@@ -1,0 +1,66 @@
+{
+  "name": "samsung-qrrecorder-server-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop server app for Samsung QR/barcode duplicate checking.",
+  "workspaces": [
+    "electron",
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "help": "node scripts/help.mjs",
+    "setup": "npm install && npm run prisma:generate",
+    "install:all": "npm install",
+    "dev": "npm run dev:desktop",
+    "dev:api": "npm run dev -w backend",
+    "dev:web": "npm run dev -w frontend",
+    "dev:desktop": "node scripts/dev-desktop.mjs",
+    "dev:ui": "concurrently -n WEB,ELECTRON -c green,magenta \"npm run dev -w frontend\" \"wait-on http://127.0.0.1:3969 && npm run dev -w desktop\"",
+    "dev:electron": "npm run dev -w desktop",
+    "build": "npm run prisma:generate && npm run build -w shared && npm run build -w backend && npm run build -w frontend && npm run build -w desktop",
+    "build:api": "npm run build -w backend",
+    "build:web": "npm run build -w frontend",
+    "build:desktop": "npm run build -w desktop",
+    "build:shared": "npm run build -w shared",
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema prisma/schema.prisma",
+    "prisma:seed": "node scripts/seed-users.mjs",
+    "db:validate": "npm run prisma:validate",
+    "db:generate": "npm run prisma:generate",
+    "db:migrate": "npm run prisma:migrate",
+    "db:deploy": "npm run prisma:deploy",
+    "db:studio": "npm run prisma:studio",
+    "db:seed": "npm run prisma:seed",
+    "clean": "node scripts/clean.mjs",
+    "reset": "node scripts/reset-workspace.mjs",
+    "add:web": "node scripts/add-package.mjs frontend",
+    "add:api": "node scripts/add-package.mjs backend",
+    "add:desktop": "node scripts/add-package.mjs electron",
+    "add:shared": "node scripts/add-package.mjs shared",
+    "add:root": "node scripts/add-package.mjs root",
+    "check": "npm run prisma:validate && npm run build",
+    "docs": "node -e \"console.log('Documentation is in ./document')\""
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.0",
+    "prisma": "6.19.3",
+    "typescript": "^5.9.0",
+    "wait-on": "^8.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.16",
+    "next@16.2.10": {
+      "postcss": "8.5.16"
+    }
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

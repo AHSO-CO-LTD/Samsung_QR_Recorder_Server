@@ -1,0 +1,709 @@
+// Prisma schema - Server DB
+// Dự án quét mã vạch / barcode duplicate checking
+// Bản v6: bám theo thiết kế DB v5 mới nhất
+// - Local không đăng nhập, không có operator_id
+// - product_profiles không có profile_name, tên hiển thị lấy từ chassis_codes.code_full
+// - product_profiles vẫn giữ factory_code để đối chiếu với full_code.factory_code local gửi lên
+// - Duplicate chính: profile_id + duplicate_key
+// - Server không gọi ngược local; local chủ động heartbeat/poll/submit/batch sync
+// - Có error_codes + notification_templates + notification_events để chuẩn hóa lỗi/noti
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================
+// ENUMS
+// =========================
+
+enum UserRole {
+  OPERATOR @map("operator")
+  ENGINEER @map("engineer")
+  ADMIN    @map("admin")
+  DEV      @map("dev")
+}
+
+enum VendorStatus {
+  ACTIVE   @map("active")
+  PENDING  @map("pending")
+  DISABLED @map("disabled")
+}
+
+enum ConnectionStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+}
+
+enum MachineConnectionEventType {
+  CONNECTED
+  DISCONNECTED
+  HEARTBEAT
+  SYNC_STARTED
+  SYNC_DONE
+  SYNC_FAILED
+}
+
+enum MachineCommandType {
+  SYNC_PROFILE
+  SYNC_SCAN_DATA
+  RELOAD_CONFIG
+  SHOW_MESSAGE
+}
+
+enum MachineCommandStatus {
+  PENDING
+  SENT
+  ACK
+  FAILED
+  CANCELLED
+}
+
+enum LocalScanStatus {
+  OK
+  NG
+}
+
+enum ServerScanStatus {
+  OK
+  NG
+  SKIPPED
+  PENDING
+}
+
+enum FinalScanStatus {
+  OK
+  NG
+  PENDING
+}
+
+enum NgStage {
+  LOCAL
+  SERVER
+  SYSTEM
+}
+
+enum SyncBatchTriggerType {
+  STARTUP
+  SHUTDOWN
+  NETWORK_RESTORED
+  MANUAL
+}
+
+enum SyncBatchStatus {
+  PENDING    @map("pending")
+  PROCESSING @map("processing")
+  DONE       @map("done")
+  FAILED     @map("failed")
+}
+
+enum HistoricalJobStatus {
+  PENDING @map("pending")
+  RUNNING @map("running")
+  DONE    @map("done")
+  FAILED  @map("failed")
+}
+
+enum Severity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum NotificationTarget {
+  SERVER_UI
+  LOCAL_UI
+  BOTH
+}
+
+enum NotificationStatus {
+  NEW
+  SENT
+  READ
+  DISMISSED
+}
+
+// =========================
+// 1. USERS
+// =========================
+
+model User {
+  id            Int      @id @default(autoincrement())
+  username      String   @unique
+  password_hash String
+  full_name     String
+  role          UserRole
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  updated_server_settings  ServerSetting[]          @relation("ServerSettingUpdatedBy")
+  created_product_profiles ProductProfile[]         @relation("ProductProfileCreatedBy")
+  created_profile_snapshots ProfileSnapshot[]       @relation("ProfileSnapshotCreatedBy")
+  created_machine_commands MachineCommand[]         @relation("MachineCommandCreatedBy")
+  created_historical_jobs  HistoricalDuplicateJob[] @relation("HistoricalJobCreatedBy")
+  audit_logs               AuditLog[]
+
+  @@map("users")
+}
+
+// =========================
+// 2. VENDORS
+// =========================
+
+model Vendor {
+  id          Int          @id @default(autoincrement())
+  vendor_name String
+  vendor_char String       @unique
+  status      VendorStatus @default(PENDING)
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+
+  product_profiles ProductProfile[]
+
+  @@map("vendors")
+}
+
+// =========================
+// 3. SERVER SETTINGS
+// Cấu hình mặc định toàn server; không thay thế rule thật trong profile.
+// =========================
+
+model ServerSetting {
+  id                           Int      @id @default(autoincrement())
+  factory_code_default         String
+  full_code_length_default     Int      @default(35)
+  full_vendor_position_default Int      @default(18)
+  led_scan_length_default      Int      @default(22)
+  led_vendor_position_default  Int      @default(16)
+  duplicate_days               Int      @default(30)
+  heartbeat_timeout_seconds    Int      @default(60)
+  updated_by                   Int?
+  created_at                   DateTime @default(now())
+  updated_at                   DateTime @updatedAt
+
+  updatedBy User? @relation("ServerSettingUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@map("server_settings")
+}
+
+// =========================
+// 4. MACHINES
+// =========================
+
+model Machine {
+  id           Int      @id @default(autoincrement())
+  machine_code String   @unique
+  machine_name String
+  line_name    String?
+  station_name String?
+  ip_address   String?
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  sync_state                 MachineSyncState?
+  connection_logs            MachineConnectionLog[]
+  commands                   MachineCommand[]
+  scan_records               ScanRecord[]
+  recent_duplicate_firsts    RecentDuplicateKey[] @relation("FirstDuplicateMachine")
+  scan_sync_batches          ScanSyncBatch[]
+  sync_request_logs          SyncRequestLog[]
+  notification_events        NotificationEvent[]
+
+  @@map("machines")
+}
+
+// =========================
+// 5. MACHINE SYNC STATES
+// =========================
+
+model MachineSyncState {
+  id                  Int              @id @default(autoincrement())
+  machine_id          Int              @unique
+  machine_code        String
+  connection_status   ConnectionStatus @default(UNKNOWN)
+  last_seen_at        DateTime?
+  last_ip_address     String?
+  local_total_record  Int              @default(0)
+  local_ok_record     Int              @default(0)
+  local_ng_record     Int              @default(0)
+  local_pending_sync  Int              @default(0)
+  local_checksum      String?
+  server_total_record Int              @default(0)
+  server_ok_record    Int              @default(0)
+  server_ng_record    Int              @default(0)
+  server_checksum     String?
+  need_sync           Boolean          @default(false)
+  last_sync_at        DateTime?
+  last_batch_code     String?
+  app_version         String?
+  local_db_version    String?
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
+
+  machine Machine @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+
+  @@index([machine_code])
+  @@index([connection_status])
+  @@map("machine_sync_states")
+}
+
+// =========================
+// 6. MACHINE CONNECTION LOGS
+// =========================
+
+model MachineConnectionLog {
+  id           Int                        @id @default(autoincrement())
+  machine_id   Int
+  machine_code String
+  event_type   MachineConnectionEventType
+  ip_address   String?
+  message      String?
+  payload_json Json?
+  created_at   DateTime                   @default(now())
+
+  machine Machine @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+
+  @@index([machine_id, created_at])
+  @@index([machine_code, created_at])
+  @@index([event_type, created_at])
+  @@map("machine_connection_logs")
+}
+
+// =========================
+// 7. MACHINE COMMANDS
+// =========================
+
+model MachineCommand {
+  id            Int                  @id @default(autoincrement())
+  machine_id    Int
+  command_type  MachineCommandType
+  payload_json  Json?
+  status        MachineCommandStatus @default(PENDING)
+  created_by    Int?
+  created_at    DateTime             @default(now())
+  sent_at       DateTime?
+  ack_at        DateTime?
+  error_message String?
+
+  machine   Machine @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("MachineCommandCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([machine_id, status])
+  @@index([command_type, status])
+  @@map("machine_commands")
+}
+
+// =========================
+// 8. CHASSIS CODES
+// =========================
+
+model ChassisCode {
+  id         Int      @id @default(autoincrement())
+  code_full  String   @unique
+  code_input String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  product_profile ProductProfile?
+
+  @@map("chassis_codes")
+}
+
+// =========================
+// 9. LED CODES
+// =========================
+
+model LedCode {
+  id           Int      @id @default(autoincrement())
+  code_full    String   @unique
+  code_input   String
+  suffix_check String
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  profile_led_codes ProfileLedCode[]
+
+  @@map("led_codes")
+}
+
+// =========================
+// 10. PRODUCT PROFILES
+// Không có profile_name; tên hiển thị lấy từ chassis_code.code_full.
+// =========================
+
+model ProductProfile {
+  id                   Int      @id @default(autoincrement())
+  chassis_code_id      Int      @unique
+  vendor_id            Int
+  factory_code         String
+  full_code_length     Int      @default(35)
+  full_vendor_position Int      @default(18)
+  led_scan_length      Int      @default(22)
+  led_vendor_position  Int      @default(16)
+  version              Int      @default(1)
+  is_active            Boolean  @default(true)
+  created_by           Int?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  chassis_code ChassisCode @relation(fields: [chassis_code_id], references: [id], onDelete: Restrict)
+  vendor       Vendor      @relation(fields: [vendor_id], references: [id], onDelete: Restrict)
+  createdBy    User?       @relation("ProductProfileCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+
+  profile_led_codes       ProfileLedCode[]
+  profile_snapshots       ProfileSnapshot[]
+  scan_records            ScanRecord[]
+  recent_duplicate_keys   RecentDuplicateKey[]
+  historical_jobs         HistoricalDuplicateJob[]
+  historical_results      HistoricalDuplicateResult[]
+
+  @@index([vendor_id])
+  @@index([is_active])
+  @@map("product_profiles")
+}
+
+// =========================
+// 11. PROFILE LED CODES
+// =========================
+
+model ProfileLedCode {
+  id          Int      @id @default(autoincrement())
+  profile_id  Int
+  led_code_id Int
+  led_slot    Int
+  is_required Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  profile  ProductProfile @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  led_code LedCode        @relation(fields: [led_code_id], references: [id], onDelete: Restrict)
+
+  @@unique([profile_id, led_code_id])
+  @@unique([profile_id, led_slot])
+  @@index([led_code_id])
+  @@map("profile_led_codes")
+}
+
+// =========================
+// 12. PROFILE SNAPSHOTS
+// =========================
+
+model ProfileSnapshot {
+  id            Int      @id @default(autoincrement())
+  profile_id    Int
+  version       Int
+  snapshot_json Json
+  created_by    Int?
+  created_at    DateTime @default(now())
+
+  profile   ProductProfile @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  createdBy User?          @relation("ProfileSnapshotCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+
+  scan_records ScanRecord[]
+
+  @@index([profile_id, version])
+  @@map("profile_snapshots")
+}
+
+// =========================
+// 13. SCAN RECORDS
+// =========================
+
+model ScanRecord {
+  id                         Int              @id @default(autoincrement())
+  local_scan_id              String
+  machine_id                 Int
+  profile_id                 Int
+  profile_snapshot_id         Int?
+
+  full_code_raw              String
+  full_prefix                String
+  full_chassis_segment       String
+  full_chassis_code          String
+  full_before_vendor         String
+  full_vendor_char           String
+  full_led_code              String
+  full_factory_code          String
+  full_after_factory         String
+  duplicate_key              String
+  chassis_scan_raw           String
+
+  local_status               LocalScanStatus
+  server_status              ServerScanStatus
+  final_status               FinalScanStatus
+  ng_stage                   NgStage?
+  ng_reason                  String?
+
+  sync_batch_id              Int?
+  scan_at                    DateTime
+  created_at                 DateTime         @default(now())
+
+  machine          Machine          @relation(fields: [machine_id], references: [id], onDelete: Restrict)
+  profile          ProductProfile   @relation(fields: [profile_id], references: [id], onDelete: Restrict)
+  profile_snapshot ProfileSnapshot? @relation(fields: [profile_snapshot_id], references: [id], onDelete: SetNull)
+  sync_batch       ScanSyncBatch?   @relation(fields: [sync_batch_id], references: [id], onDelete: SetNull)
+
+  led_items                     ScanLedItem[]
+  recent_duplicate_keys_as_first RecentDuplicateKey[] @relation("FirstDuplicateScanRecord")
+  notification_events            NotificationEvent[]
+
+  @@unique([machine_id, local_scan_id])
+  @@index([profile_id, duplicate_key, scan_at])
+  @@index([machine_id, scan_at])
+  @@index([scan_at])
+  @@index([sync_batch_id])
+  @@index([ng_reason])
+  @@map("scan_records")
+}
+
+// =========================
+// 14. SCAN LED ITEMS
+// =========================
+
+model ScanLedItem {
+  id             Int             @id @default(autoincrement())
+  scan_record_id Int
+  led_slot       Int
+  led_index      Int
+  led_scan_raw   String
+  led_lot_no     String
+  vendor_char    String
+  led_suffix     String
+  local_status   LocalScanStatus
+  ng_reason      String?
+  created_at     DateTime        @default(now())
+
+  scan_record ScanRecord @relation(fields: [scan_record_id], references: [id], onDelete: Cascade)
+
+  @@index([scan_record_id])
+  @@index([ng_reason])
+  @@map("scan_led_items")
+}
+
+// =========================
+// 15. RECENT DUPLICATE KEYS
+// =========================
+
+model RecentDuplicateKey {
+  id                   Int      @id @default(autoincrement())
+  profile_id           Int
+  duplicate_key        String
+  first_scan_record_id Int
+  first_machine_id     Int
+  first_scan_at        DateTime
+  expires_at           DateTime
+  created_at           DateTime @default(now())
+
+  profile           ProductProfile @relation(fields: [profile_id], references: [id], onDelete: Cascade)
+  first_scan_record ScanRecord     @relation("FirstDuplicateScanRecord", fields: [first_scan_record_id], references: [id], onDelete: Restrict)
+  first_machine     Machine        @relation("FirstDuplicateMachine", fields: [first_machine_id], references: [id], onDelete: Restrict)
+
+  @@unique([profile_id, duplicate_key])
+  @@index([expires_at])
+  @@index([first_scan_record_id])
+  @@index([first_machine_id])
+  @@map("recent_duplicate_keys")
+}
+
+// =========================
+// 16. SCAN SYNC BATCHES
+// =========================
+
+model ScanSyncBatch {
+  id             Int                  @id @default(autoincrement())
+  batch_code     String               @unique
+  machine_id     Int
+  trigger_type   SyncBatchTriggerType
+  total_received Int                  @default(0)
+  total_ok       Int                  @default(0)
+  total_ng       Int                  @default(0)
+  status         SyncBatchStatus      @default(PENDING)
+  summary_json   Json?
+  started_at     DateTime?
+  finished_at    DateTime?
+  created_at     DateTime             @default(now())
+
+  machine Machine @relation(fields: [machine_id], references: [id], onDelete: Restrict)
+
+  scan_records        ScanRecord[]
+  notification_events NotificationEvent[]
+
+  @@index([machine_id, created_at])
+  @@index([status, created_at])
+  @@map("scan_sync_batches")
+}
+
+// =========================
+// 17. HISTORICAL DUPLICATE JOBS
+// =========================
+
+model HistoricalDuplicateJob {
+  id          Int                 @id @default(autoincrement())
+  profile_id  Int?
+  from_date   DateTime
+  to_date     DateTime
+  status      HistoricalJobStatus @default(PENDING)
+  started_at  DateTime?
+  finished_at DateTime?
+  created_by  Int?
+  created_at  DateTime            @default(now())
+
+  profile   ProductProfile? @relation(fields: [profile_id], references: [id], onDelete: SetNull)
+  createdBy User?           @relation("HistoricalJobCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+
+  results HistoricalDuplicateResult[]
+
+  @@index([profile_id, status])
+  @@index([status, created_at])
+  @@map("historical_duplicate_jobs")
+}
+
+// =========================
+// 18. HISTORICAL DUPLICATE RESULTS
+// =========================
+
+model HistoricalDuplicateResult {
+  id                   Int      @id @default(autoincrement())
+  job_id               Int
+  profile_id           Int
+  duplicate_key        String
+  total_count          Int
+  first_scan_at        DateTime
+  latest_scan_at       DateTime
+  scan_record_ids_json Json
+  created_at           DateTime @default(now())
+
+  job     HistoricalDuplicateJob @relation(fields: [job_id], references: [id], onDelete: Cascade)
+  profile ProductProfile         @relation(fields: [profile_id], references: [id], onDelete: Restrict)
+
+  @@index([job_id])
+  @@index([profile_id, duplicate_key])
+  @@map("historical_duplicate_results")
+}
+
+// =========================
+// 19. SYNC REQUEST LOGS
+// =========================
+
+model SyncRequestLog {
+  id            Int      @id @default(autoincrement())
+  machine_id    Int
+  local_scan_id String?
+  batch_code    String?
+  request_type  String
+  payload_json  Json
+  response_json Json?
+  status        String
+  error_message String?
+  created_at    DateTime @default(now())
+
+  machine Machine @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+
+  @@index([machine_id, local_scan_id])
+  @@index([batch_code])
+  @@index([request_type, created_at])
+  @@index([status, created_at])
+  @@map("sync_request_logs")
+}
+
+// =========================
+// 20. ERROR CODES
+// Quy ước lỗi dùng chung cho server, local và báo cáo.
+// =========================
+
+model ErrorCode {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique
+  group_name      String
+  severity        Severity
+  default_message String
+  local_action    String?
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([group_name])
+  @@index([severity])
+  @@map("error_codes")
+}
+
+// =========================
+// 21. NOTIFICATION TEMPLATES
+// =========================
+
+model NotificationTemplate {
+  id               Int                @id @default(autoincrement())
+  noti_code         String             @unique
+  title_template   String
+  message_template String
+  severity         Severity
+  target           NotificationTarget
+  is_active        Boolean            @default(true)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
+
+  @@index([target])
+  @@index([severity])
+  @@map("notification_templates")
+}
+
+// =========================
+// 22. NOTIFICATION EVENTS
+// =========================
+
+model NotificationEvent {
+  id             Int                @id @default(autoincrement())
+  noti_code       String
+  machine_id      Int?
+  scan_record_id  Int?
+  batch_id        Int?
+  error_code      String?
+  title           String
+  message         String
+  severity        Severity
+  status          NotificationStatus @default(NEW)
+  created_at      DateTime           @default(now())
+
+  machine     Machine?       @relation(fields: [machine_id], references: [id], onDelete: SetNull)
+  scan_record ScanRecord?    @relation(fields: [scan_record_id], references: [id], onDelete: SetNull)
+  batch       ScanSyncBatch? @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+
+  @@index([noti_code])
+  @@index([error_code])
+  @@index([machine_id, created_at])
+  @@index([scan_record_id])
+  @@index([batch_id])
+  @@index([status, created_at])
+  @@map("notification_events")
+}
+
+// =========================
+// 23. AUDIT LOGS
+// =========================
+
+model AuditLog {
+  id             Int      @id @default(autoincrement())
+  user_id        Int?
+  action         String
+  table_name     String
+  record_id      String
+  old_value_json Json?
+  new_value_json Json?
+  created_at     DateTime @default(now())
+
+  user User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at])
+  @@index([table_name, record_id])
+  @@index([action, created_at])
+  @@map("audit_logs")
+}

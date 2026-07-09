@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.next/
+out/
+release/
+coverage/
+.agents/
+.codex/
+*.log
+.env
+.env.local
+.env.*.local
+prisma/migrations/dev.db
