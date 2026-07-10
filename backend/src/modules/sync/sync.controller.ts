@@ -1,5 +1,7 @@
-import { Controller, Get, Query } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { ApiOkResponse, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { Public } from "../../common/auth/auth.decorators";
+import { SubmitScanBatchDto } from "./dto/submit-scan-batch.dto";
 import { SyncService } from "./sync.service";
 
 @ApiTags("server-ui")
@@ -19,5 +21,13 @@ export class SyncController {
   @ApiOkResponse({ description: "List request/response logs from local machines." })
   listRequestLogs(@Query("take") take?: string) {
     return this.syncService.listRequestLogs(Number(take || 100));
+  }
+
+  @Post("batches/submit")
+  @ApiTags("local-machine")
+  @Public()
+  @ApiOkResponse({ description: "Submit a batch of pending/offline scans from a local machine." })
+  submitBatch(@Body() dto: SubmitScanBatchDto) {
+    return this.syncService.submitBatch(dto);
   }
 }

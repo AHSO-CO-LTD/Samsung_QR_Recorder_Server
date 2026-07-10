@@ -61,6 +61,19 @@ export class AuthService {
   }
 
   async validateToken(token: string) {
+    const user = await this.authenticateToken(token);
+
+    return {
+      success: true,
+      code: "AUTH_SESSION_OK",
+      message: "Phiên đăng nhập hợp lệ.",
+      data: {
+        user
+      }
+    };
+  }
+
+  async authenticateToken(token: string): Promise<AuthUser> {
     const payload = this.verifyToken(token);
     if (!payload) {
       throw new UnauthorizedException({
@@ -83,17 +96,10 @@ export class AuthService {
     }
 
     return {
-      success: true,
-      code: "AUTH_SESSION_OK",
-      message: "Phiên đăng nhập hợp lệ.",
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          full_name: user.full_name,
-          role: user.role
-        }
-      }
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      role: user.role
     };
   }
 

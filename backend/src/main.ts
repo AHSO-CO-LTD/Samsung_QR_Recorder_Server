@@ -26,6 +26,7 @@ async function bootstrap() {
     .setTitle("Samsung QR Recorder Server API")
     .setDescription("API contract for the Electron server app and Python local machines.")
     .setVersion("0.1.0")
+    .addBearerAuth()
     .addTag("local-machine", "Endpoints called by Python local machines over LAN")
     .addTag("server-ui", "Endpoints used by the Electron/Next.js UI")
     .build();

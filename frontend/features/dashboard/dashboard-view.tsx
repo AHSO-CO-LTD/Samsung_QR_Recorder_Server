@@ -1,21 +1,53 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { apiGet } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 import { ResourcePanel } from "@/features/resource-panel";
 import { ScanTrendChart } from "./scan-trend-chart";
 
-const metrics = [
-  { key: "todayOk", value: "0", tone: "default" },
-  { key: "todayNg", value: "0", tone: "destructive" },
-  { key: "pendingSync", value: "0", tone: "secondary" },
-  { key: "duplicateWindow", value: "31D", tone: "outline" }
-] as const;
+type ScanSummary = {
+  ok: number;
+  ng: number;
+  pending: number;
+  total: number;
+  pending_sync: number;
+  duplicate_days: number;
+};
 
 export function DashboardView() {
   const { t } = useI18n();
+  const [summary, setSummary] = useState<ScanSummary>({
+    ok: 0,
+    ng: 0,
+    pending: 0,
+    total: 0,
+    pending_sync: 0,
+    duplicate_days: 31
+  });
+
+  useEffect(() => {
+    void apiGet<ScanSummary>("/scans/summary")
+      .then((result) => {
+        if (result.data) {
+          setSummary(result.data);
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : t("error"));
+      });
+  }, [t]);
+
+  const metrics = [
+    { key: "todayOk", value: String(summary.ok), tone: "default" },
+    { key: "todayNg", value: String(summary.ng), tone: "destructive" },
+    { key: "pendingSync", value: String(summary.pending_sync), tone: "secondary" },
+    { key: "duplicateWindow", value: `${summary.duplicate_days}D`, tone: "outline" }
+  ] as const;
 
   return (
     <div className="min-w-0 space-y-4">

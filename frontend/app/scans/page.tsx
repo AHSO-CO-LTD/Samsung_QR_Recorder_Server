@@ -1,5 +1,5 @@
-import { ResourcePanel } from "@/features/resource-panel";
+import { ScansView } from "@/features/scans/scans-view";
 
 export default function ScansPage() {
-  return <ResourcePanel titleKey="scans" descriptionKey="scanDesc" endpoint="/scans?take=50" />;
+  return <ScansView />;
 }

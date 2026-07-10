@@ -1,7 +1,9 @@
 import { Controller, Get } from "@nestjs/common";
 import { ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import { Public } from "../../common/auth/auth.decorators";
 
 @ApiTags("server-ui")
+@Public()
 @Controller("health")
 export class HealthController {
   @Get()
