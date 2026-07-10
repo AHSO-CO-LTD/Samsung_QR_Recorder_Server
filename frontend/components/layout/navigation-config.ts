@@ -3,10 +3,12 @@ import {
   Database,
   FileSearch,
   Gauge,
+  History,
   MonitorCog,
   ScanLine,
   Settings,
   Unplug,
+  UsersRound,
   Workflow,
   type LucideIcon
 } from "lucide-react";
@@ -59,7 +61,11 @@ export const navGroups: readonly NavGroup[] = [
     icon: Settings,
     items: [
       { href: "/profiles", key: "profiles", descriptionKey: "profileDesc", icon: Database },
+      { href: "/master-data", key: "masterData", descriptionKey: "masterDataDesc", icon: Database },
       { href: "/sync", key: "sync", descriptionKey: "syncDesc", icon: Workflow },
+      { href: "/users", key: "users", descriptionKey: "usersDesc", icon: UsersRound },
+      { href: "/audit-logs", key: "auditLogs", descriptionKey: "auditLogsDesc", icon: History },
+      { href: "/settings", key: "settings", descriptionKey: "settingsDesc", icon: Settings },
       { href: "http://127.0.0.1:3979/api/docs", key: "apiDocs", descriptionKey: "apiDocsDesc", icon: Unplug, external: true }
     ]
   }

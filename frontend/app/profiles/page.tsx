@@ -1,5 +1,5 @@
-import { ResourcePanel } from "@/features/resource-panel";
+import { ProfilesView } from "@/features/profiles/profiles-view";
 
 export default function ProfilesPage() {
-  return <ResourcePanel titleKey="profiles" descriptionKey="profileDesc" endpoint="/profiles" />;
+  return <ProfilesView />;
 }

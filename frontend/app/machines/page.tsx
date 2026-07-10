@@ -1,5 +1,5 @@
-import { ResourcePanel } from "@/features/resource-panel";
+import { MachinesView } from "@/features/machines/machines-view";
 
 export default function MachinesPage() {
-  return <ResourcePanel titleKey="machines" descriptionKey="machineDesc" endpoint="/machines" />;
+  return <MachinesView />;
 }

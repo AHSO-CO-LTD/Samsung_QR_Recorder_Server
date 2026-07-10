@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppearanceSettings } from "@/features/settings/appearance-settings";
-import { ResourcePanel } from "@/features/resource-panel";
+import { ServerSettingsForm } from "@/features/settings/server-settings-form";
 import { useI18n } from "@/lib/i18n-provider";
 
 export default function SettingsPage() {
@@ -25,7 +25,7 @@ export default function SettingsPage() {
       </TabsContent>
 
       <TabsContent value="server">
-        <ResourcePanel titleKey="settings" descriptionKey="settingsDesc" endpoint="/settings/server" />
+        <ServerSettingsForm />
       </TabsContent>
 
       <TabsContent value="api">
