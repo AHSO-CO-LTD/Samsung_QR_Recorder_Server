@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateProfileDto, ProfileLedCodeInputDto, UpdateProfileDto } from "./dto/profile-crud.dto";
+
+const MAX_PROFILE_LED_CODES = 2;
 
 @Injectable()
 export class ProfilesService {
@@ -16,7 +18,6 @@ export class ProfilesService {
       orderBy: [{ is_active: "desc" }, { updated_at: "desc" }],
       include: {
         chassis_code: true,
-        vendor: true,
         profile_led_codes: {
           include: {
             led_code: true
@@ -49,13 +50,12 @@ export class ProfilesService {
 
   async createProfile(dto: CreateProfileDto, actorUserId?: number | null) {
     const profile = await this.prisma.$transaction(async (tx) => {
-      await this.ensureProfileDependencies(tx, dto.vendor_id, dto.led_codes);
+      await this.ensureLedCodes(tx, dto.led_codes);
       await this.ensureChassisCode(tx, dto.chassis_code_id);
 
       const createdProfile = await tx.productProfile.create({
         data: {
           chassis_code_id: dto.chassis_code_id,
-          vendor_id: dto.vendor_id,
           factory_code: dto.factory_code.trim(),
           full_code_length: dto.full_code_length ?? 35,
           full_vendor_position: dto.full_vendor_position ?? 18,
@@ -98,15 +98,11 @@ export class ProfilesService {
     const oldProfile = await this.findProfileById(id);
     const profile = await this.prisma.$transaction(async (tx) => {
       await this.ensureProfileById(tx, id);
-      if (dto.vendor_id) {
-        await this.ensureProfileDependencies(tx, dto.vendor_id, dto.led_codes ?? []);
-      } else if (dto.led_codes) {
-        const currentProfile = await tx.productProfile.findUniqueOrThrow({ where: { id } });
-        await this.ensureProfileDependencies(tx, currentProfile.vendor_id, dto.led_codes);
+      if (dto.led_codes) {
+        await this.ensureLedCodes(tx, dto.led_codes);
       }
 
       const shouldVersion =
-        dto.vendor_id !== undefined ||
         dto.factory_code !== undefined ||
         dto.full_code_length !== undefined ||
         dto.full_vendor_position !== undefined ||
@@ -117,7 +113,6 @@ export class ProfilesService {
       const updatedProfile = await tx.productProfile.update({
         where: { id },
         data: {
-          vendor_id: dto.vendor_id,
           factory_code: dto.factory_code?.trim(),
           full_code_length: dto.full_code_length,
           full_vendor_position: dto.full_vendor_position,
@@ -216,7 +211,6 @@ export class ProfilesService {
   private profileInclude() {
     return {
       chassis_code: true,
-      vendor: true,
       profile_led_codes: {
         include: {
           led_code: true
@@ -250,13 +244,12 @@ export class ProfilesService {
     }
   }
 
-  private async ensureProfileDependencies(tx: Prisma.TransactionClient, vendorId: number, ledCodes: ProfileLedCodeInputDto[]) {
-    const vendor = await tx.vendor.findUnique({ where: { id: vendorId } });
-    if (!vendor || vendor.status !== "ACTIVE") {
-      throw new NotFoundException({
+  private async ensureLedCodes(tx: Prisma.TransactionClient, ledCodes: ProfileLedCodeInputDto[]) {
+    if (ledCodes.length > MAX_PROFILE_LED_CODES) {
+      throw new BadRequestException({
         success: false,
-        code: "VENDOR_NOT_FOUND",
-        message: "Active vendor was not found."
+        code: "PROFILE_LED_CODES_LIMIT_EXCEEDED",
+        message: `A product profile can use at most ${MAX_PROFILE_LED_CODES} LED codes.`
       });
     }
 
@@ -287,7 +280,6 @@ export class ProfilesService {
             id: profile.id,
             version: profile.version,
             chassis_code: profile.chassis_code,
-            vendor: profile.vendor,
             factory_code: profile.factory_code,
             full_code_length: profile.full_code_length,
             full_vendor_position: profile.full_vendor_position,

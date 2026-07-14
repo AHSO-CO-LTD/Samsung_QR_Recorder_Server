@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
+import { useI18n } from "@/lib/i18n-provider";
 
 const SESSION_STORAGE_KEY = "server-session-token";
 const REMEMBER_STORAGE_KEY = "server-remember-token";
@@ -35,9 +36,15 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   useEffect(() => {
     const boot = async () => {
@@ -54,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await apiPost<ValidateResult>("/auth/validate", { token });
         setUser(result.data?.user ?? null);
         if (rememberedToken) {
-          toast.success("Đã tự động đăng nhập bằng tài khoản đã nhớ.");
+          toast.success(tRef.current("authRememberedLoginSuccess"));
         }
       } catch {
         clearStoredTokens();
@@ -67,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void boot();
   }, []);
 
-  const login = async (input: { username: string; password: string; rememberPassword: boolean }) => {
+  const login = useCallback(async (input: { username: string; password: string; rememberPassword: boolean }) => {
     setIsLoggingIn(true);
     try {
       const result = await apiPost<LoginResult>("/auth/login", {
@@ -77,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const data = result.data;
       if (!data) {
-        throw new Error("API không trả về phiên đăng nhập.");
+        throw new Error(t("loginApiMissingSession"));
       }
 
       clearStoredTokens();
@@ -86,17 +93,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.localStorage.setItem(REMEMBER_STORAGE_KEY, data.token);
       }
       setUser(data.user);
-      toast.success(input.rememberPassword ? "Đăng nhập thành công, lần sau sẽ tự đăng nhập." : "Đăng nhập thành công.");
+      toast.success(input.rememberPassword ? t("loginSuccessRemembered") : t("loginSuccess"));
     } finally {
       setIsLoggingIn(false);
     }
-  };
+  }, [t]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     clearStoredTokens();
     setUser(null);
-    toast.success("Đã đăng xuất.");
-  };
+    toast.success(t("logoutSuccess"));
+  }, [t]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -106,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout
     }),
-    [user, isBooting, isLoggingIn]
+    [user, isBooting, isLoggingIn, login, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

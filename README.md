@@ -62,3 +62,15 @@ Quy ước UI/UX và bộ lệnh root nằm tại:
 ```txt
 document/09-quy-uoc-ui-ux-va-lenh-root.md
 ```
+
+Tài liệu tích hợp API cho máy local Python:
+
+```txt
+document/10-huong-dan-api-may-local-python.md
+```
+
+SQL khởi tạo database local Python PostgreSQL:
+
+```txt
+document/11-sql-khoi-tao-db-may-local-python-postgres.md
+```

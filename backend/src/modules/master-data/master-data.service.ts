@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import {
@@ -121,10 +121,11 @@ export class MasterDataService {
   }
 
   async createChassisCode(dto: CreateChassisCodeDto, actorUserId?: number | null) {
+    const codeInput = this.normalizeCodeInput(dto.code_input);
     const chassisCode = await this.prisma.chassisCode.create({
       data: {
-        code_full: dto.code_full.trim(),
-        code_input: dto.code_input.trim(),
+        code_full: this.buildCodeFull(codeInput),
+        code_input: codeInput,
         is_active: dto.is_active ?? true
       }
     });
@@ -146,11 +147,12 @@ export class MasterDataService {
 
   async updateChassisCode(id: number, dto: UpdateChassisCodeDto, actorUserId?: number | null) {
     const oldChassisCode = await this.ensureChassisCode(id);
+    const codeInput = dto.code_input === undefined ? undefined : this.normalizeCodeInput(dto.code_input);
     const chassisCode = await this.prisma.chassisCode.update({
       where: { id },
       data: {
-        code_full: dto.code_full?.trim(),
-        code_input: dto.code_input?.trim(),
+        code_full: codeInput ? this.buildCodeFull(codeInput) : undefined,
+        code_input: codeInput,
         is_active: dto.is_active
       }
     });
@@ -208,11 +210,12 @@ export class MasterDataService {
   }
 
   async createLedCode(dto: CreateLedCodeDto, actorUserId?: number | null) {
+    const codeInput = this.normalizeCodeInput(dto.code_input);
     const ledCode = await this.prisma.ledCode.create({
       data: {
-        code_full: dto.code_full.trim(),
-        code_input: dto.code_input.trim(),
-        suffix_check: dto.suffix_check.trim(),
+        code_full: this.buildCodeFull(codeInput),
+        code_input: codeInput,
+        suffix_check: this.buildSuffixCheck(codeInput),
         is_active: dto.is_active ?? true
       }
     });
@@ -234,12 +237,13 @@ export class MasterDataService {
 
   async updateLedCode(id: number, dto: UpdateLedCodeDto, actorUserId?: number | null) {
     const oldLedCode = await this.ensureLedCode(id);
+    const codeInput = dto.code_input === undefined ? undefined : this.normalizeCodeInput(dto.code_input);
     const ledCode = await this.prisma.ledCode.update({
       where: { id },
       data: {
-        code_full: dto.code_full?.trim(),
-        code_input: dto.code_input?.trim(),
-        suffix_check: dto.suffix_check?.trim(),
+        code_full: codeInput ? this.buildCodeFull(codeInput) : undefined,
+        code_input: codeInput,
+        suffix_check: codeInput ? this.buildSuffixCheck(codeInput) : undefined,
         is_active: dto.is_active
       }
     });
@@ -320,5 +324,31 @@ export class MasterDataService {
     }
 
     return ledCode;
+  }
+
+  private normalizeCodeInput(value: string) {
+    let normalized = value.trim().toUpperCase();
+    if (normalized.startsWith("BN96-")) {
+      normalized = normalized.slice(5);
+    }
+    normalized = normalized.replace(/[^A-Z0-9]/g, "");
+
+    if (normalized.length !== 6) {
+      throw new BadRequestException({
+        success: false,
+        code: "CODE_INPUT_INVALID",
+        message: "Code input must be exactly 6 alphanumeric characters."
+      });
+    }
+
+    return normalized;
+  }
+
+  private buildCodeFull(codeInput: string) {
+    return `BN96-${codeInput}`;
+  }
+
+  private buildSuffixCheck(codeInput: string) {
+    return codeInput.slice(-5);
   }
 }

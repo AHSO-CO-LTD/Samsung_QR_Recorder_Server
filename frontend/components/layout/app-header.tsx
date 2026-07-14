@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Activity } from "lucide-react";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { PrimaryNavbar } from "@/components/layout/primary-navbar";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -21,7 +22,7 @@ type AppHeaderProps = {
   onLogout: () => void;
   onQuitApp: () => void;
   onRestartApp: () => void;
-  t: (key: MessageKey) => string;
+  t: (key: MessageKey, params?: Record<string, string | number | null | undefined>) => string;
 };
 
 export function AppHeader({
@@ -40,7 +41,7 @@ export function AppHeader({
 }: AppHeaderProps) {
   return (
     <div className="bg-card">
-      <div className="mx-auto max-w-[1440px] px-3 py-3 sm:px-4 lg:h-16 lg:py-0">
+      <div className="w-full px-3 py-3 sm:px-4 lg:h-16 lg:px-5 lg:py-0 2xl:px-6">
         <div className="flex min-w-0 items-center justify-between gap-2 lg:grid lg:h-full lg:grid-cols-[minmax(220px,1fr)_auto_minmax(220px,1fr)] lg:gap-3">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -64,7 +65,8 @@ export function AppHeader({
             onSelectGroup={onSelectGroup}
           />
 
-          <div className="flex shrink-0 justify-end">
+          <div className="flex shrink-0 justify-end gap-1">
+            <NotificationBell locale={locale} t={t} />
             <UserMenu
               user={user}
               locale={locale}

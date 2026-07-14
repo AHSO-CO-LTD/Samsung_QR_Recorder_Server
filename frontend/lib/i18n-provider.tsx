@@ -6,7 +6,7 @@ import { type Locale, type MessageKey, messages } from "./i18n";
 type I18nContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: MessageKey) => string;
+  t: (key: MessageKey, params?: Record<string, string | number | null | undefined>) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -34,12 +34,22 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       setLocale,
-      t: (key) => messages[locale][key] ?? key
+      t: (key, params) => formatMessage(messages[locale][key] ?? key, params)
     }),
     [locale]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+function formatMessage(message: string, params?: Record<string, string | number | null | undefined>) {
+  if (!params) {
+    return message;
+  }
+
+  return Object.entries(params).reduce((current, [key, value]) => {
+    return current.replaceAll(`{${key}}`, value == null ? "" : String(value));
+  }, message);
 }
 
 export function useI18n() {

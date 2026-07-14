@@ -1,5 +1,7 @@
 # API máy local Python
 
+Tài liệu này là bản tóm tắt contract API. Bản hướng dẫn tích hợp đầy đủ cho đội viết máy local Python nằm tại `document/10-huong-dan-api-may-local-python.md`.
+
 ## 1. Nguyên tắc tích hợp
 
 Máy local Python chỉ gọi backend NestJS của máy server qua LAN.
@@ -12,7 +14,57 @@ Máy local không gọi Next.js.
 
 Máy local không thao tác trực tiếp PostgreSQL.
 
-Máy local không cần đăng nhập user. Máy local được định danh bằng `machine_code`.
+Máy local không cần đăng nhập user. Ở startup/pairing, máy local dùng `serial` + `uid` để hỏi server và tải cấu hình. Sau khi server duyệt, local nhận `machine_code` chính thức để dùng cho heartbeat, runtime, scan và sync. Khi gửi request định danh lần đầu, body chỉ cần `serial`, `uid`, `ip_address`; server tự tạo raw license key tạm thời theo format `{serial}|{uid}`.
+
+Máy local mới lắp đặt phải gửi yêu cầu kết nối trước, sau đó tự poll trạng thái vì server không gọi trực tiếp ngược về local.
+
+```txt
+GET  /api/machines/identity/status?serial=...&uid=...
+POST /api/machines/register-request
+GET  /api/machines/register-requests/{request_id}/status?serial=...&uid=...
+```
+
+Payload register:
+
+```json
+{
+  "serial": "SN-LOCAL01-2026",
+  "uid": "UID-8f8f2f1c-local01",
+  "ip_address": "192.168.1.50"
+}
+```
+
+Sau khi request được tạo, admin/dev trên server sẽ xuất file thông tin máy, import file license raw để kích hoạt request, rồi mới duyệt đặt `machine_code`. Giai đoạn hiện tại chưa check công thức license thật.
+
+Nhóm API máy local:
+
+| Nhóm | API chính |
+| --- | --- |
+| Kiểm server | `GET /api/health` |
+| Định danh/pairing | `GET /api/machines/identity/status`, `POST /api/machines/register-request`, `GET /api/machines/register-requests/{request_id}/status` |
+| Lấy cấu hình | `GET /api/machines/config?serial=...&uid=...` |
+| Runtime | `POST /api/machines/heartbeat`, `GET /api/machines/commands/poll?serial=...&uid=...`, `POST /api/machines/commands/{id}/ack` |
+| Scan/sync | `POST /api/scans/submit`, `POST /api/sync/reconcile/check`, `POST /api/sync/reconcile/pull`, `POST /api/sync/batches/submit` |
+
+Trạng thái UI local nên dùng:
+
+```txt
+BOOTING, SERVER_OFFLINE, NOT_REGISTERED, REGISTERING,
+WAITING_LICENSE, WAITING_APPROVAL, REJECTED,
+READY, SCANNING, SYNCING, BLOCKED, ERROR
+```
+
+Đối soát dữ liệu local/server dùng 2 bước:
+
+```txt
+POST /api/sync/reconcile/check
+POST /api/sync/reconcile/pull
+```
+
+`reconcile/check` request tối thiểu chỉ cần `serial`, `uid`, `ip_address`. Nếu không gửi thời gian, server tự kiểm từ lần check gần nhất đến thời điểm hiện tại. Với request tối thiểu, server dùng tổng local gần nhất từ heartbeat để kết luận nếu đã có heartbeat; nếu chưa có heartbeat thì chỉ trả snapshot. Nếu muốn so sâu từng record, local gửi thêm manifest record. API này không ghi đè dữ liệu.
+
+- `Sync theo Server`: local gọi `reconcile/pull`, nhận record server trả về và upsert vào DB local.
+- `Sync theo Local`: local dùng `POST /api/sync/batches/submit` để đẩy record server thiếu lên server.
 
 ## 2. Swagger
 
@@ -65,6 +117,8 @@ Payload mẫu:
 ```json
 {
   "machine_code": "LOCAL01",
+  "serial": "SN-LOCAL01-2026",
+  "uid": "UID-8f8f2f1c-local01",
   "ip_address": "192.168.1.50",
   "app_version": "1.0.0",
   "local_db_version": "20260709.001",
@@ -79,10 +133,12 @@ Payload mẫu:
 Server xử lý:
 
 1. Tìm `machines.machine_code`.
-2. Nếu không có hoặc inactive thì trả lỗi `MACHINE_NOT_FOUND`.
-3. Upsert `machine_sync_states`.
-4. Ghi `machine_connection_logs` event `HEARTBEAT`.
-5. Trả `HEARTBEAT_ACCEPTED`.
+2. Kiểm `serial` và `uid` có khớp máy đã định danh không.
+3. Nếu không có hoặc inactive thì trả lỗi `MACHINE_NOT_FOUND`.
+4. Nếu sai định danh thì trả lỗi `MACHINE_IDENTITY_MISMATCH`.
+5. Upsert `machine_sync_states`.
+6. Ghi `machine_connection_logs` event `HEARTBEAT`.
+7. Trả `HEARTBEAT_ACCEPTED`.
 
 Response mẫu:
 
@@ -112,6 +168,8 @@ Payload mẫu local OK:
 {
   "local_scan_id": "LOCAL01-20260708-000001",
   "machine_code": "LOCAL01",
+  "serial": "SN-LOCAL01-2026",
+  "uid": "UID-8f8f2f1c-local01",
   "profile_id": 5,
   "duplicate_key": "1A1Y420673",
   "full_code": {
@@ -149,6 +207,8 @@ Payload mẫu local NG:
 {
   "local_scan_id": "LOCAL01-20260708-000002",
   "machine_code": "LOCAL01",
+  "serial": "SN-LOCAL01-2026",
+  "uid": "UID-8f8f2f1c-local01",
   "profile_id": 5,
   "duplicate_key": "1A1Y420674",
   "full_code": {
@@ -247,4 +307,4 @@ Máy local không nên:
 - Gọi trực tiếp database.
 - Gọi Next.js UI.
 - Tự quyết định duplicate 30/31 ngày thay cho server.
-- Gửi scan thiếu `machine_code`, `profile_id`, `duplicate_key`.
+- Gửi scan thiếu `machine_code`, `serial`, `uid`, `profile_id`, `duplicate_key`.

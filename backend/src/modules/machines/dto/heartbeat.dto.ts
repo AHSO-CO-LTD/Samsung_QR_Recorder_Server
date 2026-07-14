@@ -1,12 +1,22 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsOptional, IsString, Min } from "class-validator";
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from "class-validator";
 
 export class HeartbeatDto {
   @ApiProperty({ example: "LOCAL01" })
   @IsString()
   machine_code!: string;
 
-  @ApiPropertyOptional({ example: "192.168.1.50" })
+  @ApiProperty({ example: "SN-LOCAL01-2026" })
+  @IsString()
+  @IsNotEmpty()
+  serial!: string;
+
+  @ApiProperty({ example: "UID-8f8f2f1c-local01" })
+  @IsString()
+  @IsNotEmpty()
+  uid!: string;
+
+  @ApiHideProperty()
   @IsOptional()
   @IsString()
   ip_address?: string;

@@ -68,3 +68,42 @@ select,
 textarea {
   outline-color: hsl(var(--ring));
 }
+
+@keyframes bell-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  12% {
+    transform: rotate(18deg);
+  }
+  24% {
+    transform: rotate(-16deg);
+  }
+  36% {
+    transform: rotate(14deg);
+  }
+  48% {
+    transform: rotate(-10deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+  72% {
+    transform: rotate(-5deg);
+  }
+  84% {
+    transform: rotate(3deg);
+  }
+}
+
+.animate-bell-shake {
+  animation: bell-shake 0.8s ease-in-out;
+  transform-origin: 50% 0%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bell-shake {
+    animation: none;
+  }
+}

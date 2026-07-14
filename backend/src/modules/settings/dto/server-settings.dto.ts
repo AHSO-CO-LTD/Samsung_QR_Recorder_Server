@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsInt, IsOptional, IsString, Min } from "class-validator";
 
 export class UpsertServerSettingsDto {
-  @ApiProperty({ example: "DYS3" })
+  @ApiProperty({ example: "DZLV" })
   @IsString()
   factory_code_default!: string;
 

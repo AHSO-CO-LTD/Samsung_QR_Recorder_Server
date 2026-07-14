@@ -1,20 +1,29 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { apiGet } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 
-const chartData = [
-  { date: "T-6", ok: 0, ng: 0 },
-  { date: "T-5", ok: 0, ng: 0 },
-  { date: "T-4", ok: 0, ng: 0 },
-  { date: "T-3", ok: 0, ng: 0 },
-  { date: "T-2", ok: 0, ng: 0 },
-  { date: "T-1", ok: 0, ng: 0 },
-  { date: "Today", ok: 0, ng: 0 }
-];
+type ScanTrendPoint = {
+  date: string;
+  ok: number;
+  ng: number;
+  pending: number;
+  total: number;
+};
+
+const emptyChartData: ScanTrendPoint[] = Array.from({ length: 7 }, (_, index) => ({
+  date: `T-${6 - index}`,
+  ok: 0,
+  ng: 0,
+  pending: 0,
+  total: 0
+}));
 
 const chartConfig = {
   ok: {
@@ -29,6 +38,24 @@ const chartConfig = {
 
 export function ScanTrendChart() {
   const { t } = useI18n();
+  const [chartData, setChartData] = useState<ScanTrendPoint[]>(emptyChartData);
+
+  useEffect(() => {
+    let isMounted = true;
+    void apiGet<ScanTrendPoint[]>("/scans/trend?days=7")
+      .then((result) => {
+        if (isMounted && result.data) {
+          setChartData(result.data);
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : t("error"));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [t]);
 
   return (
     <Card>
@@ -45,22 +72,8 @@ export function ScanTrendChart() {
             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
             <YAxis tickLine={false} axisLine={false} width={32} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Area
-              dataKey="ok"
-              type="monotone"
-              stroke="var(--color-ok)"
-              fill="var(--color-ok)"
-              fillOpacity={0.14}
-              strokeWidth={2}
-            />
-            <Area
-              dataKey="ng"
-              type="monotone"
-              stroke="var(--color-ng)"
-              fill="var(--color-ng)"
-              fillOpacity={0.1}
-              strokeWidth={2}
-            />
+            <Area dataKey="ok" type="monotone" stroke="var(--color-ok)" fill="var(--color-ok)" fillOpacity={0.14} strokeWidth={2} />
+            <Area dataKey="ng" type="monotone" stroke="var(--color-ng)" fill="var(--color-ng)" fillOpacity={0.1} strokeWidth={2} />
           </AreaChart>
         </ChartContainer>
       </CardContent>

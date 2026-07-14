@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { apiGet } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
-import { ResourcePanel } from "@/features/resource-panel";
+import { LocalMachinesOverview } from "./local-machines-overview";
 import { ScanTrendChart } from "./scan-trend-chart";
 
 type ScanSummary = {
@@ -51,7 +51,7 @@ export function DashboardView() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <section className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Runtime metrics">
+      <section className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("runtimeMetrics")}>
         {metrics.map((metric) => (
           <Card key={metric.key}>
             <CardHeader>
@@ -62,20 +62,15 @@ export function DashboardView() {
             </CardHeader>
             <CardContent className="flex flex-wrap items-end justify-between gap-3">
               <span className="text-3xl font-semibold">{metric.value}</span>
-              <Badge variant={metric.tone}>{metric.key}</Badge>
+              <Badge variant={metric.tone}>{t(metric.key)}</Badge>
             </CardContent>
           </Card>
         ))}
       </section>
 
-      <section className="grid min-w-0 gap-4 xl:grid-cols-2">
-        <ScanTrendChart />
-        <ResourcePanel titleKey="health" descriptionKey="apiContractDesc" endpoint="/health" />
-      </section>
+      <LocalMachinesOverview />
 
-      <section className="grid min-w-0 gap-4 xl:grid-cols-2">
-        <ResourcePanel titleKey="machines" descriptionKey="machineDesc" endpoint="/machines" />
-      </section>
+      <ScanTrendChart />
     </div>
   );
 }

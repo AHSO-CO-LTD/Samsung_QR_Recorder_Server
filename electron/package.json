@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "npm run build && electron dist/main.js",
     "build": "tsc -p tsconfig.json",
-    "package": "npm run build && electron-builder --config electron-builder.yml"
+    "package": "npm run build && electron-builder --config electron-builder.yml --publish never",
+    "package:publish": "npm run build && electron-builder --config electron-builder.yml --publish always"
   },
   "devDependencies": {
     "electron": "43.1.0",

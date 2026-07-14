@@ -24,7 +24,7 @@ type UserMenuProps = {
   onLogout: () => void;
   onQuitApp: () => void;
   onRestartApp: () => void;
-  t: (key: MessageKey) => string;
+  t: (key: MessageKey, params?: Record<string, string | number | null | undefined>) => string;
 };
 
 export function UserMenu({

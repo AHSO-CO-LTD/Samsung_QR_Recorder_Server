@@ -54,3 +54,13 @@ Dự án này là ứng dụng desktop server dùng để quản lý và kiểm 
 9. `09-quy-uoc-ui-ux-va-lenh-root.md`
    - Quy ước bắt buộc về taste skill, TailwindCSS, shadcn/ui, Sonner, shadcn chart và Recharts.
    - Bộ lệnh root để setup, chạy dev, build, reset, thao tác database và cài thư viện.
+
+10. `10-huong-dan-api-may-local-python.md`
+   - Hướng dẫn tích hợp API dành cho đội viết máy local Python.
+   - Giải thích endpoint local cần gọi, request body, response body, command polling, notification, error code và sync offline.
+   - Có flow áp dụng trong app Python, checklist tích hợp và kịch bản test bắt buộc.
+
+11. `11-sql-khoi-tao-db-may-local-python-postgres.md`
+   - Script SQL PostgreSQL để tạo toàn bộ database local cho app Python một lần.
+   - Gồm bảng cấu hình, profile cache, scan local, LED item, duplicate local, sync batch, command, notification và log.
+   - Có query kiểm tra sau khi chạy và gợi ý tạo `local_scan_id`, `batch_code`.

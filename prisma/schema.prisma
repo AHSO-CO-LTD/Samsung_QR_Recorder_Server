@@ -49,6 +49,25 @@ enum MachineConnectionEventType {
   SYNC_FAILED
 }
 
+enum MachineRuntimeStatus {
+  RUNNING
+  STOPPED
+  DISCONNECTED
+  ERROR
+}
+
+enum MachineRuntimeEventType {
+  SOCKET_CONNECTED
+  SOCKET_DISCONNECTED
+  STARTED
+  PRODUCT_CHANGED
+  UPDATED
+  SNAPSHOT
+  STOPPED
+  ERROR
+  SCAN_LINKED
+}
+
 enum MachineCommandType {
   SYNC_PROFILE
   SYNC_SCAN_DATA
@@ -62,6 +81,12 @@ enum MachineCommandStatus {
   ACK
   FAILED
   CANCELLED
+}
+
+enum MachineRegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum LocalScanStatus {
@@ -109,6 +134,18 @@ enum HistoricalJobStatus {
   FAILED  @map("failed")
 }
 
+enum HistoricalDuplicateJobTrigger {
+  MANUAL_RANGE
+  MANUAL_FULL
+  SCHEDULED_FULL
+}
+
+enum HistoricalDuplicateScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum Severity {
   INFO
   WARNING
@@ -143,12 +180,14 @@ model User {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  updated_server_settings  ServerSetting[]          @relation("ServerSettingUpdatedBy")
-  created_product_profiles ProductProfile[]         @relation("ProductProfileCreatedBy")
-  created_profile_snapshots ProfileSnapshot[]       @relation("ProfileSnapshotCreatedBy")
-  created_machine_commands MachineCommand[]         @relation("MachineCommandCreatedBy")
-  created_historical_jobs  HistoricalDuplicateJob[] @relation("HistoricalJobCreatedBy")
-  audit_logs               AuditLog[]
+  updated_server_settings                ServerSetting[]               @relation("ServerSettingUpdatedBy")
+  created_product_profiles               ProductProfile[]              @relation("ProductProfileCreatedBy")
+  created_profile_snapshots              ProfileSnapshot[]             @relation("ProfileSnapshotCreatedBy")
+  created_machine_commands               MachineCommand[]              @relation("MachineCommandCreatedBy")
+  created_historical_jobs                HistoricalDuplicateJob[]      @relation("HistoricalJobCreatedBy")
+  updated_historical_duplicate_schedules HistoricalDuplicateSchedule[] @relation("HistoricalDuplicateScheduleUpdatedBy")
+  runtime_adjustments                    MachineRuntimeAdjustmentLog[] @relation("MachineRuntimeAdjustmentBy")
+  audit_logs                             AuditLog[]
 
   @@map("users")
 }
@@ -164,8 +203,6 @@ model Vendor {
   status      VendorStatus @default(PENDING)
   created_at  DateTime     @default(now())
   updated_at  DateTime     @updatedAt
-
-  product_profiles ProductProfile[]
 
   @@map("vendors")
 }
@@ -198,26 +235,76 @@ model ServerSetting {
 // =========================
 
 model Machine {
-  id           Int      @id @default(autoincrement())
-  machine_code String   @unique
-  machine_name String
-  line_name    String?
-  station_name String?
-  ip_address   String?
-  is_active    Boolean  @default(true)
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  id                   Int       @id @default(autoincrement())
+  machine_code         String    @unique
+  machine_name         String
+  serial               String?   @unique
+  uid                  String?   @unique
+  license_key_raw      String?
+  license_activated_at DateTime?
+  line_name            String?
+  station_name         String?
+  ip_address           String?
+  is_active            Boolean   @default(true)
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
 
-  sync_state                 MachineSyncState?
-  connection_logs            MachineConnectionLog[]
-  commands                   MachineCommand[]
-  scan_records               ScanRecord[]
-  recent_duplicate_firsts    RecentDuplicateKey[] @relation("FirstDuplicateMachine")
-  scan_sync_batches          ScanSyncBatch[]
-  sync_request_logs          SyncRequestLog[]
-  notification_events        NotificationEvent[]
+  sync_state                     MachineSyncState?
+  connection_logs                MachineConnectionLog[]
+  commands                       MachineCommand[]
+  runtime_sessions               MachineRuntimeSession[]
+  runtime_products               MachineRuntimeProduct[]
+  runtime_events                 MachineRuntimeEvent[]
+  scan_records                   ScanRecord[]
+  recent_duplicate_firsts        RecentDuplicateKey[]         @relation("FirstDuplicateMachine")
+  scan_sync_batches              ScanSyncBatch[]
+  sync_request_logs              SyncRequestLog[]
+  notification_events            NotificationEvent[]
+  approved_registration_requests MachineRegistrationRequest[] @relation("ApprovedMachineRegistrationRequest")
 
+  @@index([serial])
+  @@index([uid])
+  @@index([ip_address])
   @@map("machines")
+}
+
+// =========================
+// 4.1. MACHINE REGISTRATION REQUESTS
+// Local mới tự gửi yêu cầu kết nối. Server duyệt rồi định danh thành machine chính thức.
+// =========================
+
+model MachineRegistrationRequest {
+  id                     Int                       @id @default(autoincrement())
+  request_id             String                    @unique
+  requested_machine_code String?
+  serial                 String
+  uid                    String
+  license_key_raw        String?
+  ip_address             String
+  hostname               String?
+  app_version            String?
+  local_db_version       String?
+  status                 MachineRegistrationStatus @default(PENDING)
+  duplicate_fields_json  Json?
+  license_file_json      Json?
+  license_activated_at   DateTime?
+  license_activated_by   Int?
+  approved_machine_id    Int?
+  approved_machine_code  String?
+  approved_at            DateTime?
+  rejected_reason        String?
+  rejected_at            DateTime?
+  raw_json               Json?
+  created_at             DateTime                  @default(now())
+  updated_at             DateTime                  @updatedAt
+
+  approved_machine Machine? @relation("ApprovedMachineRegistrationRequest", fields: [approved_machine_id], references: [id], onDelete: SetNull)
+
+  @@index([status, created_at])
+  @@index([serial])
+  @@index([uid])
+  @@index([ip_address])
+  @@map("machine_registration_requests")
 }
 
 // =========================
@@ -275,6 +362,131 @@ model MachineConnectionLog {
   @@index([machine_code, created_at])
   @@index([event_type, created_at])
   @@map("machine_connection_logs")
+}
+
+// =========================
+// 6.1. MACHINE RUNTIME SESSIONS
+// Server-owned production runtime sessions created from WebSocket events.
+// Local does not own/edit these sessions; manual adjustment, if ever exposed,
+// must be written to machine_runtime_adjustment_logs.
+// =========================
+
+model MachineRuntimeSession {
+  id                 Int                  @id @default(autoincrement())
+  session_code       String               @unique
+  machine_id         Int
+  machine_code       String
+  status             MachineRuntimeStatus @default(RUNNING)
+  current_product_id Int?
+  total_count        Int                  @default(0)
+  ok_count           Int                  @default(0)
+  ng_count           Int                  @default(0)
+  last_result        String?
+  last_code          String?
+  last_local_scan_id String?
+  reconnect_count    Int                  @default(0)
+  started_at         DateTime             @default(now())
+  ended_at           DateTime?
+  disconnected_at    DateTime?
+  last_seen_at       DateTime             @default(now())
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @updatedAt
+
+  machine         Machine                       @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+  current_product MachineRuntimeProduct?        @relation("CurrentRuntimeProduct", fields: [current_product_id], references: [id], onDelete: SetNull)
+  products        MachineRuntimeProduct[]       @relation("RuntimeSessionProducts")
+  events          MachineRuntimeEvent[]
+  scan_records    ScanRecord[]
+  adjustments     MachineRuntimeAdjustmentLog[]
+
+  @@index([machine_id, status])
+  @@index([machine_code, last_seen_at])
+  @@index([status, last_seen_at])
+  @@map("machine_runtime_sessions")
+}
+
+model MachineRuntimeProduct {
+  id                 Int       @id @default(autoincrement())
+  session_id         Int
+  machine_id         Int
+  machine_code       String
+  profile_id         Int?
+  product_code       String
+  total_count        Int       @default(0)
+  ok_count           Int       @default(0)
+  ng_count           Int       @default(0)
+  last_result        String?
+  last_code          String?
+  last_local_scan_id String?
+  started_at         DateTime  @default(now())
+  ended_at           DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  session              MachineRuntimeSession         @relation("RuntimeSessionProducts", fields: [session_id], references: [id], onDelete: Cascade)
+  current_for_sessions MachineRuntimeSession[]       @relation("CurrentRuntimeProduct")
+  machine              Machine                       @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+  profile              ProductProfile?               @relation(fields: [profile_id], references: [id], onDelete: SetNull)
+  events               MachineRuntimeEvent[]
+  scan_records         ScanRecord[]
+  adjustments          MachineRuntimeAdjustmentLog[]
+
+  @@index([session_id, started_at])
+  @@index([machine_id, started_at])
+  @@index([profile_id])
+  @@index([product_code])
+  @@map("machine_runtime_products")
+}
+
+model MachineRuntimeEvent {
+  id            Int                     @id @default(autoincrement())
+  session_id    Int?
+  product_id    Int?
+  machine_id    Int
+  machine_code  String
+  profile_id    Int?
+  event_type    MachineRuntimeEventType
+  product_code  String?
+  total_count   Int?
+  ok_count      Int?
+  ng_count      Int?
+  last_result   String?
+  last_code     String?
+  local_scan_id String?
+  ip_address    String?
+  payload_json  Json?
+  created_at    DateTime                @default(now())
+
+  session MachineRuntimeSession? @relation(fields: [session_id], references: [id], onDelete: SetNull)
+  product MachineRuntimeProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  machine Machine                @relation(fields: [machine_id], references: [id], onDelete: Cascade)
+  profile ProductProfile?        @relation(fields: [profile_id], references: [id], onDelete: SetNull)
+
+  @@index([session_id, created_at])
+  @@index([product_id, created_at])
+  @@index([machine_id, created_at])
+  @@index([event_type, created_at])
+  @@map("machine_runtime_events")
+}
+
+model MachineRuntimeAdjustmentLog {
+  id             Int      @id @default(autoincrement())
+  session_id     Int
+  product_id     Int?
+  adjusted_by    Int?
+  reason         String
+  old_value_json Json
+  new_value_json Json
+  created_at     DateTime @default(now())
+
+  session    MachineRuntimeSession  @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  product    MachineRuntimeProduct? @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  adjustedBy User?                  @relation("MachineRuntimeAdjustmentBy", fields: [adjusted_by], references: [id], onDelete: SetNull)
+
+  @@index([session_id, created_at])
+  @@index([product_id, created_at])
+  @@index([adjusted_by, created_at])
+  @@map("machine_runtime_adjustment_logs")
 }
 
 // =========================
@@ -344,7 +556,6 @@ model LedCode {
 model ProductProfile {
   id                   Int      @id @default(autoincrement())
   chassis_code_id      Int      @unique
-  vendor_id            Int
   factory_code         String
   full_code_length     Int      @default(35)
   full_vendor_position Int      @default(18)
@@ -357,17 +568,17 @@ model ProductProfile {
   updated_at           DateTime @updatedAt
 
   chassis_code ChassisCode @relation(fields: [chassis_code_id], references: [id], onDelete: Restrict)
-  vendor       Vendor      @relation(fields: [vendor_id], references: [id], onDelete: Restrict)
   createdBy    User?       @relation("ProductProfileCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
 
-  profile_led_codes       ProfileLedCode[]
-  profile_snapshots       ProfileSnapshot[]
-  scan_records            ScanRecord[]
-  recent_duplicate_keys   RecentDuplicateKey[]
-  historical_jobs         HistoricalDuplicateJob[]
-  historical_results      HistoricalDuplicateResult[]
+  profile_led_codes     ProfileLedCode[]
+  profile_snapshots     ProfileSnapshot[]
+  runtime_products      MachineRuntimeProduct[]
+  runtime_events        MachineRuntimeEvent[]
+  scan_records          ScanRecord[]
+  recent_duplicate_keys RecentDuplicateKey[]
+  historical_jobs       HistoricalDuplicateJob[]
+  historical_results    HistoricalDuplicateResult[]
 
-  @@index([vendor_id])
   @@index([is_active])
   @@map("product_profiles")
 }
@@ -419,40 +630,44 @@ model ProfileSnapshot {
 // =========================
 
 model ScanRecord {
-  id                         Int              @id @default(autoincrement())
-  local_scan_id              String
-  machine_id                 Int
-  profile_id                 Int
-  profile_snapshot_id         Int?
+  id                  Int    @id @default(autoincrement())
+  local_scan_id       String
+  machine_id          Int
+  profile_id          Int
+  profile_snapshot_id Int?
 
-  full_code_raw              String
-  full_prefix                String
-  full_chassis_segment       String
-  full_chassis_code          String
-  full_before_vendor         String
-  full_vendor_char           String
-  full_led_code              String
-  full_factory_code          String
-  full_after_factory         String
-  duplicate_key              String
-  chassis_scan_raw           String
+  full_code_raw        String
+  full_prefix          String
+  full_chassis_segment String
+  full_chassis_code    String
+  full_before_vendor   String
+  full_vendor_char     String
+  full_led_code        String
+  full_factory_code    String
+  full_after_factory   String
+  duplicate_key        String
+  chassis_scan_raw     String
 
-  local_status               LocalScanStatus
-  server_status              ServerScanStatus
-  final_status               FinalScanStatus
-  ng_stage                   NgStage?
-  ng_reason                  String?
+  local_status  LocalScanStatus
+  server_status ServerScanStatus
+  final_status  FinalScanStatus
+  ng_stage      NgStage?
+  ng_reason     String?
 
-  sync_batch_id              Int?
-  scan_at                    DateTime
-  created_at                 DateTime         @default(now())
+  sync_batch_id      Int?
+  runtime_session_id Int?
+  runtime_product_id Int?
+  scan_at            DateTime
+  created_at         DateTime @default(now())
 
-  machine          Machine          @relation(fields: [machine_id], references: [id], onDelete: Restrict)
-  profile          ProductProfile   @relation(fields: [profile_id], references: [id], onDelete: Restrict)
-  profile_snapshot ProfileSnapshot? @relation(fields: [profile_snapshot_id], references: [id], onDelete: SetNull)
-  sync_batch       ScanSyncBatch?   @relation(fields: [sync_batch_id], references: [id], onDelete: SetNull)
+  machine          Machine                @relation(fields: [machine_id], references: [id], onDelete: Restrict)
+  profile          ProductProfile         @relation(fields: [profile_id], references: [id], onDelete: Restrict)
+  profile_snapshot ProfileSnapshot?       @relation(fields: [profile_snapshot_id], references: [id], onDelete: SetNull)
+  sync_batch       ScanSyncBatch?         @relation(fields: [sync_batch_id], references: [id], onDelete: SetNull)
+  runtime_session  MachineRuntimeSession? @relation(fields: [runtime_session_id], references: [id], onDelete: SetNull)
+  runtime_product  MachineRuntimeProduct? @relation(fields: [runtime_product_id], references: [id], onDelete: SetNull)
 
-  led_items                     ScanLedItem[]
+  led_items                      ScanLedItem[]
   recent_duplicate_keys_as_first RecentDuplicateKey[] @relation("FirstDuplicateScanRecord")
   notification_events            NotificationEvent[]
 
@@ -461,6 +676,8 @@ model ScanRecord {
   @@index([machine_id, scan_at])
   @@index([scan_at])
   @@index([sync_batch_id])
+  @@index([runtime_session_id])
+  @@index([runtime_product_id])
   @@index([ng_reason])
   @@map("scan_records")
 }
@@ -547,15 +764,16 @@ model ScanSyncBatch {
 // =========================
 
 model HistoricalDuplicateJob {
-  id          Int                 @id @default(autoincrement())
-  profile_id  Int?
-  from_date   DateTime
-  to_date     DateTime
-  status      HistoricalJobStatus @default(PENDING)
-  started_at  DateTime?
-  finished_at DateTime?
-  created_by  Int?
-  created_at  DateTime            @default(now())
+  id           Int                           @id @default(autoincrement())
+  profile_id   Int?
+  from_date    DateTime
+  to_date      DateTime
+  trigger_type HistoricalDuplicateJobTrigger @default(MANUAL_RANGE)
+  status       HistoricalJobStatus           @default(PENDING)
+  started_at   DateTime?
+  finished_at  DateTime?
+  created_by   Int?
+  created_at   DateTime                      @default(now())
 
   profile   ProductProfile? @relation(fields: [profile_id], references: [id], onDelete: SetNull)
   createdBy User?           @relation("HistoricalJobCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
@@ -563,8 +781,28 @@ model HistoricalDuplicateJob {
   results HistoricalDuplicateResult[]
 
   @@index([profile_id, status])
+  @@index([trigger_type, created_at])
   @@index([status, created_at])
   @@map("historical_duplicate_jobs")
+}
+
+model HistoricalDuplicateSchedule {
+  id           Int                                  @id @default(autoincrement())
+  enabled      Boolean                              @default(false)
+  frequency    HistoricalDuplicateScheduleFrequency @default(DAILY)
+  run_time     String                               @default("00:00")
+  day_of_week  Int                                  @default(1)
+  day_of_month Int                                  @default(1)
+  last_run_at  DateTime?
+  next_run_at  DateTime?
+  updated_by   Int?
+  created_at   DateTime                             @default(now())
+  updated_at   DateTime                             @updatedAt
+
+  updatedBy User? @relation("HistoricalDuplicateScheduleUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@index([enabled, next_run_at])
+  @@map("historical_duplicate_schedules")
 }
 
 // =========================
@@ -642,7 +880,7 @@ model ErrorCode {
 
 model NotificationTemplate {
   id               Int                @id @default(autoincrement())
-  noti_code         String             @unique
+  noti_code        String             @unique
   title_template   String
   message_template String
   severity         Severity
@@ -662,16 +900,16 @@ model NotificationTemplate {
 
 model NotificationEvent {
   id             Int                @id @default(autoincrement())
-  noti_code       String
-  machine_id      Int?
-  scan_record_id  Int?
-  batch_id        Int?
-  error_code      String?
-  title           String
-  message         String
-  severity        Severity
-  status          NotificationStatus @default(NEW)
-  created_at      DateTime           @default(now())
+  noti_code      String
+  machine_id     Int?
+  scan_record_id Int?
+  batch_id       Int?
+  error_code     String?
+  title          String
+  message        String
+  severity       Severity
+  status         NotificationStatus @default(NEW)
+  created_at     DateTime           @default(now())
 
   machine     Machine?       @relation(fields: [machine_id], references: [id], onDelete: SetNull)
   scan_record ScanRecord?    @relation(fields: [scan_record_id], references: [id], onDelete: SetNull)

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, ValidateNested } from "class-validator";
 
 export class ProfileLedCodeInputDto {
   @ApiProperty({ example: 1 })
@@ -25,12 +25,7 @@ export class CreateProfileDto {
   @Min(1)
   chassis_code_id!: number;
 
-  @ApiProperty({ example: 1 })
-  @IsInt()
-  @Min(1)
-  vendor_id!: number;
-
-  @ApiProperty({ example: "DYS3" })
+  @ApiProperty({ example: "DZLV" })
   @IsString()
   factory_code!: string;
 
@@ -58,8 +53,9 @@ export class CreateProfileDto {
   @Min(1)
   led_vendor_position?: number;
 
-  @ApiProperty({ type: [ProfileLedCodeInputDto] })
+  @ApiProperty({ type: [ProfileLedCodeInputDto], maxItems: 2 })
   @IsArray()
+  @ArrayMaxSize(2)
   @ValidateNested({ each: true })
   @Type(() => ProfileLedCodeInputDto)
   led_codes!: ProfileLedCodeInputDto[];
@@ -72,13 +68,7 @@ export class CreateProfileDto {
 }
 
 export class UpdateProfileDto {
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  vendor_id?: number;
-
-  @ApiPropertyOptional({ example: "DYS3" })
+  @ApiPropertyOptional({ example: "DZLV" })
   @IsOptional()
   @IsString()
   factory_code?: string;
@@ -112,9 +102,10 @@ export class UpdateProfileDto {
   @IsBoolean()
   is_active?: boolean;
 
-  @ApiPropertyOptional({ type: [ProfileLedCodeInputDto] })
+  @ApiPropertyOptional({ type: [ProfileLedCodeInputDto], maxItems: 2 })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(2)
   @ValidateNested({ each: true })
   @Type(() => ProfileLedCodeInputDto)
   led_codes?: ProfileLedCodeInputDto[];

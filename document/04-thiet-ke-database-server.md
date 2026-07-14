@@ -40,10 +40,30 @@ Các field quan trọng:
 
 - `machine_code`: mã máy, ví dụ `LOCAL01`, unique.
 - `machine_name`: tên máy.
+- `serial`: serial phần cứng của máy local sau khi định danh.
+- `uid`: UID ổn định của app/máy local sau khi định danh.
+- `license_key_raw`: license key tạm thời ở giai đoạn raw.
+- `license_activated_at`: thời điểm server đã import/kích hoạt license cho máy. Giai đoạn hiện tại chưa check công thức thật.
 - `line_name`: tên line.
 - `station_name`: tên trạm.
 - `ip_address`: IP gần nhất hoặc IP cấu hình.
 - `is_active`: máy inactive không được submit scan.
+
+### `machine_registration_requests`
+
+Lưu yêu cầu định danh do máy local mới gửi lên server.
+
+Các field quan trọng:
+
+- `request_id`: mã request để máy local poll trạng thái.
+- `requested_machine_code`: mã máy local đề xuất nếu sau này mở lại field này; flow hiện tại để server/admin đặt mã khi duyệt.
+- `serial`: serial phần cứng local.
+- `uid`: UID ổn định local.
+- `license_key_raw`: key kích hoạt tạm thời server tự tạo theo `serial|uid`, hiện để raw.
+- `license_file_json`: nội dung file license admin/dev import.
+- `license_activated_at`: thời điểm server đã import/kích hoạt license cho request. Giai đoạn hiện tại chưa decode/check công thức thật.
+- `status`: `PENDING`, `APPROVED`, `REJECTED`.
+- `approved_machine_code`: mã máy chính thức sau khi duyệt.
 
 ### `machine_sync_states`
 
@@ -154,9 +174,32 @@ UNIQUE(profile_id, duplicate_key)
 
 Job kiểm duplicate toàn bộ lịch sử để báo cáo. Không đổi final status cũ.
 
+Mỗi lần người dùng bấm chạy hoặc server tự chạy theo lịch đều tạo một job riêng. Các job cũ được giữ lại để xem lại lịch sử từng lần quét.
+
+Màn detail của từng job cần hiển thị tổng số mã đã kiểm, số mã theo từng profile, số nhóm trùng, profile bị trùng và danh sách duplicate key cụ thể.
+
+- `trigger_type = MANUAL_RANGE`: người dùng chạy report theo khoảng ngày.
+- `trigger_type = MANUAL_FULL`: người dùng chạy report toàn bộ DB ngay.
+- `trigger_type = SCHEDULED_FULL`: server tự chạy report toàn bộ DB theo lịch.
+
+Job toàn DB dùng `from_date = 1970-01-01` và `to_date = thời điểm chạy job` để thể hiện phạm vi không giới hạn theo cửa sổ 30/31 ngày.
+
+### `historical_duplicate_schedules`
+
+Cấu hình lịch chạy report duplicate toàn bộ DB.
+
+- Đây là chức năng chỉ thuộc máy server. Máy local không gọi API này, không lưu lịch này và không cần tự kiểm duplicate toàn bộ DB server.
+- Mặc định không có lịch chạy tự động nếu người dùng chưa bật.
+- Khi bật, server tính `next_run_at` theo `frequency`, `run_time`, `day_of_week` hoặc `day_of_month`.
+- Tần suất hỗ trợ: `DAILY`, `WEEKLY`, `MONTHLY`.
+- Mặc định giao diện đề xuất `00:00` mỗi ngày, nhưng chỉ chạy khi `enabled = true`.
+- Task này chỉ tạo báo cáo, không đổi `scan_records.final_status` và không thay logic duplicate 30/31 ngày khi local gửi scan.
+
 ### `historical_duplicate_results`
 
 Kết quả duplicate lịch sử.
+
+Kết quả luôn gắn với `job_id`, vì vậy mỗi lần quét toàn bộ DB có bộ kết quả riêng. Lần chạy sau không ghi đè kết quả của lần chạy trước.
 
 ## 7. Nhóm sync/offline
 

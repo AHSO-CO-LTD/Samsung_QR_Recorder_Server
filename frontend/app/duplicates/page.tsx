@@ -1,5 +1,5 @@
-import { DuplicatesView } from "@/features/duplicates/duplicates-view";
+import { redirect } from "next/navigation";
 
 export default function DuplicatesPage() {
-  return <DuplicatesView />;
+  redirect("/scans");
 }
