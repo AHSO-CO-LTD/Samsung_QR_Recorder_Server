@@ -1,0 +1,61 @@
+name: Build Windows setup
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run dist:win
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Upload setup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: samsung-qr-recorder-server-windows-setup
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/*.yml
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $assets = Get-ChildItem -Path release -File | Where-Object { $_.Name -match '\.(exe|blockmap|yml)$' }
+          if (-not $assets) {
+            throw "No release assets found."
+          }
+
+          gh release view $env:TAG_NAME *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG_NAME --title $env:TAG_NAME --generate-notes
+          }
+
+          gh release upload $env:TAG_NAME @($assets.FullName) --clobber

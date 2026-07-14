@@ -26,6 +26,26 @@ export type DesktopWindowState = {
   displaySettings: DesktopDisplaySettings;
 };
 
+export type DesktopUpdateRelease = {
+  version: string;
+  tagName: string;
+  name: string;
+  url: string;
+  publishedAt: string | null;
+  prerelease: boolean;
+  assetName: string;
+  assetSize: number;
+};
+
+export type DesktopUpdateState = {
+  success: boolean;
+  currentVersion: string;
+  repository: string;
+  packaged: boolean;
+  releases: DesktopUpdateRelease[];
+  message: string;
+};
+
 export type DesktopAppBridge = {
   versions: {
     node: string;
@@ -41,6 +61,10 @@ export type DesktopAppBridge = {
   previewDisplaySettings: (settings: DesktopDisplaySettings) => Promise<DesktopDisplaySettingsState>;
   confirmDisplaySettings: () => Promise<DesktopDisplaySettingsState>;
   rollbackDisplaySettings: () => Promise<DesktopDisplaySettingsState>;
+  updates: {
+    check: () => Promise<DesktopUpdateState>;
+    install: (tagName: string) => Promise<{ success: boolean; message: string }>;
+  };
 };
 
 declare global {

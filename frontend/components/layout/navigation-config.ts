@@ -1,11 +1,11 @@
 import {
-  Bell,
   Database,
-  FileSearch,
   Gauge,
   History,
+  Activity,
   MonitorCog,
   ScanLine,
+  SearchCheck,
   Settings,
   Unplug,
   UsersRound,
@@ -39,8 +39,7 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navMonitoringDesc",
     icon: Gauge,
     items: [
-      { href: "/", key: "dashboard", descriptionKey: "dashboardNavDesc", icon: Gauge },
-      { href: "/notifications", key: "notifications", descriptionKey: "notificationDesc", icon: Bell }
+      { href: "/", key: "dashboard", descriptionKey: "dashboardNavDesc", icon: Gauge }
     ]
   },
   {
@@ -50,8 +49,8 @@ export const navGroups: readonly NavGroup[] = [
     icon: ScanLine,
     items: [
       { href: "/machines", key: "machines", descriptionKey: "machineDesc", icon: MonitorCog },
-      { href: "/scans", key: "scans", descriptionKey: "scanDesc", icon: ScanLine },
-      { href: "/duplicates", key: "duplicates", descriptionKey: "duplicateDesc", icon: FileSearch }
+      { href: "/runtime", key: "runtimeSessions", descriptionKey: "runtimeDesc", icon: Activity },
+      { href: "/scans", key: "scans", descriptionKey: "scanDesc", icon: ScanLine }
     ]
   },
   {
@@ -60,12 +59,11 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navSystemDesc",
     icon: Settings,
     items: [
-      { href: "/profiles", key: "profiles", descriptionKey: "profileDesc", icon: Database },
       { href: "/master-data", key: "masterData", descriptionKey: "masterDataDesc", icon: Database },
       { href: "/sync", key: "sync", descriptionKey: "syncDesc", icon: Workflow },
+      { href: "/duplicate-audit", key: "duplicateAudit", descriptionKey: "duplicateAuditDesc", icon: SearchCheck },
       { href: "/users", key: "users", descriptionKey: "usersDesc", icon: UsersRound },
       { href: "/audit-logs", key: "auditLogs", descriptionKey: "auditLogsDesc", icon: History },
-      { href: "/settings", key: "settings", descriptionKey: "settingsDesc", icon: Settings },
       { href: "http://127.0.0.1:3979/api/docs", key: "apiDocs", descriptionKey: "apiDocsDesc", icon: Unplug, external: true }
     ]
   }

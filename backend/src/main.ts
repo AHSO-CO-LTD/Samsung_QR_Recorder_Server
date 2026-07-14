@@ -28,6 +28,11 @@ async function bootstrap() {
     .setVersion("0.1.0")
     .addBearerAuth()
     .addTag("local-machine", "Endpoints called by Python local machines over LAN")
+    .addTag("machines-admin", "Machine registration and management endpoints for the server UI")
+    .addTag("machine-commands-admin", "Endpoints used by the server UI to inspect and queue machine commands")
+    .addTag("machine-runtime", "Runtime WebSocket session history and monitoring endpoints")
+    .addTag("scan-dashboard", "Scan history and summary endpoints for the server UI")
+    .addTag("sync-dashboard", "Sync batch and request log endpoints for the server UI")
     .addTag("server-ui", "Endpoints used by the Electron/Next.js UI")
     .build();
 

@@ -33,6 +33,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    const syncHeaderHeight = () => {
+      const header = headerRef.current;
+      if (!header) {
+        return;
+      }
+
+      const headerHeight = Math.max(0, Math.ceil(header.getBoundingClientRect().height));
+      document.documentElement.style.setProperty("--app-header-height", `${headerHeight}px`);
+    };
+
+    syncHeaderHeight();
+
+    const observer = new ResizeObserver(syncHeaderHeight);
+    if (headerRef.current) {
+      observer.observe(headerRef.current);
+    }
+
+    window.addEventListener("resize", syncHeaderHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncHeaderHeight);
+    };
+  }, [openGroupId, pathname]);
+
+  useEffect(() => {
     if (!openGroupId) {
       return;
     }
@@ -137,7 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </header>
 
-        <main className="mx-auto min-w-0 max-w-[1440px] p-3 sm:p-4 lg:p-6">{children}</main>
+        <main className="w-full min-w-0 p-3 sm:p-4 lg:p-5 2xl:p-6">{children}</main>
       </div>
 
       <Dialog open={Boolean(confirmAction)} onOpenChange={(open) => !open && setConfirmAction(null)}>

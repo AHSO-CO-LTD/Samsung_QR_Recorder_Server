@@ -7,6 +7,18 @@ export type ApiResult<T = unknown> = {
   code: string;
   message: string;
   data?: T;
+  meta?: ApiPaginationMeta;
+};
+
+export type ApiPaginationMeta = {
+  total?: number;
+  take?: number;
+  skip?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+  has_previous?: boolean;
+  has_next?: boolean;
 };
 
 export async function apiGet<T>(path: string): Promise<ApiResult<T>> {

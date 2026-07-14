@@ -7,6 +7,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppearanceSettings } from "@/features/settings/appearance-settings";
 import { ServerSettingsForm } from "@/features/settings/server-settings-form";
+import { UpdateSettings } from "@/features/settings/update-settings";
 import { useI18n } from "@/lib/i18n-provider";
 
 export default function SettingsPage() {
@@ -17,6 +18,7 @@ export default function SettingsPage() {
       <TabsList className="w-full sm:w-auto">
         <TabsTrigger value="appearance">{t("appearanceTab")}</TabsTrigger>
         <TabsTrigger value="server">{t("serverTab")}</TabsTrigger>
+        <TabsTrigger value="updates">Cập nhật</TabsTrigger>
         <TabsTrigger value="api">{t("apiTab")}</TabsTrigger>
       </TabsList>
 
@@ -28,8 +30,12 @@ export default function SettingsPage() {
         <ServerSettingsForm />
       </TabsContent>
 
+      <TabsContent value="updates">
+        <UpdateSettings />
+      </TabsContent>
+
       <TabsContent value="api">
-        <Card className="max-w-xl">
+        <Card>
           <CardHeader>
             <div className="flex min-w-0 items-center gap-2">
               <CardTitle className="truncate">{t("apiContract")}</CardTitle>
@@ -43,13 +49,13 @@ export default function SettingsPage() {
                 {t("openSwagger")}
               </Button>
             </a>
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div className="flex min-w-0 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm font-medium">
                 <span className="truncate">{t("duplicateWindow")}</span>
                 <InfoTooltip content={t("duplicateRule")} />
               </div>
               <div className="flex min-w-0 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm font-medium">
-                <span className="truncate">Local NG</span>
+                <span className="truncate">{t("localNgLabel")}</span>
                 <InfoTooltip content={t("localRule")} />
               </div>
             </div>

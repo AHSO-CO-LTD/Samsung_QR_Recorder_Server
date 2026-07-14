@@ -1,38 +1,50 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Power } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { apiDelete, apiPost } from "@/lib/api";
+import { apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n-provider";
+import { CheckboxField, SelectField, TextInputField } from "@/features/shared/form-fields";
 import { ConfirmActionDialog } from "@/features/shared/confirm-action-dialog";
 import { DataTablePanel, DateText, StatusBadge, type Column } from "@/features/shared/data-view";
-import { PageTitle } from "@/features/shared/page-title";
 import type { AppUser, UserRole } from "@/features/shared/types";
+import type { MessageKey } from "@/lib/i18n";
 
-const roleLabels: Record<UserRole, string> = {
-  OPERATOR: "Operator",
-  ENGINEER: "Engineer",
-  ADMIN: "Admin",
-  DEV: "Dev"
+type UserDraft = {
+  username: string;
+  full_name: string;
+  password: string;
+  role: UserRole;
+  is_active: boolean;
 };
 
-const emptyUser = {
+const roleLabelKeys: Record<UserRole, MessageKey> = {
+  OPERATOR: "roleOperator",
+  ENGINEER: "roleEngineer",
+  ADMIN: "roleAdmin",
+  DEV: "roleDev"
+};
+
+const emptyUser: UserDraft = {
   username: "",
   full_name: "",
   password: "",
-  role: "OPERATOR" as UserRole
+  role: "OPERATOR",
+  is_active: true
 };
 
 export function UsersView() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [refreshId, setRefreshId] = useState(0);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [draft, setDraft] = useState(emptyUser);
+  const [draft, setDraft] = useState<UserDraft>(emptyUser);
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [target, setTarget] = useState<AppUser | null>(null);
 
   const availableRoles = useMemo<UserRole[]>(
@@ -41,35 +53,67 @@ export function UsersView() {
   );
 
   const columns: Column<AppUser>[] = [
-    { key: "username", header: "Tài khoản", render: (item) => item.username },
-    { key: "name", header: "Họ tên", render: (item) => item.full_name },
-    { key: "role", header: "Role", render: (item) => roleLabels[item.role] },
-    { key: "active", header: "Trạng thái", render: (item) => <StatusBadge value={item.is_active} /> },
-    { key: "updated", header: "Cập nhật", render: (item) => <DateText value={item.updated_at} /> },
+    { key: "username", header: t("fieldUsername"), render: (item) => item.username },
+    { key: "name", header: t("fieldFullName"), render: (item) => item.full_name },
+    { key: "role", header: t("colRole"), render: (item) => t(roleLabelKeys[item.role]) },
+    { key: "active", header: t("colStatus"), render: (item) => <StatusBadge value={item.is_active} /> },
+    { key: "updated", header: t("colUpdated"), render: (item) => <DateText value={item.updated_at} /> },
     {
       key: "actions",
-      header: "Thao tác",
-      className: "w-28 text-right",
+      header: t("colActions"),
+      className: "w-40 text-right",
       render: (item) => (
-        <Button type="button" variant="outline" size="sm" onClick={() => setTarget(item)} disabled={!item.is_active || item.id === user?.id}>
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          Tắt
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => openForm(item)} disabled={item.id === user?.id && item.role === "DEV"}>
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+            {t("edit")}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setTarget(item)} disabled={!item.is_active || item.id === user?.id}>
+            <Power className="h-4 w-4" aria-hidden="true" />
+            {t("deactivate")}
+          </Button>
+        </div>
       )
     }
   ];
+
+  const openForm = (targetUser?: AppUser) => {
+    setEditingUser(targetUser ?? null);
+    setDraft(
+      targetUser
+        ? {
+            username: targetUser.username,
+            full_name: targetUser.full_name,
+            password: "",
+            role: targetUser.role,
+            is_active: targetUser.is_active
+          }
+        : { ...emptyUser, role: availableRoles[0] }
+    );
+    setIsFormOpen(true);
+  };
 
   const saveUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSaving(true);
     try {
-      await apiPost("/users", draft);
-      toast.success("Đã tạo user.");
+      if (editingUser) {
+        await apiPatch(`/users/${editingUser.id}`, {
+          full_name: draft.full_name,
+          role: draft.role,
+          password: draft.password || undefined,
+          is_active: draft.is_active
+        });
+        toast.success(t("userUpdated"));
+      } else {
+        await apiPost("/users", draft);
+        toast.success(t("userCreated"));
+      }
       setDraft({ ...emptyUser, role: availableRoles[0] });
-      setIsCreateOpen(false);
+      setIsFormOpen(false);
       setRefreshId((value) => value + 1);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không tạo được user.");
+      toast.error(error instanceof Error ? error.message : t("userSaveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -83,11 +127,11 @@ export function UsersView() {
     setIsSaving(true);
     try {
       await apiDelete(`/users/${target.id}`);
-      toast.success("Đã vô hiệu hóa user.");
+      toast.success(t("userDeactivated"));
       setTarget(null);
       setRefreshId((value) => value + 1);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không vô hiệu hóa được user.");
+      toast.error(error instanceof Error ? error.message : t("userDeactivateFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -95,46 +139,51 @@ export function UsersView() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <PageTitle title="Users và role" description="Quản lý tài khoản vận hành server. Role Dev chỉ hiển thị với tài khoản Dev." />
       <DataTablePanel
-        title="Danh sách user"
+        title={t("usersList")}
         endpoint={`/users?refresh=${refreshId}`}
         columns={columns}
         getRowKey={(item) => item.id}
+        searchableText={(item) => `${item.username} ${item.full_name} ${item.role} ${item.is_active}`}
         actions={
-          <Button type="button" size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Button type="button" size="sm" onClick={() => openForm()}>
             <Plus className="h-4 w-4" aria-hidden="true" />
-            Thêm user
+            {t("addUser")}
           </Button>
         }
       />
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Thêm user</DialogTitle>
+            <DialogTitle>{editingUser ? t("editUser") : t("createUser")}</DialogTitle>
           </DialogHeader>
           <form className="space-y-3" onSubmit={saveUser}>
-            <Input required placeholder="Tên đăng nhập" value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} />
-            <Input required placeholder="Họ tên" value={draft.full_name} onChange={(event) => setDraft({ ...draft, full_name: event.target.value })} />
-            <Input required type="password" minLength={8} placeholder="Mật khẩu" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} />
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={draft.role}
-              onChange={(event) => setDraft({ ...draft, role: event.target.value as UserRole })}
-            >
+            <TextInputField required disabled={Boolean(editingUser)} label={t("fieldUsername")} value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} />
+            <TextInputField required label={t("fieldFullName")} value={draft.full_name} onChange={(event) => setDraft({ ...draft, full_name: event.target.value })} />
+            <TextInputField
+              required={!editingUser}
+              type="password"
+              minLength={draft.password ? 8 : undefined}
+              label={editingUser ? t("fieldNewPassword") : t("fieldPassword")}
+              hint={editingUser ? t("passwordBlankHint") : undefined}
+              value={draft.password}
+              onChange={(event) => setDraft({ ...draft, password: event.target.value })}
+            />
+            <SelectField label={t("colRole")} value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as UserRole })}>
               {availableRoles.map((role) => (
                 <option key={role} value={role}>
-                  {roleLabels[role]}
+                  {t(roleLabelKeys[role])}
                 </option>
               ))}
-            </select>
+            </SelectField>
+            <CheckboxField label={t("userActiveField")} checked={draft.is_active} onCheckedChange={(checked) => setDraft({ ...draft, is_active: checked })} />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)} disabled={isSaving}>
-                Hủy
+              <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)} disabled={isSaving}>
+                {t("cancel")}
               </Button>
               <Button type="submit" disabled={isSaving}>
-                Lưu
+                {t("save")}
               </Button>
             </DialogFooter>
           </form>
@@ -144,9 +193,9 @@ export function UsersView() {
       <ConfirmActionDialog
         open={Boolean(target)}
         onOpenChange={(open) => !open && setTarget(null)}
-        title="Vô hiệu hóa user?"
-        description={`Tài khoản ${target?.username ?? ""} sẽ không đăng nhập được nữa.`}
-        confirmLabel="Vô hiệu hóa"
+        title={t("userDeactivateTitle")}
+        description={t("userDeactivateDesc", { username: target?.username ?? "" })}
+        confirmLabel={t("deactivate")}
         isRunning={isSaving}
         onConfirm={() => void deactivateUser()}
       />

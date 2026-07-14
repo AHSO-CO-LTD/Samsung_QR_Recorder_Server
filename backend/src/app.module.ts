@@ -10,8 +10,10 @@ import { MachinesModule } from "./modules/machines/machines.module";
 import { MasterDataModule } from "./modules/master-data/master-data.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
+import { RuntimeModule } from "./modules/runtime/runtime.module";
 import { ScansModule } from "./modules/scans/scans.module";
 import { SettingsModule } from "./modules/settings/settings.module";
+import { SetupModule } from "./modules/setup/setup.module";
 import { SyncModule } from "./modules/sync/sync.module";
 import { UsersModule } from "./modules/users/users.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -29,11 +31,13 @@ import { PrismaModule } from "./prisma/prisma.module";
     MachinesModule,
     MasterDataModule,
     ProfilesModule,
+    RuntimeModule,
     ScansModule,
     DuplicatesModule,
     SyncModule,
     NotificationsModule,
     SettingsModule,
+    SetupModule,
     UsersModule
   ],
   providers: [

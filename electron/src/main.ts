@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
+import https from "node:https";
 import http from "node:http";
 import path from "node:path";
 
@@ -58,7 +59,36 @@ type ManagedService = {
   command: string;
   args: string[];
   readyUrl: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
   process?: ChildProcessWithoutNullStreams;
+};
+
+type UpdateAsset = {
+  name: string;
+  size: number;
+  browser_download_url: string;
+};
+
+type GithubRelease = {
+  tag_name: string;
+  name: string | null;
+  html_url: string;
+  draft: boolean;
+  prerelease: boolean;
+  published_at: string | null;
+  assets: UpdateAsset[];
+};
+
+type AppUpdateRelease = {
+  version: string;
+  tagName: string;
+  name: string;
+  url: string;
+  publishedAt: string | null;
+  prerelease: boolean;
+  assetName: string;
+  assetSize: number;
 };
 
 const serviceLogs: string[] = [];
@@ -105,6 +135,23 @@ function getProjectRoot() {
   return app.isPackaged ? path.dirname(app.getPath("exe")) : path.resolve(__dirname, "../..");
 }
 
+function getRuntimeRoot() {
+  return app.isPackaged ? path.join(process.resourcesPath, "runtime") : path.join(getProjectRoot(), "release-runtime");
+}
+
+function getRuntimeBackendRoot() {
+  return path.join(getRuntimeRoot(), "backend");
+}
+
+function getRuntimeFrontendRoot() {
+  const monorepoServer = path.join(getRuntimeRoot(), "frontend", "frontend", "server.js");
+  if (fs.existsSync(monorepoServer)) {
+    return path.join(getRuntimeRoot(), "frontend", "frontend");
+  }
+
+  return path.join(getRuntimeRoot(), "frontend");
+}
+
 function getNpmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
@@ -123,30 +170,39 @@ function getManagedNpmCommand(scriptName: string) {
   };
 }
 
+function getNodeCommand() {
+  return process.platform === "win32" ? "node.exe" : "node";
+}
+
 function loadRootEnv() {
-  const envPath = path.join(getProjectRoot(), ".env");
-  if (!fs.existsSync(envPath)) {
-    return;
-  }
+  const envPaths = app.isPackaged
+    ? [path.join(getRuntimeRoot(), ".env"), path.join(getRuntimeBackendRoot(), ".env"), path.join(getProjectRoot(), ".env")]
+    : [path.join(getProjectRoot(), ".env")];
 
-  const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
+  for (const envPath of envPaths) {
+    if (!fs.existsSync(envPath)) {
       continue;
     }
 
-    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!match) {
-      continue;
-    }
+    const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
 
-    const [, key, rawValue] = match;
-    if (process.env[key] !== undefined) {
-      continue;
-    }
+      const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!match) {
+        continue;
+      }
 
-    process.env[key] = rawValue.trim().replace(/^["']|["']$/g, "");
+      const [, key, rawValue] = match;
+      if (process.env[key] !== undefined) {
+        continue;
+      }
+
+      process.env[key] = rawValue.trim().replace(/^["']|["']$/g, "");
+    }
   }
 }
 
@@ -391,9 +447,10 @@ async function startManagedService(service: ManagedService) {
   appendServiceLog(service.name, `Starting ${service.command} ${service.args.join(" ")}`);
   try {
     service.process = spawn(service.command, service.args, {
-      cwd: getProjectRoot(),
+      cwd: service.cwd ?? getProjectRoot(),
       env: {
         ...process.env,
+        ...service.env,
         FORCE_COLOR: "0"
       },
       windowsHide: true
@@ -425,22 +482,50 @@ async function startManagedServices() {
     return true;
   }
 
-  const apiCommand = getManagedNpmCommand("dev:api");
-  const webCommand = getManagedNpmCommand("dev:web");
-  managedServices.push(
-    {
-      name: "API",
-      command: apiCommand.command,
-      args: apiCommand.args,
-      readyUrl: getApiHealthUrl()
-    },
-    {
-      name: "WEB",
-      command: webCommand.command,
-      args: webCommand.args,
-      readyUrl: getFrontendUrl()
-    }
-  );
+  if (app.isPackaged) {
+    const frontendRoot = getRuntimeFrontendRoot();
+    managedServices.push(
+      {
+        name: "API",
+        command: getNodeCommand(),
+        args: [path.join(getRuntimeBackendRoot(), "dist", "main.js")],
+        cwd: getRuntimeBackendRoot(),
+        readyUrl: getApiHealthUrl(),
+        env: {
+          AHSO_RUNTIME_ROOT: getRuntimeRoot()
+        }
+      },
+      {
+        name: "WEB",
+        command: getNodeCommand(),
+        args: [path.join(frontendRoot, "server.js")],
+        cwd: frontendRoot,
+        readyUrl: getFrontendUrl(),
+        env: {
+          HOSTNAME: "127.0.0.1",
+          PORT: String(getFrontendPort()),
+          NEXT_TELEMETRY_DISABLED: "1"
+        }
+      }
+    );
+  } else {
+    const apiCommand = getManagedNpmCommand("dev:api");
+    const webCommand = getManagedNpmCommand("dev:web");
+    managedServices.push(
+      {
+        name: "API",
+        command: apiCommand.command,
+        args: apiCommand.args,
+        readyUrl: getApiHealthUrl()
+      },
+      {
+        name: "WEB",
+        command: webCommand.command,
+        args: webCommand.args,
+        readyUrl: getFrontendUrl()
+      }
+    );
+  }
 
   const results = await Promise.all(managedServices.map((service) => startManagedService(service)));
   if (!results.every(Boolean)) {
@@ -906,6 +991,241 @@ function getDesktopWindowState() {
   };
 }
 
+function normalizeVersion(value: string) {
+  const match = value.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
+  return match ? `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}` : null;
+}
+
+function compareVersions(left: string, right: string) {
+  const leftParts = left.split(".").map((part) => Number(part));
+  const rightParts = right.split(".").map((part) => Number(part));
+  for (let index = 0; index < 3; index += 1) {
+    const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (delta !== 0) {
+      return delta;
+    }
+  }
+  return 0;
+}
+
+function getUpdateRepository() {
+  if (process.env.UPDATE_REPOSITORY?.trim()) {
+    return process.env.UPDATE_REPOSITORY.trim();
+  }
+
+  const updateSourcePath = path.join(getRuntimeRoot(), "update-source.json");
+  if (!fs.existsSync(updateSourcePath)) {
+    return "";
+  }
+
+  try {
+    const value = JSON.parse(fs.readFileSync(updateSourcePath, "utf8")) as { repository?: string };
+    return value.repository?.trim() ?? "";
+  } catch (error) {
+    appendServiceLog("SYSTEM", `Unable to read update source: ${formatUnknownError(error)}`);
+    return "";
+  }
+}
+
+function requestJson<T>(url: string) {
+  return new Promise<T>((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": APP_NAME
+        }
+      },
+      (response) => {
+        if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          response.resume();
+          requestJson<T>(response.headers.location).then(resolve, reject);
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf8");
+          if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+            reject(new Error(`GitHub returned ${response.statusCode}: ${body.slice(0, 200)}`));
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(body) as T);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }
+    );
+
+    request.on("error", reject);
+    request.setTimeout(15000, () => {
+      request.destroy(new Error("GitHub update check timed out."));
+    });
+  });
+}
+
+function mapRelease(release: GithubRelease, currentVersion: string): AppUpdateRelease | null {
+  if (release.draft) {
+    return null;
+  }
+
+  const version = normalizeVersion(release.tag_name);
+  if (!version || compareVersions(version, currentVersion) <= 0) {
+    return null;
+  }
+
+  const asset = release.assets.find((item) => item.name.toLowerCase().endsWith(".exe") && !item.name.toLowerCase().endsWith(".blockmap.exe"));
+  if (!asset) {
+    return null;
+  }
+
+  return {
+    version,
+    tagName: release.tag_name,
+    name: release.name || release.tag_name,
+    url: release.html_url,
+    publishedAt: release.published_at,
+    prerelease: release.prerelease,
+    assetName: asset.name,
+    assetSize: asset.size
+  };
+}
+
+async function getAvailableUpdateReleases() {
+  const repository = getUpdateRepository();
+  const currentVersion = normalizeVersion(app.getVersion()) ?? "0.0.0";
+  if (!repository) {
+    return {
+      currentVersion,
+      repository,
+      packaged: app.isPackaged,
+      releases: [] as AppUpdateRelease[],
+      message: "UPDATE_REPOSITORY is not configured."
+    };
+  }
+
+  const releases = await requestJson<GithubRelease[]>(`https://api.github.com/repos/${repository}/releases`);
+  const mappedReleases = releases
+    .map((release) => mapRelease(release, currentVersion))
+    .filter((release): release is AppUpdateRelease => Boolean(release))
+    .sort((first, second) => compareVersions(second.version, first.version));
+
+  return {
+    currentVersion,
+    repository,
+    packaged: app.isPackaged,
+    releases: mappedReleases,
+    message: mappedReleases.length ? "Updates are available." : "App is up to date."
+  };
+}
+
+async function checkForUpdates() {
+  try {
+    return {
+      success: true,
+      ...(await getAvailableUpdateReleases())
+    };
+  } catch (error) {
+    appendServiceLog("SYSTEM", `Update check failed: ${formatUnknownError(error)}`);
+    return {
+      success: false,
+      currentVersion: normalizeVersion(app.getVersion()) ?? app.getVersion(),
+      repository: getUpdateRepository(),
+      packaged: app.isPackaged,
+      releases: [] as AppUpdateRelease[],
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function downloadFile(url: string, targetPath: string) {
+  return new Promise<void>((resolve, reject) => {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    const file = fs.createWriteStream(targetPath);
+
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "application/octet-stream",
+          "User-Agent": APP_NAME
+        }
+      },
+      (response) => {
+        if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          file.close();
+          fs.rmSync(targetPath, { force: true });
+          downloadFile(response.headers.location, targetPath).then(resolve, reject);
+          return;
+        }
+
+        if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+          file.close();
+          fs.rmSync(targetPath, { force: true });
+          reject(new Error(`Download failed with status ${response.statusCode ?? "unknown"}.`));
+          return;
+        }
+
+        response.pipe(file);
+        file.on("finish", () => {
+          file.close();
+          resolve();
+        });
+      }
+    );
+
+    request.on("error", (error) => {
+      file.close();
+      fs.rmSync(targetPath, { force: true });
+      reject(error);
+    });
+    request.setTimeout(120000, () => {
+      request.destroy(new Error("Update download timed out."));
+    });
+  });
+}
+
+async function installUpdate(tagName: string) {
+  if (!app.isPackaged) {
+    throw new Error("Update install is only available in packaged desktop builds.");
+  }
+
+  const state = await getAvailableUpdateReleases();
+  const release = state.releases.find((item) => item.tagName === tagName);
+  if (!release) {
+    throw new Error("Selected release is not a valid upgrade target.");
+  }
+
+  const githubRelease = await requestJson<GithubRelease>(`https://api.github.com/repos/${state.repository}/releases/tags/${encodeURIComponent(tagName)}`);
+  const asset = githubRelease.assets.find((item) => item.name === release.assetName);
+  if (!asset) {
+    throw new Error("Installer asset was not found on the selected release.");
+  }
+
+  const targetPath = path.join(app.getPath("userData"), "updates", asset.name);
+  appendServiceLog("SYSTEM", `Downloading update ${tagName} to ${targetPath}`);
+  await downloadFile(asset.browser_download_url, targetPath);
+
+  appendServiceLog("SYSTEM", `Launching update installer ${targetPath}`);
+  const installer = spawn(targetPath, [], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false
+  });
+  installer.unref();
+
+  setTimeout(() => app.quit(), 500);
+  return {
+    success: true,
+    message: "Update installer started."
+  };
+}
+
 function registerAppIpc() {
   ipcMain.handle("app:quit", () => {
     appendServiceLog("SYSTEM", "Quit requested from desktop UI.");
@@ -930,6 +1250,8 @@ function registerAppIpc() {
   );
   ipcMain.handle("window:confirm-display-settings", () => confirmDesktopDisplaySettings());
   ipcMain.handle("window:rollback-display-settings", () => rollbackPendingDisplaySettings());
+  ipcMain.handle("updates:check", () => checkForUpdates());
+  ipcMain.handle("updates:install", (_event, tagName: unknown) => installUpdate(String(tagName ?? "")));
 }
 
 function registerHiddenTerminalShortcut(targetWindow: BrowserWindow) {

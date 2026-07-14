@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsIn, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsIn, IsOptional, IsString, Length } from "class-validator";
 
 export class CreateVendorDto {
   @ApiProperty({ example: "Samsung Display" })
@@ -34,12 +34,14 @@ export class UpdateVendorDto {
 }
 
 export class CreateChassisCodeDto {
-  @ApiProperty({ example: "BN96-60877C" })
+  @ApiPropertyOptional({ example: "BN96-60877C", description: "Optional. Server derives this from code_input." })
+  @IsOptional()
   @IsString()
-  code_full!: string;
+  code_full?: string;
 
   @ApiProperty({ example: "60877C" })
   @IsString()
+  @Length(6, 6)
   code_input!: string;
 
   @ApiPropertyOptional({ example: true })
@@ -49,7 +51,7 @@ export class CreateChassisCodeDto {
 }
 
 export class UpdateChassisCodeDto {
-  @ApiPropertyOptional({ example: "BN96-60877C" })
+  @ApiPropertyOptional({ example: "BN96-60877C", description: "Optional. Server derives this from code_input when code_input changes." })
   @IsOptional()
   @IsString()
   code_full?: string;
@@ -57,6 +59,7 @@ export class UpdateChassisCodeDto {
   @ApiPropertyOptional({ example: "60877C" })
   @IsOptional()
   @IsString()
+  @Length(6, 6)
   code_input?: string;
 
   @ApiPropertyOptional({ example: true })
@@ -66,17 +69,20 @@ export class UpdateChassisCodeDto {
 }
 
 export class CreateLedCodeDto {
-  @ApiProperty({ example: "BN96-60376A" })
+  @ApiPropertyOptional({ example: "BN96-60376A", description: "Optional. Server derives this from code_input." })
+  @IsOptional()
   @IsString()
-  code_full!: string;
+  code_full?: string;
 
   @ApiProperty({ example: "60376A" })
   @IsString()
+  @Length(6, 6)
   code_input!: string;
 
-  @ApiProperty({ example: "0376A" })
+  @ApiPropertyOptional({ example: "0376A", description: "Optional. Server derives this from the last 5 characters of code_input." })
+  @IsOptional()
   @IsString()
-  suffix_check!: string;
+  suffix_check?: string;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -93,6 +99,7 @@ export class UpdateLedCodeDto {
   @ApiPropertyOptional({ example: "60376A" })
   @IsOptional()
   @IsString()
+  @Length(6, 6)
   code_input?: string;
 
   @ApiPropertyOptional({ example: "0376A" })

@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsNotEmpty, IsOptional, IsString, ValidateNested } from "class-validator";
 import { SubmitScanDto } from "../../scans/dto/submit-scan.dto";
 
 export class SubmitScanBatchDto {
@@ -11,6 +11,16 @@ export class SubmitScanBatchDto {
   @ApiProperty({ example: "LOCAL01" })
   @IsString()
   machine_code!: string;
+
+  @ApiProperty({ example: "SN-LOCAL01-2026" })
+  @IsString()
+  @IsNotEmpty()
+  serial!: string;
+
+  @ApiProperty({ example: "UID-8f8f2f1c-local01" })
+  @IsString()
+  @IsNotEmpty()
+  uid!: string;
 
   @ApiProperty({ enum: ["STARTUP", "SHUTDOWN", "NETWORK_RESTORED", "MANUAL"], example: "NETWORK_RESTORED" })
   @IsIn(["STARTUP", "SHUTDOWN", "NETWORK_RESTORED", "MANUAL"])

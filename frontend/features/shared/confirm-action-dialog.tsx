@@ -3,6 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useI18n } from "@/lib/i18n-provider";
 
 type ConfirmActionDialogProps = {
   open: boolean;
@@ -23,6 +24,8 @@ export function ConfirmActionDialog({
   onOpenChange,
   onConfirm
 }: ConfirmActionDialogProps) {
+  const { t } = useI18n();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -35,7 +38,7 @@ export function ConfirmActionDialog({
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isRunning}>
-            Hủy
+            {t("cancel")}
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm} disabled={isRunning}>
             {confirmLabel}

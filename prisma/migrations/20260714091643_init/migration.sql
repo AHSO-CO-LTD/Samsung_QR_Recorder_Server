@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "UserRole" AS ENUM ('operator', 'engineer', 'admin', 'dev');
 
@@ -11,10 +14,19 @@ CREATE TYPE "ConnectionStatus" AS ENUM ('ONLINE', 'OFFLINE', 'UNKNOWN');
 CREATE TYPE "MachineConnectionEventType" AS ENUM ('CONNECTED', 'DISCONNECTED', 'HEARTBEAT', 'SYNC_STARTED', 'SYNC_DONE', 'SYNC_FAILED');
 
 -- CreateEnum
+CREATE TYPE "MachineRuntimeStatus" AS ENUM ('RUNNING', 'STOPPED', 'DISCONNECTED', 'ERROR');
+
+-- CreateEnum
+CREATE TYPE "MachineRuntimeEventType" AS ENUM ('SOCKET_CONNECTED', 'SOCKET_DISCONNECTED', 'STARTED', 'PRODUCT_CHANGED', 'UPDATED', 'SNAPSHOT', 'STOPPED', 'ERROR', 'SCAN_LINKED');
+
+-- CreateEnum
 CREATE TYPE "MachineCommandType" AS ENUM ('SYNC_PROFILE', 'SYNC_SCAN_DATA', 'RELOAD_CONFIG', 'SHOW_MESSAGE');
 
 -- CreateEnum
 CREATE TYPE "MachineCommandStatus" AS ENUM ('PENDING', 'SENT', 'ACK', 'FAILED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "MachineRegistrationStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 
 -- CreateEnum
 CREATE TYPE "LocalScanStatus" AS ENUM ('OK', 'NG');
@@ -94,6 +106,10 @@ CREATE TABLE "machines" (
     "id" SERIAL NOT NULL,
     "machine_code" TEXT NOT NULL,
     "machine_name" TEXT NOT NULL,
+    "serial" TEXT,
+    "uid" TEXT,
+    "license_key_raw" TEXT,
+    "license_activated_at" TIMESTAMP(3),
     "line_name" TEXT,
     "station_name" TEXT,
     "ip_address" TEXT,
@@ -102,6 +118,35 @@ CREATE TABLE "machines" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "machines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "machine_registration_requests" (
+    "id" SERIAL NOT NULL,
+    "request_id" TEXT NOT NULL,
+    "requested_machine_code" TEXT,
+    "serial" TEXT NOT NULL,
+    "uid" TEXT NOT NULL,
+    "license_key_raw" TEXT,
+    "ip_address" TEXT NOT NULL,
+    "hostname" TEXT,
+    "app_version" TEXT,
+    "local_db_version" TEXT,
+    "status" "MachineRegistrationStatus" NOT NULL DEFAULT 'PENDING',
+    "duplicate_fields_json" JSONB,
+    "license_file_json" JSONB,
+    "license_activated_at" TIMESTAMP(3),
+    "license_activated_by" INTEGER,
+    "approved_machine_id" INTEGER,
+    "approved_machine_code" TEXT,
+    "approved_at" TIMESTAMP(3),
+    "rejected_reason" TEXT,
+    "rejected_at" TIMESTAMP(3),
+    "raw_json" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "machine_registration_requests_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -144,6 +189,90 @@ CREATE TABLE "machine_connection_logs" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "machine_connection_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "machine_runtime_sessions" (
+    "id" SERIAL NOT NULL,
+    "session_code" TEXT NOT NULL,
+    "machine_id" INTEGER NOT NULL,
+    "machine_code" TEXT NOT NULL,
+    "status" "MachineRuntimeStatus" NOT NULL DEFAULT 'RUNNING',
+    "current_product_id" INTEGER,
+    "total_count" INTEGER NOT NULL DEFAULT 0,
+    "ok_count" INTEGER NOT NULL DEFAULT 0,
+    "ng_count" INTEGER NOT NULL DEFAULT 0,
+    "last_result" TEXT,
+    "last_code" TEXT,
+    "last_local_scan_id" TEXT,
+    "reconnect_count" INTEGER NOT NULL DEFAULT 0,
+    "started_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "ended_at" TIMESTAMP(3),
+    "disconnected_at" TIMESTAMP(3),
+    "last_seen_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "machine_runtime_sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "machine_runtime_products" (
+    "id" SERIAL NOT NULL,
+    "session_id" INTEGER NOT NULL,
+    "machine_id" INTEGER NOT NULL,
+    "machine_code" TEXT NOT NULL,
+    "profile_id" INTEGER,
+    "product_code" TEXT NOT NULL,
+    "total_count" INTEGER NOT NULL DEFAULT 0,
+    "ok_count" INTEGER NOT NULL DEFAULT 0,
+    "ng_count" INTEGER NOT NULL DEFAULT 0,
+    "last_result" TEXT,
+    "last_code" TEXT,
+    "last_local_scan_id" TEXT,
+    "started_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "ended_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "machine_runtime_products_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "machine_runtime_events" (
+    "id" SERIAL NOT NULL,
+    "session_id" INTEGER,
+    "product_id" INTEGER,
+    "machine_id" INTEGER NOT NULL,
+    "machine_code" TEXT NOT NULL,
+    "profile_id" INTEGER,
+    "event_type" "MachineRuntimeEventType" NOT NULL,
+    "product_code" TEXT,
+    "total_count" INTEGER,
+    "ok_count" INTEGER,
+    "ng_count" INTEGER,
+    "last_result" TEXT,
+    "last_code" TEXT,
+    "local_scan_id" TEXT,
+    "ip_address" TEXT,
+    "payload_json" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "machine_runtime_events_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "machine_runtime_adjustment_logs" (
+    "id" SERIAL NOT NULL,
+    "session_id" INTEGER NOT NULL,
+    "product_id" INTEGER,
+    "adjusted_by" INTEGER,
+    "reason" TEXT NOT NULL,
+    "old_value_json" JSONB NOT NULL,
+    "new_value_json" JSONB NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "machine_runtime_adjustment_logs_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -191,7 +320,6 @@ CREATE TABLE "led_codes" (
 CREATE TABLE "product_profiles" (
     "id" SERIAL NOT NULL,
     "chassis_code_id" INTEGER NOT NULL,
-    "vendor_id" INTEGER NOT NULL,
     "factory_code" TEXT NOT NULL,
     "full_code_length" INTEGER NOT NULL DEFAULT 35,
     "full_vendor_position" INTEGER NOT NULL DEFAULT 18,
@@ -254,6 +382,8 @@ CREATE TABLE "scan_records" (
     "ng_stage" "NgStage",
     "ng_reason" TEXT,
     "sync_batch_id" INTEGER,
+    "runtime_session_id" INTEGER,
+    "runtime_product_id" INTEGER,
     "scan_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -426,6 +556,36 @@ CREATE UNIQUE INDEX "vendors_vendor_char_key" ON "vendors"("vendor_char");
 CREATE UNIQUE INDEX "machines_machine_code_key" ON "machines"("machine_code");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "machines_serial_key" ON "machines"("serial");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "machines_uid_key" ON "machines"("uid");
+
+-- CreateIndex
+CREATE INDEX "machines_serial_idx" ON "machines"("serial");
+
+-- CreateIndex
+CREATE INDEX "machines_uid_idx" ON "machines"("uid");
+
+-- CreateIndex
+CREATE INDEX "machines_ip_address_idx" ON "machines"("ip_address");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "machine_registration_requests_request_id_key" ON "machine_registration_requests"("request_id");
+
+-- CreateIndex
+CREATE INDEX "machine_registration_requests_status_created_at_idx" ON "machine_registration_requests"("status", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_registration_requests_serial_idx" ON "machine_registration_requests"("serial");
+
+-- CreateIndex
+CREATE INDEX "machine_registration_requests_uid_idx" ON "machine_registration_requests"("uid");
+
+-- CreateIndex
+CREATE INDEX "machine_registration_requests_ip_address_idx" ON "machine_registration_requests"("ip_address");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "machine_sync_states_machine_id_key" ON "machine_sync_states"("machine_id");
 
 -- CreateIndex
@@ -444,6 +604,51 @@ CREATE INDEX "machine_connection_logs_machine_code_created_at_idx" ON "machine_c
 CREATE INDEX "machine_connection_logs_event_type_created_at_idx" ON "machine_connection_logs"("event_type", "created_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "machine_runtime_sessions_session_code_key" ON "machine_runtime_sessions"("session_code");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_sessions_machine_id_status_idx" ON "machine_runtime_sessions"("machine_id", "status");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_sessions_machine_code_last_seen_at_idx" ON "machine_runtime_sessions"("machine_code", "last_seen_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_sessions_status_last_seen_at_idx" ON "machine_runtime_sessions"("status", "last_seen_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_products_session_id_started_at_idx" ON "machine_runtime_products"("session_id", "started_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_products_machine_id_started_at_idx" ON "machine_runtime_products"("machine_id", "started_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_products_profile_id_idx" ON "machine_runtime_products"("profile_id");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_products_product_code_idx" ON "machine_runtime_products"("product_code");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_events_session_id_created_at_idx" ON "machine_runtime_events"("session_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_events_product_id_created_at_idx" ON "machine_runtime_events"("product_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_events_machine_id_created_at_idx" ON "machine_runtime_events"("machine_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_events_event_type_created_at_idx" ON "machine_runtime_events"("event_type", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_adjustment_logs_session_id_created_at_idx" ON "machine_runtime_adjustment_logs"("session_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_adjustment_logs_product_id_created_at_idx" ON "machine_runtime_adjustment_logs"("product_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "machine_runtime_adjustment_logs_adjusted_by_created_at_idx" ON "machine_runtime_adjustment_logs"("adjusted_by", "created_at");
+
+-- CreateIndex
 CREATE INDEX "machine_commands_machine_id_status_idx" ON "machine_commands"("machine_id", "status");
 
 -- CreateIndex
@@ -457,9 +662,6 @@ CREATE UNIQUE INDEX "led_codes_code_full_key" ON "led_codes"("code_full");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "product_profiles_chassis_code_id_key" ON "product_profiles"("chassis_code_id");
-
--- CreateIndex
-CREATE INDEX "product_profiles_vendor_id_idx" ON "product_profiles"("vendor_id");
 
 -- CreateIndex
 CREATE INDEX "product_profiles_is_active_idx" ON "product_profiles"("is_active");
@@ -487,6 +689,12 @@ CREATE INDEX "scan_records_scan_at_idx" ON "scan_records"("scan_at");
 
 -- CreateIndex
 CREATE INDEX "scan_records_sync_batch_id_idx" ON "scan_records"("sync_batch_id");
+
+-- CreateIndex
+CREATE INDEX "scan_records_runtime_session_id_idx" ON "scan_records"("runtime_session_id");
+
+-- CreateIndex
+CREATE INDEX "scan_records_runtime_product_id_idx" ON "scan_records"("runtime_product_id");
 
 -- CreateIndex
 CREATE INDEX "scan_records_ng_reason_idx" ON "scan_records"("ng_reason");
@@ -594,10 +802,49 @@ CREATE INDEX "audit_logs_action_created_at_idx" ON "audit_logs"("action", "creat
 ALTER TABLE "server_settings" ADD CONSTRAINT "server_settings_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "machine_registration_requests" ADD CONSTRAINT "machine_registration_requests_approved_machine_id_fkey" FOREIGN KEY ("approved_machine_id") REFERENCES "machines"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "machine_sync_states" ADD CONSTRAINT "machine_sync_states_machine_id_fkey" FOREIGN KEY ("machine_id") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "machine_connection_logs" ADD CONSTRAINT "machine_connection_logs_machine_id_fkey" FOREIGN KEY ("machine_id") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_sessions" ADD CONSTRAINT "machine_runtime_sessions_machine_id_fkey" FOREIGN KEY ("machine_id") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_sessions" ADD CONSTRAINT "machine_runtime_sessions_current_product_id_fkey" FOREIGN KEY ("current_product_id") REFERENCES "machine_runtime_products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_products" ADD CONSTRAINT "machine_runtime_products_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "machine_runtime_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_products" ADD CONSTRAINT "machine_runtime_products_machine_id_fkey" FOREIGN KEY ("machine_id") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_products" ADD CONSTRAINT "machine_runtime_products_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "product_profiles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_events" ADD CONSTRAINT "machine_runtime_events_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "machine_runtime_sessions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_events" ADD CONSTRAINT "machine_runtime_events_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "machine_runtime_products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_events" ADD CONSTRAINT "machine_runtime_events_machine_id_fkey" FOREIGN KEY ("machine_id") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_events" ADD CONSTRAINT "machine_runtime_events_profile_id_fkey" FOREIGN KEY ("profile_id") REFERENCES "product_profiles"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_adjustment_logs" ADD CONSTRAINT "machine_runtime_adjustment_logs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "machine_runtime_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_adjustment_logs" ADD CONSTRAINT "machine_runtime_adjustment_logs_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "machine_runtime_products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "machine_runtime_adjustment_logs" ADD CONSTRAINT "machine_runtime_adjustment_logs_adjusted_by_fkey" FOREIGN KEY ("adjusted_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "machine_commands" ADD CONSTRAINT "machine_commands_machine_id_fkey" FOREIGN KEY ("machine_id") REFERENCES "machines"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -607,9 +854,6 @@ ALTER TABLE "machine_commands" ADD CONSTRAINT "machine_commands_created_by_fkey"
 
 -- AddForeignKey
 ALTER TABLE "product_profiles" ADD CONSTRAINT "product_profiles_chassis_code_id_fkey" FOREIGN KEY ("chassis_code_id") REFERENCES "chassis_codes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "product_profiles" ADD CONSTRAINT "product_profiles_vendor_id_fkey" FOREIGN KEY ("vendor_id") REFERENCES "vendors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "product_profiles" ADD CONSTRAINT "product_profiles_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -637,6 +881,12 @@ ALTER TABLE "scan_records" ADD CONSTRAINT "scan_records_profile_snapshot_id_fkey
 
 -- AddForeignKey
 ALTER TABLE "scan_records" ADD CONSTRAINT "scan_records_sync_batch_id_fkey" FOREIGN KEY ("sync_batch_id") REFERENCES "scan_sync_batches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scan_records" ADD CONSTRAINT "scan_records_runtime_session_id_fkey" FOREIGN KEY ("runtime_session_id") REFERENCES "machine_runtime_sessions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "scan_records" ADD CONSTRAINT "scan_records_runtime_product_id_fkey" FOREIGN KEY ("runtime_product_id") REFERENCES "machine_runtime_products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "scan_led_items" ADD CONSTRAINT "scan_led_items_scan_record_id_fkey" FOREIGN KEY ("scan_record_id") REFERENCES "scan_records"("id") ON DELETE CASCADE ON UPDATE CASCADE;

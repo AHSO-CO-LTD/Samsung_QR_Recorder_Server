@@ -1,0 +1,13 @@
+[31m[Nest] 12864  - [39m07/14/2026, 3:08:02 PM [31m  ERROR[39m [38;5;3m[NestApplication] [39m[31mError: listen EADDRINUSE: address already in use 0.0.0.0:3979[39m[38;5;3m +12ms[39m
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3979
+    at Server.setupListenHandle [as _listen2] (node:net:1948:16)
+    at listenInCluster (node:net:2005:12)
+    at node:net:2214:7
+    at processTicksAndRejections (node:internal/process/task_queues:90:21)
+npm error Lifecycle script `dev` failed with error:
+npm error code 4294967295
+npm error path C:\duyhai\AHSO\Samsung_QR_Recorder_Server\backend
+npm error workspace backend@0.1.0
+npm error location C:\duyhai\AHSO\Samsung_QR_Recorder_Server\backend
+npm error command failed
+npm error command C:\Windows\system32\cmd.exe /d /s /c ts-node-dev --respawn --transpile-only --project tsconfig.json src/main.ts

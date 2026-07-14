@@ -3,9 +3,11 @@ dist/
 .next/
 out/
 release/
+release-runtime/
 coverage/
 .agents/
 .codex/
+.matrix-cache/
 *.log
 .env
 .env.local

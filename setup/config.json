@@ -1,0 +1,30 @@
+{
+  "appName": "Samsung QR Recorder Server",
+  "database": {
+    "defaultName": "ahso_qr_recorder",
+    "defaultUser": "postgres",
+    "defaultPassword": "0123456789",
+    "host": "127.0.0.1",
+    "port": 5432
+  },
+  "ports": {
+    "api": 3979,
+    "frontend": 3969
+  },
+  "requirements": {
+    "node": {
+      "minimumMajor": 22,
+      "wingetId": "OpenJS.NodeJS.LTS"
+    },
+    "npm": {
+      "minimumMajor": 10
+    },
+    "postgresql": {
+      "minimumMajor": 13,
+      "wingetId": "PostgreSQL.PostgreSQL"
+    },
+    "pgAdmin": {
+      "wingetId": "PostgreSQL.pgAdmin"
+    }
+  }
+}

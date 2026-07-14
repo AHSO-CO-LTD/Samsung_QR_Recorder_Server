@@ -1,9 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsIn, IsInt, IsISO8601, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from "class-validator";
 
 export class FullCodePayloadDto {
-  @ApiProperty({ example: "VN39BN9660877C1A1L60376ADYS3Y420673" })
+  @ApiProperty({ example: "VN39BN9658567A1F1S58282ADZLVX880447" })
   @IsString()
   raw!: string;
 
@@ -11,27 +11,27 @@ export class FullCodePayloadDto {
   @IsString()
   prefix!: string;
 
-  @ApiProperty({ example: "BN96-60877C" })
+  @ApiProperty({ example: "BN96-58567A" })
   @IsString()
   chassis_code!: string;
 
-  @ApiProperty({ example: "1A1" })
+  @ApiProperty({ example: "1F1" })
   @IsString()
   before_vendor!: string;
 
-  @ApiProperty({ example: "L" })
+  @ApiProperty({ example: "S" })
   @IsString()
   vendor_char!: string;
 
-  @ApiProperty({ example: "BN96-60376A" })
+  @ApiProperty({ example: "BN96-58282A" })
   @IsString()
   led_code!: string;
 
-  @ApiProperty({ example: "DYS3" })
+  @ApiProperty({ example: "DZLV" })
   @IsString()
   factory_code!: string;
 
-  @ApiProperty({ example: "Y420673" })
+  @ApiProperty({ example: "X880447" })
   @IsString()
   after_factory!: string;
 }
@@ -47,19 +47,19 @@ export class LedScanPayloadDto {
   @Min(1)
   index!: number;
 
-  @ApiProperty({ example: "ZB36L582465U528LD0376A" })
+  @ApiProperty({ example: "000000000000001S8282AX" })
   @IsString()
   raw!: string;
 
-  @ApiProperty({ example: "528" })
+  @ApiProperty({ example: "000000000000001" })
   @IsString()
   lot_no!: string;
 
-  @ApiProperty({ example: "L" })
+  @ApiProperty({ example: "S" })
   @IsString()
   vendor_char!: string;
 
-  @ApiProperty({ example: "0376A" })
+  @ApiProperty({ example: "8282A" })
   @IsString()
   suffix!: string;
 
@@ -82,12 +82,22 @@ export class SubmitScanDto {
   @IsString()
   machine_code!: string;
 
-  @ApiProperty({ example: 5 })
+  @ApiProperty({ example: "SN-LOCAL01-2026" })
+  @IsString()
+  @IsNotEmpty()
+  serial!: string;
+
+  @ApiProperty({ example: "UID-8f8f2f1c-local01" })
+  @IsString()
+  @IsNotEmpty()
+  uid!: string;
+
+  @ApiProperty({ example: 1 })
   @IsInt()
   @Min(1)
   profile_id!: number;
 
-  @ApiProperty({ example: "1A1Y420673" })
+  @ApiProperty({ example: "1F1SX880447" })
   @IsString()
   duplicate_key!: string;
 
@@ -96,7 +106,7 @@ export class SubmitScanDto {
   @Type(() => FullCodePayloadDto)
   full_code!: FullCodePayloadDto;
 
-  @ApiProperty({ example: "BN96-60877C" })
+  @ApiProperty({ example: "BN96-58567A" })
   @IsString()
   chassis_scan_raw!: string;
 

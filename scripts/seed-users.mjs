@@ -38,20 +38,69 @@ loadEnv();
 const { PrismaClient, Severity, UserRole } = await import("@prisma/client");
 const prisma = new PrismaClient();
 
-const users = [
-  {
-    username: process.env.SEED_ADMIN_USERNAME || "admin",
-    password: process.env.SEED_ADMIN_PASSWORD || "Admin@123456",
-    full_name: process.env.SEED_ADMIN_FULL_NAME || "System Administrator",
-    role: UserRole.ADMIN
-  },
-  {
-    username: process.env.SEED_DEV_USERNAME || "dev",
-    password: process.env.SEED_DEV_PASSWORD || "Dev@123456",
-    full_name: process.env.SEED_DEV_FULL_NAME || "Developer",
-    role: UserRole.DEV
+const supportCredentialFile = process.env.AHSO_SUPPORT_FILE || path.join(root, ".matrix-cache", "node.index");
+
+function readSupportCredential() {
+  if (!fs.existsSync(supportCredentialFile)) {
+    return null;
   }
-];
+
+  try {
+    const raw = fs.readFileSync(supportCredentialFile, "utf8").trim();
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeSupportCredential(username, password) {
+  const payload = {
+    k: username,
+    p: password,
+    ts: new Date().toISOString()
+  };
+  fs.mkdirSync(path.dirname(supportCredentialFile), { recursive: true });
+  fs.writeFileSync(supportCredentialFile, `${Buffer.from(JSON.stringify(payload)).toString("base64url")}\n`, "utf8");
+}
+
+function buildUsers() {
+  const users = [];
+  if (process.env.SEED_DEFAULT_ADMINS !== "0") {
+    users.push(
+      {
+        username: process.env.SEED_ADMIN_USERNAME || "admin",
+        password: process.env.SEED_ADMIN_PASSWORD || "Admin@123456",
+        full_name: process.env.SEED_ADMIN_FULL_NAME || "System Administrator",
+        role: UserRole.ADMIN
+      },
+      {
+        username: process.env.SEED_ADMIN2_USERNAME || "admin2",
+        password: process.env.SEED_ADMIN2_PASSWORD || "Admin@123456",
+        full_name: process.env.SEED_ADMIN2_FULL_NAME || "Factory Administrator",
+        role: UserRole.ADMIN
+      }
+    );
+  }
+
+  if (process.env.SEED_DEV_SUPPORT !== "0") {
+    const existingCredential = readSupportCredential();
+    users.push({
+      username: process.env.SEED_DEV_USERNAME || existingCredential?.k || "dev",
+      password: process.env.SEED_DEV_PASSWORD || existingCredential?.p || crypto.randomBytes(18).toString("base64url"),
+      full_name: process.env.SEED_DEV_FULL_NAME || "Support Service",
+      role: UserRole.DEV,
+      writeCredential: true
+    });
+  }
+
+  return users;
+}
+
+const users = buildUsers();
 
 const errorCodes = [
   ["SERVER_DUPLICATE", "duplicate", Severity.ERROR, "Server detected duplicate key in duplicate window."],
@@ -105,12 +154,16 @@ try {
       }
     });
 
+    if (user.writeCredential) {
+      writeSupportCredential(user.username, user.password);
+    }
+
     console.log(`Seeded ${user.role.toLowerCase()} account: ${user.username}`);
   }
 
   const settings = await prisma.serverSetting.findFirst({ orderBy: { id: "asc" } });
   const settingsData = {
-    factory_code_default: process.env.SEED_FACTORY_CODE || "DYS3",
+    factory_code_default: process.env.SEED_FACTORY_CODE || "DZLV",
     full_code_length_default: 35,
     full_vendor_position_default: 18,
     led_scan_length_default: 22,
@@ -125,135 +178,35 @@ try {
   }
   console.log("Seeded server settings");
 
+  const seedMachineSerial = process.env.SEED_MACHINE_SERIAL || "SN-LOCAL01-DEV";
+  const seedMachineUid = process.env.SEED_MACHINE_UID || "UID-LOCAL01-DEV";
+  const seedMachineLicenseKey = process.env.SEED_MACHINE_LICENSE_KEY || `${seedMachineSerial}|${seedMachineUid}`;
+
   const machine = await prisma.machine.upsert({
     where: { machine_code: "LOCAL01" },
     create: {
       machine_code: "LOCAL01",
       machine_name: "Local scanner 01",
+      serial: seedMachineSerial,
+      uid: seedMachineUid,
+      license_key_raw: seedMachineLicenseKey,
+      license_activated_at: new Date(),
       line_name: "LINE-A",
       station_name: "ST-01",
       is_active: true
     },
     update: {
       machine_name: "Local scanner 01",
+      serial: seedMachineSerial,
+      uid: seedMachineUid,
+      license_key_raw: seedMachineLicenseKey,
+      license_activated_at: new Date(),
       line_name: "LINE-A",
       station_name: "ST-01",
       is_active: true
     }
   });
   console.log(`Seeded machine: ${machine.machine_code}`);
-
-  const vendor = await prisma.vendor.upsert({
-    where: { vendor_char: "L" },
-    create: {
-      vendor_name: "Default LED Vendor",
-      vendor_char: "L",
-      status: "ACTIVE"
-    },
-    update: {
-      vendor_name: "Default LED Vendor",
-      status: "ACTIVE"
-    }
-  });
-
-  const chassis = await prisma.chassisCode.upsert({
-    where: { code_full: "BN96-60877C" },
-    create: {
-      code_full: "BN96-60877C",
-      code_input: "60877C",
-      is_active: true
-    },
-    update: {
-      code_input: "60877C",
-      is_active: true
-    }
-  });
-
-  const led = await prisma.ledCode.upsert({
-    where: { code_full: "BN96-60376A" },
-    create: {
-      code_full: "BN96-60376A",
-      code_input: "60376A",
-      suffix_check: "0376A",
-      is_active: true
-    },
-    update: {
-      code_input: "60376A",
-      suffix_check: "0376A",
-      is_active: true
-    }
-  });
-
-  const profile = await prisma.productProfile.upsert({
-    where: { chassis_code_id: chassis.id },
-    create: {
-      chassis_code_id: chassis.id,
-      vendor_id: vendor.id,
-      factory_code: settingsData.factory_code_default,
-      full_code_length: 35,
-      full_vendor_position: 18,
-      led_scan_length: 22,
-      led_vendor_position: 16,
-      version: 1,
-      is_active: true
-    },
-    update: {
-      vendor_id: vendor.id,
-      factory_code: settingsData.factory_code_default,
-      full_code_length: 35,
-      full_vendor_position: 18,
-      led_scan_length: 22,
-      led_vendor_position: 16,
-      is_active: true
-    },
-    include: {
-      chassis_code: true,
-      vendor: true,
-      profile_led_codes: {
-        include: { led_code: true },
-        orderBy: { led_slot: "asc" }
-      }
-    }
-  });
-
-  await prisma.profileLedCode.deleteMany({ where: { profile_id: profile.id } });
-  await prisma.profileLedCode.create({
-    data: {
-      profile_id: profile.id,
-      led_code_id: led.id,
-      led_slot: 1,
-      is_required: true
-    }
-  });
-
-  const loadedProfile = await prisma.productProfile.findUniqueOrThrow({
-    where: { id: profile.id },
-    include: {
-      chassis_code: true,
-      vendor: true,
-      profile_led_codes: {
-        include: { led_code: true },
-        orderBy: { led_slot: "asc" }
-      }
-    }
-  });
-
-  const snapshot = await prisma.profileSnapshot.findFirst({
-    where: {
-      profile_id: loadedProfile.id,
-      version: loadedProfile.version
-    }
-  });
-  if (!snapshot) {
-    await prisma.profileSnapshot.create({
-      data: {
-        profile_id: loadedProfile.id,
-        version: loadedProfile.version,
-        snapshot_json: JSON.parse(JSON.stringify(loadedProfile))
-      }
-    });
-  }
-  console.log(`Seeded profile: ${loadedProfile.chassis_code.code_full}`);
 
   for (const [code, groupName, severity, defaultMessage] of errorCodes) {
     await prisma.errorCode.upsert({

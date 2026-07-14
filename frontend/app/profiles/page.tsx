@@ -1,5 +1,5 @@
-import { ProfilesView } from "@/features/profiles/profiles-view";
+import { redirect } from "next/navigation";
 
 export default function ProfilesPage() {
-  return <ProfilesView />;
+  redirect("/master-data");
 }
