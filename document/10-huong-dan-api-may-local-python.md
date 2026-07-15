@@ -1,6 +1,6 @@
 # Hướng dẫn tích hợp API cho máy local Python
 
-Tài liệu này dành cho đội phát triển chương trình máy local Python trong hệ thống Samsung QR Recorder Server. Mục tiêu là giải thích đầy đủ các API mà máy local cần tương tác, chức năng của từng API, lý do cần gọi, request body, response body, error code, notification, command polling, offline sync và cách áp dụng đúng trong dự án Python.
+Tài liệu này dành cho đội phát triển chương trình máy local Python trong hệ thống QR Recorder Server. Mục tiêu là giải thích đầy đủ các API mà máy local cần tương tác, chức năng của từng API, lý do cần gọi, request body, response body, error code, notification, command polling, offline sync và cách áp dụng đúng trong dự án Python.
 
 Contract trong tài liệu bám theo backend hiện tại:
 
@@ -1074,7 +1074,7 @@ Không có request body.
   "message": "Server API is running.",
   "data": {
     "status": "ok",
-    "service": "samsung-qrrecorder-server-api",
+    "service": "qr-recorder-server-api",
     "timestamp": "2026-07-13T02:20:30.000Z"
   }
 }
@@ -2084,6 +2084,19 @@ Gửi khi app local gặp lỗi runtime nhưng vẫn kết nối được server
 ### Event server broadcast `server:runtime-updated`
 
 Server UI dùng event này để refresh realtime. Máy local không bắt buộc xử lý.
+
+Dashboard máy local hiện tách 2 loại OK/NG:
+
+- **OK/NG local live**: lấy từ Socket.IO runtime, phản ánh số máy local tự đọc trong phiên hiện tại. Đây là telemetry vận hành, chưa phải kết quả cuối cùng của server.
+- **OK/NG server final**: lấy từ `scan_records` sau khi máy local submit scan qua REST và server xử lý/ghi `final_status`. Đây mới là kết quả đã được server check.
+
+Vì vậy máy local vẫn cần gọi `POST /api/scans/submit` hoặc batch sync tương ứng. Chỉ emit `runtime:update`/`runtime:snapshot` sẽ làm biểu đồ local live chạy, nhưng không tạo dữ liệu cho lịch sử scan hoặc biểu đồ server final.
+
+Biểu đồ trong card máy local là dạng tích lũy:
+
+- Local chart lấy sample từ WebSocket runtime và poll trạng thái hiện tại, bắt đầu từ `0` rồi vẽ các đường `Total`, `OK`, `NG`.
+- Server final chart gọi `GET /api/scans/trend?hours=12&bucket_minutes=30&machine_code=...`, sau đó UI cộng dồn từng bucket để vẽ `Total`, `OK`, `NG`.
+- Nếu không có scan server final trong bucket nào thì đường server giữ nguyên ngang ở giá trị hiện tại, không tự sinh dữ liệu giả.
 
 ```json
 {
@@ -3248,6 +3261,8 @@ Local upsert theo `local_scan_id`:
 
 Server có bảng `notification_templates` và `notification_events`. Các notification này chủ yếu phục vụ Server UI. Máy local hiện chưa có endpoint riêng để lấy `notification_events`.
 
+Notification server hỗ trợ nội dung song ngữ. Event mới có thể lưu `title_vi`, `message_vi`, `title_en`, `message_en` và `payload_json`; Server UI chọn bản dịch theo ngôn ngữ đang dùng. Event cũ hoặc event chưa có bản dịch sẽ fallback về `title` và `message` mặc định.
+
 Local nhận tác động từ server qua:
 
 - response của submit scan;
@@ -3482,7 +3497,7 @@ class ServerApiConfig:
         return f"http://{self.host}:{self.port}/api"
 
 
-class SamsungQrServerClient:
+class QrServerClient:
     def __init__(self, config: ServerApiConfig) -> None:
         self.config = config
         self.session = requests.Session()
@@ -3679,7 +3694,7 @@ class SamsungQrServerClient:
 ## 23. Python flow mẫu cho một scan
 
 ```python
-from server_api_client import SamsungQrServerClient, ServerApiConfig, ServerApiError
+from server_api_client import QrServerClient, ServerApiConfig, ServerApiError
 
 
 def build_sample_ok_scan(machine_code: str, serial: str, uid: str) -> dict:
@@ -3742,7 +3757,7 @@ def submit_one_scan() -> None:
     machine_code = "LOCAL01"
     serial = "SN-LOCAL01-2026"
     uid = "UID-8f8f2f1c-local01"
-    client = SamsungQrServerClient(ServerApiConfig(host="127.0.0.1", port=3979))
+    client = QrServerClient(ServerApiConfig(host="127.0.0.1", port=3979))
     scan_payload = build_sample_ok_scan(machine_code, serial, uid)
 
     print("save local first", scan_payload["local_scan_id"])

@@ -1,7 +1,9 @@
 param(
   [string] $InstallDir = (Get-Location).Path,
   [ValidateSet("Full", "KeepDatabase", "KeepFramework", "KeepBoth")]
-  [string] $Mode = ""
+  [string] $Mode = "",
+  [switch] $SelectOnly,
+  [string] $ModeFile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,7 +22,7 @@ function Show-Message([string] $Message, [string] $Icon = "Information") {
 
 function Choose-Mode {
   $form = New-Object System.Windows.Forms.Form
-  $form.Text = "Gỡ cài đặt"
+  $form.Text = "Uninstall"
   $form.StartPosition = "CenterScreen"
   $form.Width = 520
   $form.Height = 260
@@ -29,17 +31,17 @@ function Choose-Mode {
   $form.MinimizeBox = $false
 
   $label = New-Object System.Windows.Forms.Label
-  $label.Text = "Chọn phạm vi gỡ cài đặt:"
+  $label.Text = "Choose uninstall scope before continuing:"
   $label.Left = 16
   $label.Top = 16
   $label.Width = 460
   $form.Controls.Add($label)
 
   $options = @(
-    @("Full", "Gỡ tất cả"),
-    @("KeepDatabase", "Giữ database"),
-    @("KeepFramework", "Giữ Node.js/PostgreSQL/pgAdmin"),
-    @("KeepBoth", "Chỉ gỡ ứng dụng")
+    @("Full", "Remove app, database, Node.js, PostgreSQL, pgAdmin"),
+    @("KeepDatabase", "Keep database, remove app and frameworks"),
+    @("KeepFramework", "Keep Node.js/PostgreSQL/pgAdmin, remove app and database"),
+    @("KeepBoth", "Remove app only")
   )
 
   $buttons = @()
@@ -58,7 +60,7 @@ function Choose-Mode {
   }
 
   $ok = New-Object System.Windows.Forms.Button
-  $ok.Text = "Tiếp tục"
+  $ok.Text = "Continue"
   $ok.Left = 296
   $ok.Top = 176
   $ok.Width = 90
@@ -67,7 +69,7 @@ function Choose-Mode {
   $form.Controls.Add($ok)
 
   $cancel = New-Object System.Windows.Forms.Button
-  $cancel.Text = "Hủy"
+  $cancel.Text = "Cancel"
   $cancel.Left = 396
   $cancel.Top = 176
   $cancel.Width = 90
@@ -80,6 +82,21 @@ function Choose-Mode {
   }
 
   return ($buttons | Where-Object { $_.Checked } | Select-Object -First 1).Tag
+}
+
+function Resolve-Mode {
+  if ($Mode) {
+    return $Mode
+  }
+
+  if ($ModeFile -and (Test-Path $ModeFile)) {
+    $savedMode = (Get-Content -Raw -Encoding UTF8 $ModeFile).Trim()
+    if (@("Full", "KeepDatabase", "KeepFramework", "KeepBoth") -contains $savedMode) {
+      return $savedMode
+    }
+  }
+
+  return Choose-Mode
 }
 
 function Read-EnvFile {
@@ -117,18 +134,18 @@ function Get-PsqlPath {
   if ($candidate) {
     return $candidate.FullName
   }
-  throw "Không tìm thấy psql.exe."
+  throw "psql.exe was not found."
 }
 
 function Drop-Database {
   $envValues = Read-EnvFile
   if (-not $envValues.DATABASE_URL) {
-    Show-Message "Không tìm thấy DATABASE_URL nên bỏ qua bước gỡ database." "Warning"
+    Show-Message "DATABASE_URL was not found. Database removal will be skipped." "Warning"
     return
   }
 
   $db = Parse-DatabaseUrl $envValues.DATABASE_URL
-  $confirm = [System.Windows.Forms.MessageBox]::Show("Xóa database '$($db.Database)'?", $Config.appName, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
+  $confirm = [System.Windows.Forms.MessageBox]::Show("Remove database '$($db.Database)'?", $Config.appName, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning)
   if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
     return
   }
@@ -146,15 +163,22 @@ function Drop-Database {
 function Uninstall-WingetPackage([string] $PackageId) {
   $winget = Get-Command "winget.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $winget) {
-    Show-Message "Không tìm thấy winget, bỏ qua gỡ $PackageId." "Warning"
+    Show-Message "winget was not found. Skipping $PackageId removal." "Warning"
     return
   }
   Start-Process -FilePath $winget.Source -ArgumentList @("uninstall", "--id", $PackageId, "--exact", "--silent", "--accept-source-agreements") -Wait -WindowStyle Hidden | Out-Null
 }
 
 try {
-  if (-not $Mode) {
-    $Mode = Choose-Mode
+  $Mode = Resolve-Mode
+
+  if ($SelectOnly) {
+    if (-not $ModeFile) {
+      throw "Mode file path is required."
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ModeFile) | Out-Null
+    Set-Content -Path $ModeFile -Value $Mode -Encoding UTF8
+    exit 0
   }
 
   if ($Mode -eq "Full" -or $Mode -eq "KeepFramework") {
@@ -167,8 +191,8 @@ try {
     Uninstall-WingetPackage $Config.requirements.postgresql.wingetId
   }
 
-  Show-Message "Đã xử lý lựa chọn gỡ cài đặt. Bộ gỡ của ứng dụng sẽ tiếp tục xóa file app."
+  Show-Message "Uninstall scope was processed. The app uninstaller will continue removing app files."
 } catch {
-  Show-Message "Gỡ cài đặt chưa hoàn tất:`n`n$($_.Exception.Message)" "Error"
+  Show-Message "Uninstall was not completed:`n`n$($_.Exception.Message)" "Error"
   exit 1
 }

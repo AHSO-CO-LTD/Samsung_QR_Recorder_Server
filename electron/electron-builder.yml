@@ -1,5 +1,5 @@
 appId: vn.ahso.samsung.qrrecorder.server
-productName: Samsung QR Recorder Server
+productName: QR Recorder Server
 directories:
   output: ../release
 asar: true
@@ -17,7 +17,9 @@ win:
     - nsis
 nsis:
   oneClick: false
+  perMachine: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  runAfterFinish: false
   include: ../setup/windows/installer.nsh

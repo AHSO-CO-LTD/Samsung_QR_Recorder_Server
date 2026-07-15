@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UpdatePanel } from "@/features/updates/update-panel";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n-provider";
 
@@ -47,7 +48,7 @@ export function LoginScreen() {
 
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-background px-3 py-6 sm:px-4 lg:py-8">
-      <section className="flex w-full max-w-[420px] flex-col items-center gap-4">
+      <section className="flex w-full max-w-[460px] flex-col items-center gap-4">
         <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal">{t("appName")}</h1>
 
         <Card className="w-full">
@@ -126,6 +127,8 @@ export function LoginScreen() {
             </form>
           </CardContent>
         </Card>
+
+        <UpdatePanel mode="login" autoCheck={false} />
       </section>
     </main>
   );

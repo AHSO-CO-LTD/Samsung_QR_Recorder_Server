@@ -5,12 +5,16 @@ import fs from "node:fs";
 import https from "node:https";
 import http from "node:http";
 import path from "node:path";
+import { activateServerLicense, clearServerLicense, evaluateServerLicense, getServerLicenseRequestInfo, type ServerLicenseStatus } from "./license/license-manager";
 
-const APP_NAME = "Samsung QR Recorder Server";
+const APP_NAME = "QR Recorder Server";
 const DEFAULT_FRONTEND_PORT = 3969;
 const DEFAULT_API_PORT = 3979;
 const SESSION_STORAGE_KEY = "server-session-token";
-const SHOULD_START_SERVICES = process.env.ELECTRON_START_SERVICES === "1" || process.argv.includes("--start-services");
+const SHOULD_START_SERVICES =
+  process.env.ELECTRON_START_SERVICES === "1" ||
+  process.argv.includes("--start-services") ||
+  (app.isPackaged && process.env.ELECTRON_START_SERVICES !== "0" && !process.argv.includes("--no-start-services"));
 const STARTUP_LOG_PATH = readArgValue("--startup-log");
 
 app.setName(APP_NAME);
@@ -477,9 +481,32 @@ async function startManagedService(service: ManagedService) {
   return ready;
 }
 
+async function waitForExistingServices() {
+  const services: Array<Pick<ManagedService, "name" | "readyUrl">> = [
+    { name: "API", readyUrl: getApiHealthUrl() },
+    { name: "WEB", readyUrl: getFrontendUrl() }
+  ];
+
+  const results = await Promise.all(
+    services.map(async (service) => {
+      appendServiceLog(service.name, `Waiting for existing service at ${service.readyUrl}.`);
+      const ready = await waitForUrl(service.readyUrl);
+      appendServiceLog(service.name, ready ? `${service.readyUrl} is ready.` : `${service.readyUrl} did not become ready in time.`);
+      return ready;
+    })
+  );
+
+  if (!results.every(Boolean)) {
+    appendServiceLog("SYSTEM", "Existing services are not ready. Login screen will not open until services are ready.");
+    return false;
+  }
+
+  return true;
+}
+
 async function startManagedServices() {
   if (!SHOULD_START_SERVICES) {
-    return true;
+    return waitForExistingServices();
   }
 
   if (app.isPackaged) {
@@ -569,7 +596,7 @@ function getStartupHtml() {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Starting Samsung QR Recorder Server</title>
+    <title>Starting QR Recorder Server</title>
     <style>
       :root {
         color-scheme: light;
@@ -629,7 +656,7 @@ function getStartupHtml() {
   <body>
     <main>
       <header>
-        <h1>Samsung QR Recorder Server</h1>
+        <h1>QR Recorder Server</h1>
         <p>Đang chuẩn bị quyền, port và dịch vụ nền. Cửa sổ chính sẽ mở khi UI sẵn sàng.</p>
       </header>
       <section id="log"></section>
@@ -657,7 +684,7 @@ function createStartupWindow() {
     height: 420,
     minWidth: 560,
     minHeight: 360,
-    title: "Starting Samsung QR Recorder Server",
+    title: "Starting QR Recorder Server",
     show: true,
     resizable: false,
     maximizable: false,
@@ -697,7 +724,7 @@ function getTerminalHtml() {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Samsung QR Recorder Terminal</title>
+    <title>QR Recorder Terminal</title>
     <style>
       :root {
         color-scheme: dark;
@@ -766,7 +793,7 @@ function createTerminalWindow() {
     height: 640,
     minWidth: 780,
     minHeight: 420,
-    title: "Samsung QR Recorder Terminal",
+    title: "QR Recorder Terminal",
     show: false,
     backgroundColor: "#111827",
     webPreferences: {
@@ -996,6 +1023,29 @@ function normalizeVersion(value: string) {
   return match ? `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}` : null;
 }
 
+function readPackageVersion(packageJsonPath: string) {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: string };
+    return packageJson.version?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function getDesktopAppVersion() {
+  const candidates = [
+    process.env.UPDATE_APP_VERSION?.trim(),
+    process.env.APP_VERSION?.trim(),
+    process.env.npm_package_version?.trim(),
+    readPackageVersion(path.join(__dirname, "..", "package.json")),
+    readPackageVersion(path.join(getProjectRoot(), "electron", "package.json")),
+    readPackageVersion(path.join(getProjectRoot(), "package.json")),
+    app.getVersion()
+  ];
+
+  return candidates.find((value) => value && normalizeVersion(value)) ?? "0.0.0";
+}
+
 function compareVersions(left: string, right: string) {
   const leftParts = left.split(".").map((part) => Number(part));
   const rightParts = right.split(".").map((part) => Number(part));
@@ -1098,7 +1148,7 @@ function mapRelease(release: GithubRelease, currentVersion: string): AppUpdateRe
 
 async function getAvailableUpdateReleases() {
   const repository = getUpdateRepository();
-  const currentVersion = normalizeVersion(app.getVersion()) ?? "0.0.0";
+  const currentVersion = normalizeVersion(getDesktopAppVersion()) ?? "0.0.0";
   if (!repository) {
     return {
       currentVersion,
@@ -1134,7 +1184,7 @@ async function checkForUpdates() {
     appendServiceLog("SYSTEM", `Update check failed: ${formatUnknownError(error)}`);
     return {
       success: false,
-      currentVersion: normalizeVersion(app.getVersion()) ?? app.getVersion(),
+      currentVersion: normalizeVersion(getDesktopAppVersion()) ?? getDesktopAppVersion(),
       repository: getUpdateRepository(),
       packaged: app.isPackaged,
       releases: [] as AppUpdateRelease[],
@@ -1226,6 +1276,72 @@ async function installUpdate(tagName: string) {
   };
 }
 
+let lastLicenseFailureSignature = "";
+
+function appendLicenseLog(message: string) {
+  appendServiceLog("LICENSE", message);
+  console.log(`[LICENSE] ${message}`);
+}
+
+function formatLicenseValue(value: unknown) {
+  if (value === undefined) {
+    return "undefined";
+  }
+  if (value === null) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.join(",") : "[]";
+  }
+  return String(value);
+}
+
+function buildLicenseDiagnostic(status: ServerLicenseStatus) {
+  const lic = status.lic ?? {};
+  return [
+    `state=${status.state}`,
+    `ok=${status.ok}`,
+    `why=${formatLicenseValue(status.why)}`,
+    `expected_product=${formatLicenseValue(status.product)}`,
+    `license_product=${formatLicenseValue(lic.product)}`,
+    `current_machine_id=${formatLicenseValue(status.machineId)}`,
+    `license_machine_id=${formatLicenseValue(lic.machine_id)}`,
+    `app_version=${formatLicenseValue(status.version)}`,
+    `license_purchased_version=${formatLicenseValue(lic.purchased_version)}`,
+    `license_max_major=${formatLicenseValue(lic.max_major)}`,
+    `app_release_date=${formatLicenseValue(status.releaseDate)}`,
+    `license_update_until=${formatLicenseValue(lic.update_until)}`,
+    `license_expires_at=${formatLicenseValue(lic.expires_at)}`,
+    `license_id=${formatLicenseValue(lic.lic_id)}`,
+    `customer_id=${formatLicenseValue(lic.customer_id)}`,
+    `project=${formatLicenseValue(lic.project)}`,
+    `license_path=${formatLicenseValue(status.licensePath)}`
+  ].join(" ");
+}
+
+function logLicenseStatus(action: string, status: ServerLicenseStatus, options: { force?: boolean } = {}) {
+  const diagnostic = buildLicenseDiagnostic(status);
+  if (status.ok) {
+    if (options.force) {
+      appendLicenseLog(`${action} success: ${diagnostic}`);
+    }
+    lastLicenseFailureSignature = "";
+    return;
+  }
+
+  const signature = `${status.state}|${status.why}|${status.product}|${status.lic?.product}|${status.machineId}|${status.lic?.machine_id}`;
+  if (!options.force && signature === lastLicenseFailureSignature) {
+    return;
+  }
+
+  lastLicenseFailureSignature = signature;
+  appendLicenseLog(`${action} failed: ${diagnostic}`);
+}
+
+function logLicenseException(action: string, error: unknown) {
+  appendLicenseLog(`${action} exception: ${formatUnknownError(error)}`);
+}
+
 function registerAppIpc() {
   ipcMain.handle("app:quit", () => {
     appendServiceLog("SYSTEM", "Quit requested from desktop UI.");
@@ -1252,6 +1368,51 @@ function registerAppIpc() {
   ipcMain.handle("window:rollback-display-settings", () => rollbackPendingDisplaySettings());
   ipcMain.handle("updates:check", () => checkForUpdates());
   ipcMain.handle("updates:install", (_event, tagName: unknown) => installUpdate(String(tagName ?? "")));
+  ipcMain.handle("license:get-status", async () => {
+    try {
+      const status = await evaluateServerLicense();
+      logLicenseStatus("status-check", status);
+      return status;
+    } catch (error) {
+      logLicenseException("status-check", error);
+      throw error;
+    }
+  });
+  ipcMain.handle("license:get-request-info", () => getServerLicenseRequestInfo());
+  ipcMain.handle("license:activate", async (_event, licenseString: unknown) => {
+    try {
+      const status = await activateServerLicense(String(licenseString ?? ""));
+      logLicenseStatus("activate", status, { force: true });
+      return status;
+    } catch (error) {
+      logLicenseException("activate", error);
+      throw error;
+    }
+  });
+  ipcMain.handle("license:clear", async () => {
+    try {
+      const status = await clearServerLicense();
+      logLicenseStatus("clear", status, { force: true });
+      return status;
+    } catch (error) {
+      logLicenseException("clear", error);
+      throw error;
+    }
+  });
+}
+
+function requestMainWindowCloseConfirmation() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  appendServiceLog("SYSTEM", "Window close requested. Waiting for desktop UI confirmation.");
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send("app:close-requested");
 }
 
 function registerHiddenTerminalShortcut(targetWindow: BrowserWindow) {
@@ -1311,17 +1472,46 @@ function createMainWindow() {
 
   const frontendUrl = getFrontendUrl();
   const initialUrl = restoreState?.url?.startsWith(frontendUrl) ? restoreState.url : frontendUrl;
-  void mainWindow.loadURL(initialUrl);
+  let mainWindowShown = false;
+  let loadRetryCount = 0;
+  const showMainWindow = () => {
+    if (mainWindowShown || !mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
 
-  mainWindow.once("ready-to-show", () => {
+    mainWindowShown = true;
     appendServiceLog("SYSTEM", "Desktop UI is ready.");
     closeStartupWindow();
-    mainWindow?.show();
-    mainWindow?.focus();
+    mainWindow.show();
+    mainWindow.focus();
+  };
+
+  void mainWindow.loadURL(initialUrl);
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    const loadedUrl = mainWindow?.webContents.getURL() ?? "";
+    if (loadedUrl.startsWith(frontendUrl)) {
+      showMainWindow();
+    }
   });
 
   mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+    if (errorCode === -3) {
+      return;
+    }
+
     appendServiceLog("SYSTEM", `Desktop UI failed to load. code=${errorCode} message=${errorDescription}`);
+    if (loadRetryCount < 3) {
+      loadRetryCount += 1;
+      appendServiceLog("SYSTEM", `Retrying desktop UI load (${loadRetryCount}/3).`);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          void mainWindow.loadURL(initialUrl);
+        }
+      }, loadRetryCount * 1200);
+      return;
+    }
+
     closeStartupWindow();
     mainWindow?.show();
   });
@@ -1339,6 +1529,15 @@ function createMainWindow() {
   });
 
   registerHiddenTerminalShortcut(mainWindow);
+
+  mainWindow.on("close", (event) => {
+    if (isQuitting) {
+      return;
+    }
+
+    event.preventDefault();
+    requestMainWindowCloseConfirmation();
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -1365,8 +1564,10 @@ app.whenReady().then(async () => {
   if (SHOULD_START_SERVICES) {
     appendServiceLog("STARTUP", "Reclaiming managed ports before starting services.");
     await reclaimManagedPorts();
+    appendServiceLog("STARTUP", "Starting managed services.");
+  } else {
+    appendServiceLog("STARTUP", "Waiting for existing services.");
   }
-  appendServiceLog("STARTUP", "Starting managed services.");
   const servicesReady = await startManagedServices();
   if (!servicesReady) {
     appendServiceLog("SYSTEM", "Startup stopped on service readiness check. Close this window to stop the app.");

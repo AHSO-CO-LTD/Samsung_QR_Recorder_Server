@@ -1,16 +1,20 @@
 {
   "name": "desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "main": "dist/main.js",
   "scripts": {
     "dev": "npm run build && electron dist/main.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "node ../scripts/prepare-license-key-runtime.mjs && tsc -p tsconfig.json",
     "package": "npm run build && electron-builder --config electron-builder.yml --publish never",
     "package:publish": "npm run build && electron-builder --config electron-builder.yml --publish always"
   },
   "devDependencies": {
     "electron": "43.1.0",
     "electron-builder": "26.15.3"
+  },
+  "dependencies": {
+    "systeminformation": "^5.31.17",
+    "tweetnacl": "^1.0.3"
   }
 }

@@ -10,6 +10,8 @@ import { MachinesModule } from "./modules/machines/machines.module";
 import { MasterDataModule } from "./modules/master-data/master-data.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
+import { ReportsModule } from "./modules/reports/reports.module";
+import { RolePermissionsModule } from "./modules/role-permissions/role-permissions.module";
 import { RuntimeModule } from "./modules/runtime/runtime.module";
 import { ScansModule } from "./modules/scans/scans.module";
 import { SettingsModule } from "./modules/settings/settings.module";
@@ -38,6 +40,8 @@ import { PrismaModule } from "./prisma/prisma.module";
     NotificationsModule,
     SettingsModule,
     SetupModule,
+    ReportsModule,
+    RolePermissionsModule,
     UsersModule
   ],
   providers: [

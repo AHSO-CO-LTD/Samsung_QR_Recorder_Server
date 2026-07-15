@@ -9,7 +9,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     cors: {
       origin: true,
-      credentials: true
+      credentials: true,
+      exposedHeaders: ["Content-Disposition"]
     }
   });
 
@@ -23,7 +24,7 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle("Samsung QR Recorder Server API")
+    .setTitle("QR Recorder Server API")
     .setDescription("API contract for the Electron server app and Python local machines.")
     .setVersion("0.1.0")
     .addBearerAuth()
@@ -32,6 +33,7 @@ async function bootstrap() {
     .addTag("machine-commands-admin", "Endpoints used by the server UI to inspect and queue machine commands")
     .addTag("machine-runtime", "Runtime WebSocket session history and monitoring endpoints")
     .addTag("scan-dashboard", "Scan history and summary endpoints for the server UI")
+    .addTag("reports", "Excel report export endpoints for the server UI")
     .addTag("sync-dashboard", "Sync batch and request log endpoints for the server UI")
     .addTag("server-ui", "Endpoints used by the Electron/Next.js UI")
     .build();

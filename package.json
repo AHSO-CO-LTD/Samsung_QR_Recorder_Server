@@ -1,8 +1,8 @@
 {
-  "name": "samsung-qrrecorder-server-app",
-  "version": "0.1.0",
+  "name": "qr-recorder-server-app",
+  "version": "1.0.0",
   "private": true,
-  "description": "Desktop server app for Samsung QR/barcode duplicate checking.",
+  "description": "Desktop server app for QR/barcode duplicate checking.",
   "workspaces": [
     "electron",
     "frontend",

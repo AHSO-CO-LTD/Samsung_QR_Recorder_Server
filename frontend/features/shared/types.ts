@@ -350,6 +350,11 @@ export type NotificationEvent = {
   noti_code: string;
   title: string;
   message: string;
+  title_vi?: string | null;
+  message_vi?: string | null;
+  title_en?: string | null;
+  message_en?: string | null;
+  payload_json?: unknown;
   severity: string;
   status: string;
   created_at: string;
@@ -361,6 +366,10 @@ export type NotificationTemplate = {
   noti_code: string;
   title_template: string;
   message_template: string;
+  title_template_vi?: string | null;
+  message_template_vi?: string | null;
+  title_template_en?: string | null;
+  message_template_en?: string | null;
   severity: "INFO" | "WARNING" | "ERROR" | "CRITICAL";
   target: "SERVER_UI" | "LOCAL_UI" | "BOTH";
   is_active: boolean;

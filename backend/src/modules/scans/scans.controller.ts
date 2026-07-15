@@ -28,9 +28,17 @@ export class ScansController {
   @Get("trend")
   @ApiTags("scan-dashboard")
   @ApiQuery({ name: "days", required: false, example: 7 })
-  @ApiOkResponse({ description: "Get daily scan trend counters for dashboard chart." })
-  getScanTrend(@Query("days") days?: string) {
-    return this.scansService.getScanTrend(Number(days || 7));
+  @ApiQuery({ name: "hours", required: false, example: 12 })
+  @ApiQuery({ name: "bucket_minutes", required: false, example: 30 })
+  @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
+  @ApiOkResponse({ description: "Get daily or bucketed scan trend counters for dashboard chart." })
+  getScanTrend(@Query("days") days?: string, @Query("hours") hours?: string, @Query("bucket_minutes") bucketMinutes?: string, @Query("machine_code") machineCode?: string) {
+    return this.scansService.getScanTrend({
+      days: Number(days || 7),
+      hours: hours ? Number(hours) : undefined,
+      bucketMinutes: bucketMinutes ? Number(bucketMinutes) : undefined,
+      machineCode: machineCode?.trim() || undefined
+    });
   }
 
   @Get()

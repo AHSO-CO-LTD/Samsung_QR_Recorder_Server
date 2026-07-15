@@ -11,11 +11,16 @@ import { CheckboxField, SelectField, TextAreaField, TextInputField } from "@/fea
 import { ConfirmActionDialog } from "@/features/shared/confirm-action-dialog";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
 import type { NotificationEvent, NotificationTemplate } from "@/features/shared/types";
+import { getNotificationMessage, getNotificationTemplateMessage, getNotificationTemplateTitle, getNotificationTitle } from "./localized-notification";
 
 type TemplateDraft = {
   noti_code: string;
   title_template: string;
   message_template: string;
+  title_template_vi: string;
+  message_template_vi: string;
+  title_template_en: string;
+  message_template_en: string;
   severity: NotificationTemplate["severity"];
   target: NotificationTemplate["target"];
   is_active: boolean;
@@ -25,13 +30,17 @@ const emptyTemplateDraft: TemplateDraft = {
   noti_code: "",
   title_template: "",
   message_template: "",
+  title_template_vi: "",
+  message_template_vi: "",
+  title_template_en: "",
+  message_template_en: "",
   severity: "INFO",
   target: "SERVER_UI",
   is_active: true
 };
 
 export function NotificationsView() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [refreshId, setRefreshId] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isTemplateOpen, setIsTemplateOpen] = useState(false);
@@ -42,7 +51,7 @@ export function NotificationsView() {
   const eventColumns: Column<NotificationEvent>[] = [
     { key: "time", header: t("colTime"), render: (item) => <DateText value={item.created_at} /> },
     { key: "code", header: t("fieldNotificationCode"), render: (item) => <MonoText value={item.noti_code} /> },
-    { key: "title", header: t("colTitle"), render: (item) => item.title },
+    { key: "title", header: t("colTitle"), render: (item) => getNotificationTitle(item, locale) },
     { key: "machine", header: t("colMachine"), render: (item) => <MonoText value={item.machine?.machine_code} /> },
     { key: "severity", header: t("colSeverity"), render: (item) => <StatusBadge value={item.severity} /> },
     { key: "status", header: t("colStatus"), render: (item) => <StatusBadge value={item.status} /> },
@@ -67,7 +76,7 @@ export function NotificationsView() {
 
   const templateColumns: Column<NotificationTemplate>[] = [
     { key: "code", header: t("fieldNotificationCode"), render: (item) => <MonoText value={item.noti_code} /> },
-    { key: "title", header: t("colTemplate"), render: (item) => item.title_template },
+    { key: "title", header: t("colTemplate"), render: (item) => getNotificationTemplateTitle(item, locale) },
     { key: "target", header: t("colTarget"), render: (item) => item.target },
     { key: "severity", header: t("colSeverity"), render: (item) => <StatusBadge value={item.severity} /> },
     { key: "active", header: t("colStatus"), render: (item) => <StatusBadge value={item.is_active} /> },
@@ -99,6 +108,10 @@ export function NotificationsView() {
             noti_code: template.noti_code,
             title_template: template.title_template,
             message_template: template.message_template,
+            title_template_vi: template.title_template_vi ?? "",
+            message_template_vi: template.message_template_vi ?? "",
+            title_template_en: template.title_template_en ?? "",
+            message_template_en: template.message_template_en ?? "",
             severity: template.severity,
             target: template.target,
             is_active: template.is_active
@@ -129,6 +142,10 @@ export function NotificationsView() {
         await apiPatch(`/notifications/templates/${editingTemplate.id}`, {
           title_template: templateDraft.title_template,
           message_template: templateDraft.message_template,
+          title_template_vi: templateDraft.title_template_vi,
+          message_template_vi: templateDraft.message_template_vi,
+          title_template_en: templateDraft.title_template_en,
+          message_template_en: templateDraft.message_template_en,
           severity: templateDraft.severity,
           target: templateDraft.target,
           is_active: templateDraft.is_active
@@ -172,14 +189,18 @@ export function NotificationsView() {
         endpoint={`/notifications?take=100&refresh=${refreshId}`}
         columns={eventColumns}
         getRowKey={(item) => item.id}
-        searchableText={(item) => `${item.noti_code} ${item.title} ${item.message} ${item.severity} ${item.status} ${item.machine?.machine_code ?? ""}`}
+        searchableText={(item) =>
+          `${item.noti_code} ${item.title} ${item.message} ${getNotificationTitle(item, locale)} ${getNotificationMessage(item, locale)} ${item.severity} ${item.status} ${item.machine?.machine_code ?? ""}`
+        }
       />
       <DataTablePanel
         title={t("notificationTemplates")}
         endpoint={`/notifications/templates?refresh=${refreshId}`}
         columns={templateColumns}
         getRowKey={(item) => item.id}
-        searchableText={(item) => `${item.noti_code} ${item.title_template} ${item.message_template} ${item.severity} ${item.target} ${item.is_active}`}
+        searchableText={(item) =>
+          `${item.noti_code} ${item.title_template} ${item.message_template} ${getNotificationTemplateTitle(item, locale)} ${getNotificationTemplateMessage(item, locale)} ${item.severity} ${item.target} ${item.is_active}`
+        }
         actions={
           <Button type="button" size="sm" onClick={() => openTemplateDialog()}>
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -197,6 +218,14 @@ export function NotificationsView() {
             <TextInputField required disabled={Boolean(editingTemplate)} label={t("fieldNotificationCode")} value={templateDraft.noti_code} onChange={(event) => setTemplateDraft({ ...templateDraft, noti_code: event.target.value })} />
             <TextInputField required label={t("fieldTitleTemplate")} value={templateDraft.title_template} onChange={(event) => setTemplateDraft({ ...templateDraft, title_template: event.target.value })} />
             <TextAreaField required label={t("fieldMessageTemplate")} value={templateDraft.message_template} onChange={(event) => setTemplateDraft({ ...templateDraft, message_template: event.target.value })} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextInputField label={`${t("fieldTitleTemplate")} VI`} value={templateDraft.title_template_vi} onChange={(event) => setTemplateDraft({ ...templateDraft, title_template_vi: event.target.value })} />
+              <TextInputField label={`${t("fieldTitleTemplate")} EN`} value={templateDraft.title_template_en} onChange={(event) => setTemplateDraft({ ...templateDraft, title_template_en: event.target.value })} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextAreaField label={`${t("fieldMessageTemplate")} VI`} value={templateDraft.message_template_vi} onChange={(event) => setTemplateDraft({ ...templateDraft, message_template_vi: event.target.value })} />
+              <TextAreaField label={`${t("fieldMessageTemplate")} EN`} value={templateDraft.message_template_en} onChange={(event) => setTemplateDraft({ ...templateDraft, message_template_en: event.target.value })} />
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <SelectField label={t("fieldSeverity")} value={templateDraft.severity} onChange={(event) => setTemplateDraft({ ...templateDraft, severity: event.target.value as NotificationTemplate["severity"] })}>
                 <option value="INFO">INFO</option>

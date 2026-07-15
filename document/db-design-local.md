@@ -1,4 +1,4 @@
-# DB Design Local - Samsung QR Recorder
+# DB Design Local - QR Recorder
 
 Ngày tạo: 2026-07-13
 

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppearanceSettings } from "@/features/settings/appearance-settings";
+import { LicenseSettings } from "@/features/settings/license-settings";
 import { ServerSettingsForm } from "@/features/settings/server-settings-form";
 import { UpdateSettings } from "@/features/settings/update-settings";
 import { useI18n } from "@/lib/i18n-provider";
@@ -18,6 +19,7 @@ export default function SettingsPage() {
       <TabsList className="w-full sm:w-auto">
         <TabsTrigger value="appearance">{t("appearanceTab")}</TabsTrigger>
         <TabsTrigger value="server">{t("serverTab")}</TabsTrigger>
+        <TabsTrigger value="license">License</TabsTrigger>
         <TabsTrigger value="updates">Cập nhật</TabsTrigger>
         <TabsTrigger value="api">{t("apiTab")}</TabsTrigger>
       </TabsList>
@@ -28,6 +30,10 @@ export default function SettingsPage() {
 
       <TabsContent value="server">
         <ServerSettingsForm />
+      </TabsContent>
+
+      <TabsContent value="license">
+        <LicenseSettings />
       </TabsContent>
 
       <TabsContent value="updates">

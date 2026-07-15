@@ -192,6 +192,18 @@ model User {
   @@map("users")
 }
 
+model RolePermission {
+  id             Int      @id @default(autoincrement())
+  role           UserRole
+  permission_key String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@unique([role, permission_key])
+  @@index([role])
+  @@map("role_permissions")
+}
+
 // =========================
 // 2. VENDORS
 // =========================
@@ -883,6 +895,10 @@ model NotificationTemplate {
   noti_code        String             @unique
   title_template   String
   message_template String
+  title_template_vi   String?
+  message_template_vi String?
+  title_template_en   String?
+  message_template_en String?
   severity         Severity
   target           NotificationTarget
   is_active        Boolean            @default(true)
@@ -907,6 +923,11 @@ model NotificationEvent {
   error_code     String?
   title          String
   message        String
+  title_vi       String?
+  message_vi     String?
+  title_en       String?
+  message_en     String?
+  payload_json   Json?
   severity       Severity
   status         NotificationStatus @default(NEW)
   created_at     DateTime           @default(now())

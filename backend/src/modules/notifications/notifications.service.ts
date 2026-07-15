@@ -14,6 +14,11 @@ type CreateNotificationEventInput = {
   notiCode: string;
   title: string;
   message: string;
+  titleVi?: string | null;
+  messageVi?: string | null;
+  titleEn?: string | null;
+  messageEn?: string | null;
+  payload?: unknown;
   severity: NotificationSeverity;
   status?: NotificationEventStatus;
   machineId?: number | null;
@@ -42,6 +47,11 @@ export class NotificationsService {
           error_code: input.errorCode ?? null,
           title: input.title,
           message: input.message,
+          title_vi: this.cleanOptional(input.titleVi),
+          message_vi: this.cleanOptional(input.messageVi),
+          title_en: this.cleanOptional(input.titleEn) ?? input.title,
+          message_en: this.cleanOptional(input.messageEn) ?? input.message,
+          payload_json: input.payload === undefined ? undefined : JSON.parse(JSON.stringify(input.payload)),
           severity: input.severity,
           status: input.status ?? "NEW"
         }
@@ -56,6 +66,11 @@ export class NotificationsService {
   async listNotifications(take: number) {
     const notifications = await this.prisma.notificationEvent.findMany({
       take: Math.min(Math.max(take || 50, 1), 200),
+      where: {
+        noti_code: {
+          notIn: ["LOCAL_POST_HEARTBEAT", "LOCAL_POST_SCAN_SUBMIT"]
+        }
+      },
       orderBy: { created_at: "desc" },
       include: {
         machine: true,
@@ -121,6 +136,10 @@ export class NotificationsService {
         noti_code: dto.noti_code.trim(),
         title_template: dto.title_template.trim(),
         message_template: dto.message_template.trim(),
+        title_template_vi: this.cleanOptional(dto.title_template_vi),
+        message_template_vi: this.cleanOptional(dto.message_template_vi),
+        title_template_en: this.cleanOptional(dto.title_template_en) ?? dto.title_template.trim(),
+        message_template_en: this.cleanOptional(dto.message_template_en) ?? dto.message_template.trim(),
         severity: dto.severity,
         target: dto.target,
         is_active: dto.is_active ?? true
@@ -149,6 +168,10 @@ export class NotificationsService {
       data: {
         title_template: dto.title_template?.trim(),
         message_template: dto.message_template?.trim(),
+        title_template_vi: this.cleanOptionalForUpdate(dto.title_template_vi),
+        message_template_vi: this.cleanOptionalForUpdate(dto.message_template_vi),
+        title_template_en: this.cleanOptionalForUpdate(dto.title_template_en),
+        message_template_en: this.cleanOptionalForUpdate(dto.message_template_en),
         severity: dto.severity,
         target: dto.target,
         is_active: dto.is_active
@@ -226,5 +249,17 @@ export class NotificationsService {
     }
 
     return template;
+  }
+
+  private cleanOptional(value?: string | null) {
+    const cleaned = value?.trim();
+    return cleaned || null;
+  }
+
+  private cleanOptionalForUpdate(value?: string | null) {
+    if (value === undefined) {
+      return undefined;
+    }
+    return this.cleanOptional(value);
   }
 }

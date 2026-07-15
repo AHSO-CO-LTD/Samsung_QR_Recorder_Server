@@ -565,7 +565,7 @@ function updateSqlDocumentFieldGuide(section) {
 }
 
 let markdown = "";
-markdown += "# DB Design Local - Samsung QR Recorder\n\n";
+markdown += "# DB Design Local - QR Recorder\n\n";
 markdown += `Ngày tạo: ${generatedAt}\n\n`;
 markdown += `Tài liệu này là bản thiết kế database dành riêng cho máy local Python dùng PostgreSQL. Nội dung được tách từ thiết kế tổng thể \`db-design.pdf\` và đối chiếu với SQL khởi tạo local tại \`${sqlDocPath}\`.\n\n`;
 markdown += "## 1. Phạm vi local only\n\n";
@@ -744,7 +744,7 @@ const html = `<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<title>DB Design Local - Samsung QR Recorder</title>
+<title>DB Design Local - QR Recorder</title>
 <style>
   @page { size: A4 landscape; margin: 12mm; }
   * { box-sizing: border-box; }
@@ -767,12 +767,12 @@ const html = `<!doctype html>
 </head>
 <body>
   <section class="cover">
-    <h1>DB Design Local - Samsung QR Recorder</h1>
+    <h1>DB Design Local - QR Recorder</h1>
     <p class="muted">Thiết kế database PostgreSQL dành riêng cho máy local Python. Không bao gồm bảng server chính.</p>
     <p><strong>Nguồn đối chiếu:</strong> db-design.pdf, ${escapeHtml(sqlDocPath)}, ${escapeHtml(apiDocPath)}</p>
     <p><strong>Ngày tạo:</strong> ${generatedAt}</p>
   </section>
-  ${renderMarkdown(markdown).replace("<h1>DB Design Local - Samsung QR Recorder</h1>", "")}
+  ${renderMarkdown(markdown).replace("<h1>DB Design Local - QR Recorder</h1>", "")}
 </body>
 </html>`;
 

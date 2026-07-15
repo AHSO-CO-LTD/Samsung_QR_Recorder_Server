@@ -2,7 +2,7 @@
 
 Tài liệu này dành cho người code chương trình máy local Python. Mục tiêu là cung cấp một bộ lệnh SQL đầy đủ để copy vào Query Tool của PostgreSQL và tạo toàn bộ database local một lần.
 
-Quan trọng: đây là database của máy local, không phải database server chính của app `Samsung_QR_Recorder_Server`.
+Quan trọng: đây là database của máy local, không phải database server chính của app `QR Recorder Server`.
 
 ## 1. Phạm vi
 

@@ -1,4 +1,4 @@
-# Samsung QR Recorder Server App
+# QR Recorder Server App
 
 Ứng dụng desktop server cho dự án kiểm tra mã độc nhất TV.
 

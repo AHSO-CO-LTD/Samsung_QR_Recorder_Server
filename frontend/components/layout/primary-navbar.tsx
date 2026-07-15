@@ -1,24 +1,25 @@
 "use client";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { navGroups, type NavGroupId } from "@/components/layout/navigation-config";
+import { type NavGroup, type NavGroupId } from "@/components/layout/navigation-config";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 
 type PrimaryNavbarProps = {
   selectedGroupId: NavGroupId;
   activeGroupId: NavGroupId;
+  groups: readonly NavGroup[];
   onSelectGroup: (groupId: NavGroupId) => void;
   className?: string;
 };
 
-export function PrimaryNavbar({ selectedGroupId, activeGroupId, onSelectGroup, className }: PrimaryNavbarProps) {
+export function PrimaryNavbar({ selectedGroupId, activeGroupId, groups, onSelectGroup, className }: PrimaryNavbarProps) {
   const { t } = useI18n();
 
   return (
     <nav className={cn("min-w-0 overflow-hidden", className)} aria-label={t("primaryNavigation")}>
       <div className="flex flex-nowrap justify-start gap-1 overflow-x-auto [scrollbar-width:none] sm:justify-center [&::-webkit-scrollbar]:hidden">
-        {navGroups.map((group) => {
+        {groups.map((group) => {
           const Icon = group.icon;
           const isSelected = selectedGroupId === group.id;
           const isActive = activeGroupId === group.id;

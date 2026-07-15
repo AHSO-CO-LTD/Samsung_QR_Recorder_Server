@@ -49,3 +49,67 @@ export type ScanDecision =
   | "LOCAL_NG_SAVED"
   | "SERVER_OK"
   | "SERVER_DUPLICATE";
+
+export const USER_ROLES = ["OPERATOR", "ENGINEER", "ADMIN", "DEV"] as const;
+export type SharedUserRole = (typeof USER_ROLES)[number];
+
+export const SCREEN_PERMISSION_KEYS = [
+  "dashboard",
+  "machines",
+  "runtime",
+  "scans",
+  "reports",
+  "master-data",
+  "sync",
+  "duplicate-audit",
+  "duplicates",
+  "users",
+  "audit-logs",
+  "notifications",
+  "settings",
+  "api-docs"
+] as const;
+
+export type ScreenPermissionKey = (typeof SCREEN_PERMISSION_KEYS)[number];
+
+export const SCREEN_PERMISSION_DEFINITIONS: readonly {
+  key: ScreenPermissionKey;
+  group: "monitoring" | "operation" | "system";
+  label_vi: string;
+  label_en: string;
+}[] = [
+  { key: "dashboard", group: "monitoring", label_vi: "Tổng quan", label_en: "Dashboard" },
+  { key: "machines", group: "operation", label_vi: "Máy local", label_en: "Local machines" },
+  { key: "runtime", group: "operation", label_vi: "Phiên chạy", label_en: "Runtime sessions" },
+  { key: "scans", group: "operation", label_vi: "Lịch sử scan", label_en: "Scan history" },
+  { key: "reports", group: "operation", label_vi: "Báo cáo", label_en: "Reports" },
+  { key: "master-data", group: "system", label_vi: "Master data", label_en: "Master data" },
+  { key: "sync", group: "system", label_vi: "Đồng bộ", label_en: "Sync" },
+  { key: "duplicate-audit", group: "system", label_vi: "Audit duplicate", label_en: "Duplicate audit" },
+  { key: "duplicates", group: "system", label_vi: "Duplicate", label_en: "Duplicates" },
+  { key: "users", group: "system", label_vi: "Users và role", label_en: "Users and roles" },
+  { key: "audit-logs", group: "system", label_vi: "Audit logs", label_en: "Audit logs" },
+  { key: "notifications", group: "system", label_vi: "Thông báo", label_en: "Notifications" },
+  { key: "settings", group: "system", label_vi: "Cài đặt", label_en: "Settings" },
+  { key: "api-docs", group: "system", label_vi: "Swagger", label_en: "Swagger" }
+] as const;
+
+export const DEFAULT_ROLE_SCREEN_PERMISSIONS: Record<Exclude<SharedUserRole, "DEV">, readonly ScreenPermissionKey[]> = {
+  OPERATOR: ["dashboard", "machines", "runtime", "scans", "reports", "notifications", "settings"],
+  ENGINEER: [
+    "dashboard",
+    "machines",
+    "runtime",
+    "scans",
+    "reports",
+    "master-data",
+    "sync",
+    "duplicate-audit",
+    "duplicates",
+    "audit-logs",
+    "notifications",
+    "settings",
+    "api-docs"
+  ],
+  ADMIN: SCREEN_PERMISSION_KEYS
+};

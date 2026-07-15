@@ -19,6 +19,7 @@ type UserMenuProps = {
   user: AuthUser | null;
   locale: Locale;
   theme: "light" | "dark";
+  canAccessSettings: boolean;
   onToggleLocale: () => void;
   onToggleTheme: () => void;
   onLogout: () => void;
@@ -31,6 +32,7 @@ export function UserMenu({
   user,
   locale,
   theme,
+  canAccessSettings,
   onToggleLocale,
   onToggleTheme,
   onLogout,
@@ -70,13 +72,15 @@ export function UserMenu({
           <span className="block truncate text-xs font-normal text-muted-foreground">{user?.username ?? t("offlineMode")}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/settings">
-            <Settings className="h-4 w-4" aria-hidden="true" />
-            {t("settings")}
-          </Link>
-        </DropdownMenuItem>
-        <div className="border-t">
+        {canAccessSettings ? (
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
+              <Settings className="h-4 w-4" aria-hidden="true" />
+              {t("settings")}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        <div className={canAccessSettings ? "border-t" : ""}>
           <ToggleRow active={locale === "en"} leftLabel="VN" rightLabel="EN" tooltip={locale === "vi" ? t("english") : t("vietnamese")} onClick={onToggleLocale} />
           <ToggleRow
             active={theme === "dark"}

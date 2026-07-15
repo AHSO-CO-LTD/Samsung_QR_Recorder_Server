@@ -7,6 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeRoot = path.join(root, "release-runtime");
 const backendRuntime = path.join(runtimeRoot, "backend");
 const frontendRuntime = path.join(runtimeRoot, "frontend");
+const defaultUpdateRepository = "AHSO-CO-LTD/Samsung_QR_Recorder_Server";
 
 function copyRequired(source, target) {
   if (!fs.existsSync(source)) {
@@ -73,7 +74,7 @@ const frontendServerRoot = getFrontendServerRoot();
 copyRequired(path.join(root, "frontend", ".next", "static"), path.join(frontendServerRoot, ".next", "static"));
 copyOptional(path.join(root, "frontend", "public"), path.join(frontendServerRoot, "public"));
 
-const updateRepository = process.env.GITHUB_REPOSITORY || process.env.UPDATE_REPOSITORY || "";
+const updateRepository = process.env.UPDATE_REPOSITORY || process.env.GITHUB_REPOSITORY || defaultUpdateRepository;
 fs.writeFileSync(
   path.join(runtimeRoot, "update-source.json"),
   `${JSON.stringify({ repository: updateRepository }, null, 2)}\n`,

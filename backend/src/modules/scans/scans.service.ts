@@ -4,7 +4,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { MachinesService } from "../machines/machines.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RuntimeService } from "../runtime/runtime.service";
-import { SubmitScanDto } from "./dto/submit-scan.dto";
+import { FullCodePayloadDto, LedScanPayloadDto, SubmitScanDto } from "./dto/submit-scan.dto";
 
 type SubmitScanOptions = {
   syncBatchId?: number;
@@ -25,6 +25,13 @@ type ListScansQuery = {
   ng_reason?: string;
   from?: string;
   to?: string;
+};
+
+type CompleteSubmitScanDto = SubmitScanDto & {
+  duplicate_key: string;
+  full_code: FullCodePayloadDto;
+  chassis_scan_raw: string;
+  led_scans: LedScanPayloadDto[];
 };
 
 @Injectable()
@@ -174,8 +181,22 @@ export class ScansService {
     };
   }
 
-  async getScanTrend(days: number) {
-    const safeDays = Math.min(Math.max(days || 7, 1), 31);
+  async getScanTrend(options: { days: number; hours?: number; bucketMinutes?: number; machineCode?: string }) {
+    const safeDays = Math.min(Math.max(options.days || 7, 1), 31);
+    const safeBucketMinutes = options.bucketMinutes ? Math.min(Math.max(options.bucketMinutes, 5), 240) : undefined;
+    const safeHours = options.hours ? Math.min(Math.max(options.hours, 1), 72) : 12;
+    const machineFilter: Prisma.ScanRecordWhereInput = options.machineCode
+      ? {
+          machine: {
+            machine_code: options.machineCode
+          }
+        }
+      : {};
+
+    if (safeBucketMinutes) {
+      return this.getBucketedScanTrend(machineFilter, safeHours, safeBucketMinutes);
+    }
+
     const today = new Date();
     const dayStarts = Array.from({ length: safeDays }, (_, index) => {
       const date = new Date(today);
@@ -192,6 +213,7 @@ export class ScansService {
         const [ok, ng, pending] = await Promise.all([
           this.prisma.scanRecord.count({
             where: {
+              ...machineFilter,
               final_status: "OK",
               scan_at: {
                 gte: fromDate,
@@ -201,6 +223,7 @@ export class ScansService {
           }),
           this.prisma.scanRecord.count({
             where: {
+              ...machineFilter,
               final_status: "NG",
               scan_at: {
                 gte: fromDate,
@@ -210,6 +233,7 @@ export class ScansService {
           }),
           this.prisma.scanRecord.count({
             where: {
+              ...machineFilter,
               final_status: "PENDING",
               scan_at: {
                 gte: fromDate,
@@ -220,7 +244,7 @@ export class ScansService {
         ]);
 
         return {
-          date: fromDate.toISOString().slice(0, 10),
+          date: this.formatTrendDate(fromDate),
           ok,
           ng,
           pending,
@@ -237,6 +261,90 @@ export class ScansService {
     };
   }
 
+  private async getBucketedScanTrend(machineFilter: Prisma.ScanRecordWhereInput, hours: number, bucketMinutes: number) {
+    const now = new Date();
+    const end = new Date(now);
+    end.setSeconds(0, 0);
+    const start = new Date(end);
+    start.setHours(start.getHours() - hours);
+    start.setMinutes(Math.floor(start.getMinutes() / bucketMinutes) * bucketMinutes, 0, 0);
+
+    const bucketStarts: Date[] = [];
+    for (const cursor = new Date(start); cursor <= end; cursor.setMinutes(cursor.getMinutes() + bucketMinutes)) {
+      bucketStarts.push(new Date(cursor));
+    }
+
+    const rangeEnd = new Date(end);
+    rangeEnd.setMinutes(rangeEnd.getMinutes() + bucketMinutes);
+    const records = await this.prisma.scanRecord.findMany({
+      where: {
+        ...machineFilter,
+        scan_at: {
+          gte: start,
+          lt: rangeEnd
+        }
+      },
+      select: {
+        scan_at: true,
+        final_status: true
+      }
+    });
+
+    const bucketMs = bucketMinutes * 60 * 1000;
+    const data = bucketStarts.map((fromDate) => ({
+      date: this.formatTrendTime(fromDate),
+      ok: 0,
+      ng: 0,
+      pending: 0,
+      total: 0
+    }));
+
+    for (const record of records) {
+      const bucketDate = this.floorTrendBucket(record.scan_at, bucketMinutes);
+      const bucketIndex = Math.floor((bucketDate.getTime() - start.getTime()) / bucketMs);
+      const bucket = data[bucketIndex];
+      if (!bucket) {
+        continue;
+      }
+
+      if (record.final_status === "OK") {
+        bucket.ok += 1;
+      } else if (record.final_status === "NG") {
+        bucket.ng += 1;
+      } else if (record.final_status === "PENDING") {
+        bucket.pending += 1;
+      }
+      bucket.total = bucket.ok + bucket.ng + bucket.pending;
+    }
+
+    return {
+      success: true,
+      code: "SCAN_TREND_LOADED",
+      message: "Scan trend loaded.",
+      data
+    };
+  }
+
+  private formatTrendDate(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  private formatTrendTime(date: Date) {
+    const hour = String(date.getHours()).padStart(2, "0");
+    const minute = String(date.getMinutes()).padStart(2, "0");
+    return `${hour}:${minute}`;
+  }
+
+  private floorTrendBucket(date: Date, bucketMinutes: number) {
+    const bucket = new Date(date);
+    bucket.setSeconds(0, 0);
+    bucket.setMinutes(Math.floor(bucket.getMinutes() / bucketMinutes) * bucketMinutes, 0, 0);
+    return bucket;
+  }
+
   async submitScan(dto: SubmitScanDto, options: SubmitScanOptions = {}) {
     const machineForLog = await this.prisma.machine.findUnique({
       where: { machine_code: dto.machine_code }
@@ -246,9 +354,6 @@ export class ScansService {
       const result = await this.processSubmitScan(dto, options);
       if (!options.skipRequestLog && machineForLog) {
         await this.logSyncRequest(machineForLog.id, dto, result, options.requestType ?? "SUBMIT_SCAN", "OK", options.batchCode);
-      }
-      if (!options.skipNotification) {
-        await this.notifyScanPost(machineForLog?.id ?? null, dto, result, "OK", options.requestType ?? "SUBMIT_SCAN");
       }
       return result;
     } catch (error) {
@@ -264,7 +369,7 @@ export class ScansService {
         );
       }
       if (!options.skipNotification) {
-        await this.notifyScanPost(machineForLog?.id ?? null, dto, this.extractErrorPayload(error), "ERROR", options.requestType ?? "SUBMIT_SCAN");
+        await this.notifyScanPostError(machineForLog?.id ?? null, dto, this.extractErrorPayload(error), options.requestType ?? "SUBMIT_SCAN");
       }
       throw error;
     }
@@ -298,9 +403,6 @@ export class ScansService {
         });
       }
 
-      this.validateFullCodePayload(dto, profile);
-      await this.captureVendorCharForReporting(tx, dto.full_code.vendor_char);
-
       const existingScan = await tx.scanRecord.findUnique({
         where: {
           machine_id_local_scan_id: {
@@ -309,10 +411,6 @@ export class ScansService {
           }
         }
       });
-
-      if (existingScan) {
-        return this.buildReplayResponse(existingScan);
-      }
 
       const profileSnapshot = await tx.profileSnapshot.findFirst({
         where: {
@@ -324,6 +422,10 @@ export class ScansService {
       const runtimeContext = await this.runtimeService.resolveRuntimeForScan(machine.id, profile.id);
 
       if (dto.local_status === "NG") {
+        if (existingScan) {
+          return this.buildReplayResponse(existingScan);
+        }
+
         const scan = await this.createScanRecord(tx, dto, {
           machine_id: machine.id,
           profile_snapshot_id: profileSnapshot?.id ?? null,
@@ -349,6 +451,14 @@ export class ScansService {
             ng_reason: scan.ng_reason
           }
         };
+      }
+
+      this.assertCompleteOkPayload(dto);
+      this.validateFullCodePayload(dto, profile);
+      await this.captureVendorCharForReporting(tx, dto.full_code.vendor_char);
+
+      if (existingScan) {
+        return this.buildReplayResponse(existingScan);
       }
 
       const settings = await tx.serverSetting.findFirst({
@@ -494,23 +604,26 @@ export class ScansService {
       scan_at: Date;
     }
   ) {
+    const fullCode = dto.full_code;
+    const ledScans = Array.isArray(dto.led_scans) ? dto.led_scans : [];
+
     return tx.scanRecord.create({
       data: {
         local_scan_id: dto.local_scan_id,
         machine_id: state.machine_id,
         profile_id: dto.profile_id,
         profile_snapshot_id: state.profile_snapshot_id,
-        full_code_raw: dto.full_code.raw,
-        full_prefix: dto.full_code.prefix,
-        full_chassis_segment: dto.full_code.chassis_code.replace("-", ""),
-        full_chassis_code: dto.full_code.chassis_code,
-        full_before_vendor: dto.full_code.before_vendor,
-        full_vendor_char: dto.full_code.vendor_char,
-        full_led_code: dto.full_code.led_code,
-        full_factory_code: dto.full_code.factory_code,
-        full_after_factory: dto.full_code.after_factory,
-        duplicate_key: dto.duplicate_key,
-        chassis_scan_raw: dto.chassis_scan_raw,
+        full_code_raw: this.cleanScanText(fullCode?.raw),
+        full_prefix: this.cleanScanText(fullCode?.prefix),
+        full_chassis_segment: this.cleanScanText(fullCode?.chassis_code).replace("-", ""),
+        full_chassis_code: this.cleanScanText(fullCode?.chassis_code),
+        full_before_vendor: this.cleanScanText(fullCode?.before_vendor),
+        full_vendor_char: this.cleanScanText(fullCode?.vendor_char),
+        full_led_code: this.cleanScanText(fullCode?.led_code),
+        full_factory_code: this.cleanScanText(fullCode?.factory_code),
+        full_after_factory: this.cleanScanText(fullCode?.after_factory),
+        duplicate_key: this.cleanScanText(dto.duplicate_key),
+        chassis_scan_raw: this.cleanScanText(dto.chassis_scan_raw),
         local_status: state.local_status,
         server_status: state.server_status,
         final_status: state.final_status,
@@ -521,19 +634,42 @@ export class ScansService {
         runtime_product_id: state.runtime_product_id,
         scan_at: state.scan_at,
         led_items: {
-          create: dto.led_scans.map((item) => ({
-            led_slot: item.slot,
-            led_index: item.index,
-            led_scan_raw: item.raw,
-            led_lot_no: item.lot_no,
-            vendor_char: item.vendor_char,
-            led_suffix: item.suffix,
-            local_status: item.status,
-            ng_reason: item.ng_reason ?? null
+          create: ledScans.map((item, index) => ({
+            led_slot: this.toPositiveInt(item?.slot, index + 1),
+            led_index: this.toPositiveInt(item?.index, index + 1),
+            led_scan_raw: this.cleanScanText(item?.raw),
+            led_lot_no: this.cleanScanText(item?.lot_no),
+            vendor_char: this.cleanScanText(item?.vendor_char),
+            led_suffix: this.cleanScanText(item?.suffix),
+            local_status: item?.status === "OK" || item?.status === "NG" ? item.status : state.local_status,
+            ng_reason: this.cleanOptionalScanText(item?.ng_reason)
           }))
         }
       } as any
     });
+  }
+
+  private cleanScanText(value: unknown) {
+    if (typeof value === "string") {
+      return value;
+    }
+    if (value === null || value === undefined) {
+      return "";
+    }
+    return String(value);
+  }
+
+  private cleanOptionalScanText(value: unknown) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const text = this.cleanScanText(value);
+    return text || null;
+  }
+
+  private toPositiveInt(value: unknown, fallback: number) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 1 ? parsed : fallback;
   }
 
   private buildReplayResponse(scan: {
@@ -593,14 +729,31 @@ export class ScansService {
         error_code: "SERVER_DUPLICATE",
         title: "Server duplicate detected",
         message: `Duplicate key ${duplicateKey} was rejected by server duplicate rule.`,
+        title_vi: "Server phát hiện trùng mã",
+        message_vi: `Duplicate key ${duplicateKey} bị server từ chối theo rule duplicate.`,
+        title_en: "Server duplicate detected",
+        message_en: `Duplicate key ${duplicateKey} was rejected by server duplicate rule.`,
+        payload_json: {
+          duplicate_key: duplicateKey
+        },
         severity: "ERROR",
         status: "NEW"
       }
     });
   }
 
+  private assertCompleteOkPayload(dto: SubmitScanDto): asserts dto is CompleteSubmitScanDto {
+    if (!dto.full_code || !dto.duplicate_key || dto.chassis_scan_raw === undefined || !Array.isArray(dto.led_scans)) {
+      throw new BadRequestException({
+        success: false,
+        code: "PAYLOAD_INVALID",
+        message: "OK scan payload must include full_code, duplicate_key, chassis_scan_raw, and led_scans."
+      });
+    }
+  }
+
   private validateFullCodePayload(
-    dto: SubmitScanDto,
+    dto: CompleteSubmitScanDto,
     profile: {
       full_code_length: number;
       full_vendor_position: number;
@@ -737,23 +890,30 @@ export class ScansService {
     });
   }
 
-  private notifyScanPost(machineId: number | null, dto: SubmitScanDto, response: unknown, status: "OK" | "ERROR", requestType: string) {
+  private notifyScanPostError(machineId: number | null, dto: SubmitScanDto, response: unknown, requestType: string) {
     const payload = this.asRecord(response);
-    const code = typeof payload.code === "string" ? payload.code : status === "OK" ? "SCAN_SUBMIT_DONE" : "SCAN_SUBMIT_FAILED";
+    const code = typeof payload.code === "string" ? payload.code : "SCAN_SUBMIT_FAILED";
     const data = this.asRecord(payload.data);
     const finalStatus = typeof data.final_status === "string" ? data.final_status : null;
-    const severity = status === "ERROR" ? "ERROR" : finalStatus === "NG" || code.includes("DUPLICATE") ? "WARNING" : "INFO";
 
     return this.notifications.createEvent({
-      notiCode: status === "ERROR" ? "LOCAL_POST_SCAN_ERROR" : "LOCAL_POST_SCAN_SUBMIT",
+      notiCode: "LOCAL_POST_SCAN_ERROR",
       machineId,
-      title: status === "ERROR" ? "Local scan POST failed" : "Local scan POST received",
-      message:
-        status === "ERROR"
-          ? `Machine ${dto.machine_code} submitted scan ${dto.local_scan_id} but server returned ${code}.`
-          : `Machine ${dto.machine_code} submitted scan ${dto.local_scan_id}. Result: ${code}${finalStatus ? `/${finalStatus}` : ""}.`,
-      severity,
-      errorCode: status === "ERROR" ? code : code.includes("DUPLICATE") ? "SERVER_DUPLICATE" : null
+      title: "Local scan POST failed",
+      titleVi: "Local gửi scan thất bại",
+      titleEn: "Local scan POST failed",
+      message: `Machine ${dto.machine_code} submitted scan ${dto.local_scan_id} but server returned ${code}.`,
+      messageVi: `Máy ${dto.machine_code} gửi scan ${dto.local_scan_id} nhưng server trả về ${code}.`,
+      messageEn: `Machine ${dto.machine_code} submitted scan ${dto.local_scan_id} but server returned ${code}.`,
+      payload: {
+        machine_code: dto.machine_code,
+        local_scan_id: dto.local_scan_id,
+        request_type: requestType,
+        code,
+        final_status: finalStatus
+      },
+      severity: "ERROR",
+      errorCode: code
     });
   }
 

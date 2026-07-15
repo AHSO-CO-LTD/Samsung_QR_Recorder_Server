@@ -1,0 +1,16 @@
+# === AN TOÀN: chặn mọi thứ liên quan tới KHÓA KÝ và LICENSE THẬT ===
+# (repo này chỉ chứa phần CLIENT/verify cho dev — không bao giờ chứa private key)
+private.key
+*.private.key
+keys/
+tools/keygen.py
+tools/issue_license.py
+licenses.json
+issued/
+*.lic
+
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store

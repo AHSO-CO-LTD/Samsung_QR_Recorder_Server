@@ -1,5 +1,5 @@
 {
-  "appName": "Samsung QR Recorder Server",
+  "appName": "QR Recorder Server",
   "database": {
     "defaultName": "ahso_qr_recorder",
     "defaultUser": "postgres",
@@ -10,6 +10,9 @@
   "ports": {
     "api": 3979,
     "frontend": 3969
+  },
+  "updates": {
+    "repository": "AHSO-CO-LTD/Samsung_QR_Recorder_Server"
   },
   "requirements": {
     "node": {

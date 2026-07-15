@@ -116,11 +116,19 @@ const notificationTemplates = [
     "SERVER_DUPLICATE",
     "Server duplicate detected",
     "Machine {{machine_code}} sent duplicate key {{duplicate_key}}.",
+    "Server phát hiện trùng mã",
+    "Máy {{machine_code}} gửi duplicate key {{duplicate_key}}.",
+    "Server duplicate detected",
+    "Machine {{machine_code}} sent duplicate key {{duplicate_key}}.",
     Severity.ERROR,
     "SERVER_UI"
   ],
   [
     "MACHINE_OFFLINE",
+    "Machine offline",
+    "Machine {{machine_code}} has not sent heartbeat in time.",
+    "Máy offline",
+    "Máy {{machine_code}} không gửi heartbeat đúng hạn.",
     "Machine offline",
     "Machine {{machine_code}} has not sent heartbeat in time.",
     Severity.WARNING,
@@ -130,10 +138,49 @@ const notificationTemplates = [
     "OFFLINE_SYNC_HAS_NG",
     "Offline sync has NG",
     "Batch {{batch_code}} contains NG or failed records.",
+    "Offline sync có NG",
+    "Batch {{batch_code}} có record NG hoặc thất bại.",
+    "Offline sync has NG",
+    "Batch {{batch_code}} contains NG or failed records.",
     Severity.WARNING,
     "BOTH"
   ]
 ];
+
+const defaultRoleScreenPermissions = {
+  [UserRole.OPERATOR]: ["dashboard", "machines", "runtime", "scans", "reports", "notifications", "settings"],
+  [UserRole.ENGINEER]: [
+    "dashboard",
+    "machines",
+    "runtime",
+    "scans",
+    "reports",
+    "master-data",
+    "sync",
+    "duplicate-audit",
+    "duplicates",
+    "audit-logs",
+    "notifications",
+    "settings",
+    "api-docs"
+  ],
+  [UserRole.ADMIN]: [
+    "dashboard",
+    "machines",
+    "runtime",
+    "scans",
+    "reports",
+    "master-data",
+    "sync",
+    "duplicate-audit",
+    "duplicates",
+    "users",
+    "audit-logs",
+    "notifications",
+    "settings",
+    "api-docs"
+  ]
+};
 
 try {
   for (const user of users) {
@@ -162,8 +209,9 @@ try {
   }
 
   const settings = await prisma.serverSetting.findFirst({ orderBy: { id: "asc" } });
+  const factoryCode = (process.env.SEED_FACTORY_CODE || "DZLV").trim().toUpperCase();
   const settingsData = {
-    factory_code_default: process.env.SEED_FACTORY_CODE || "DZLV",
+    factory_code_default: factoryCode,
     full_code_length_default: 35,
     full_vendor_position_default: 18,
     led_scan_length_default: 22,
@@ -176,37 +224,22 @@ try {
   } else {
     await prisma.serverSetting.create({ data: settingsData });
   }
-  console.log("Seeded server settings");
+  console.log(`Seeded server settings with factory code: ${factoryCode}`);
 
-  const seedMachineSerial = process.env.SEED_MACHINE_SERIAL || "SN-LOCAL01-DEV";
-  const seedMachineUid = process.env.SEED_MACHINE_UID || "UID-LOCAL01-DEV";
-  const seedMachineLicenseKey = process.env.SEED_MACHINE_LICENSE_KEY || `${seedMachineSerial}|${seedMachineUid}`;
-
-  const machine = await prisma.machine.upsert({
-    where: { machine_code: "LOCAL01" },
-    create: {
-      machine_code: "LOCAL01",
-      machine_name: "Local scanner 01",
-      serial: seedMachineSerial,
-      uid: seedMachineUid,
-      license_key_raw: seedMachineLicenseKey,
-      license_activated_at: new Date(),
-      line_name: "LINE-A",
-      station_name: "ST-01",
-      is_active: true
-    },
-    update: {
-      machine_name: "Local scanner 01",
-      serial: seedMachineSerial,
-      uid: seedMachineUid,
-      license_key_raw: seedMachineLicenseKey,
-      license_activated_at: new Date(),
-      line_name: "LINE-A",
-      station_name: "ST-01",
-      is_active: true
-    }
-  });
-  console.log(`Seeded machine: ${machine.machine_code}`);
+  const rolePermissionCount = await prisma.rolePermission.count();
+  if (rolePermissionCount === 0) {
+    await prisma.rolePermission.createMany({
+      data: Object.entries(defaultRoleScreenPermissions).flatMap(([role, permissionKeys]) =>
+        permissionKeys.map((permissionKey) => ({
+          role,
+          permission_key: permissionKey
+        }))
+      )
+    });
+    console.log("Seeded default role screen permissions");
+  } else {
+    console.log(`Role screen permissions already exist: ${rolePermissionCount}`);
+  }
 
   for (const [code, groupName, severity, defaultMessage] of errorCodes) {
     await prisma.errorCode.upsert({
@@ -228,13 +261,17 @@ try {
   }
   console.log(`Seeded ${errorCodes.length} error codes`);
 
-  for (const [notiCode, titleTemplate, messageTemplate, severity, target] of notificationTemplates) {
+  for (const [notiCode, titleTemplate, messageTemplate, titleTemplateVi, messageTemplateVi, titleTemplateEn, messageTemplateEn, severity, target] of notificationTemplates) {
     await prisma.notificationTemplate.upsert({
       where: { noti_code: notiCode },
       create: {
         noti_code: notiCode,
         title_template: titleTemplate,
         message_template: messageTemplate,
+        title_template_vi: titleTemplateVi,
+        message_template_vi: messageTemplateVi,
+        title_template_en: titleTemplateEn,
+        message_template_en: messageTemplateEn,
         severity,
         target,
         is_active: true
@@ -242,6 +279,10 @@ try {
       update: {
         title_template: titleTemplate,
         message_template: messageTemplate,
+        title_template_vi: titleTemplateVi,
+        message_template_vi: messageTemplateVi,
+        title_template_en: titleTemplateEn,
+        message_template_en: messageTemplateEn,
         severity,
         target,
         is_active: true
