@@ -15,7 +15,7 @@ export class HealthController {
       message: "Server API is running.",
       data: {
         status: "ok",
-        service: "samsung-qrrecorder-server-api",
+        service: "qr-recorder-server-api",
         timestamp: new Date().toISOString()
       }
     };

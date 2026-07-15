@@ -6,16 +6,19 @@ import { NotificationBell } from "@/components/layout/notification-bell";
 import { PrimaryNavbar } from "@/components/layout/primary-navbar";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { NavGroupId } from "@/components/layout/navigation-config";
+import type { NavGroup, NavGroupId } from "@/components/layout/navigation-config";
 import type { AuthUser } from "@/lib/auth";
 import type { Locale, MessageKey } from "@/lib/i18n";
 
 type AppHeaderProps = {
   activeGroupId: NavGroupId;
   selectedGroupId: NavGroupId;
+  groups: readonly NavGroup[];
   user: AuthUser | null;
   locale: Locale;
   theme: "light" | "dark";
+  canAccessNotifications: boolean;
+  canAccessSettings: boolean;
   onSelectGroup: (groupId: NavGroupId) => void;
   onToggleLocale: () => void;
   onToggleTheme: () => void;
@@ -28,9 +31,12 @@ type AppHeaderProps = {
 export function AppHeader({
   activeGroupId,
   selectedGroupId,
+  groups,
   user,
   locale,
   theme,
+  canAccessNotifications,
+  canAccessSettings,
   onSelectGroup,
   onToggleLocale,
   onToggleTheme,
@@ -62,15 +68,17 @@ export function AppHeader({
             className="hidden lg:block lg:justify-self-center"
             activeGroupId={activeGroupId}
             selectedGroupId={selectedGroupId}
+            groups={groups}
             onSelectGroup={onSelectGroup}
           />
 
           <div className="flex shrink-0 justify-end gap-1">
-            <NotificationBell locale={locale} t={t} />
+            {canAccessNotifications ? <NotificationBell locale={locale} t={t} /> : null}
             <UserMenu
               user={user}
               locale={locale}
               theme={theme}
+              canAccessSettings={canAccessSettings}
               onToggleLocale={onToggleLocale}
               onToggleTheme={onToggleTheme}
               onLogout={onLogout}
@@ -85,6 +93,7 @@ export function AppHeader({
           className="mt-3 lg:hidden"
           activeGroupId={activeGroupId}
           selectedGroupId={selectedGroupId}
+          groups={groups}
           onSelectGroup={onSelectGroup}
         />
       </div>

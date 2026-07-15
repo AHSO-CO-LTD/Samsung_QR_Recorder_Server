@@ -4,8 +4,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Samsung QR Recorder Server",
-  description: "Desktop server app for Samsung QR duplicate checking"
+  title: "QR Recorder Server",
+  description: "Desktop server app for QR duplicate checking"
 };
 
 const themeInitScript = `

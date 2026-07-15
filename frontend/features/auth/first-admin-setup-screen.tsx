@@ -66,7 +66,7 @@ export function FirstAdminSetupScreen({ onCreated }: FirstAdminSetupScreenProps)
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-background px-3 py-6 sm:px-4 lg:py-8">
       <section className="flex w-full max-w-[460px] flex-col items-center gap-4">
-        <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal">Samsung QR Recorder Server</h1>
+        <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal">QR Recorder Server</h1>
         <Card className="w-full">
           <CardHeader>
             <CardTitle className="flex items-center justify-center gap-2 text-center">

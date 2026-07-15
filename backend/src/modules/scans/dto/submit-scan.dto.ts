@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsIn, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { IsArray, IsDefined, IsIn, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Min, ValidateIf, ValidateNested } from "class-validator";
 
 export class FullCodePayloadDto {
   @ApiProperty({ example: "VN39BN9658567A1F1S58282ADZLVX880447" })
@@ -97,24 +97,29 @@ export class SubmitScanDto {
   @Min(1)
   profile_id!: number;
 
-  @ApiProperty({ example: "1F1SX880447" })
+  @ApiPropertyOptional({ example: "1F1SX880447", description: "Required when local_status is OK. Local NG may omit it." })
+  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
   @IsString()
-  duplicate_key!: string;
+  duplicate_key?: string;
 
-  @ApiProperty({ type: FullCodePayloadDto })
+  @ApiPropertyOptional({ type: FullCodePayloadDto, description: "Required when local_status is OK. Local NG may send malformed or partial code data." })
+  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
+  @IsDefined()
   @ValidateNested()
   @Type(() => FullCodePayloadDto)
-  full_code!: FullCodePayloadDto;
+  full_code?: FullCodePayloadDto;
 
-  @ApiProperty({ example: "BN96-58567A" })
+  @ApiPropertyOptional({ example: "BN96-58567A", description: "Required when local_status is OK. Local NG may omit it." })
+  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
   @IsString()
-  chassis_scan_raw!: string;
+  chassis_scan_raw?: string;
 
-  @ApiProperty({ type: [LedScanPayloadDto] })
+  @ApiPropertyOptional({ type: [LedScanPayloadDto], description: "Required when local_status is OK. Local NG may omit it." })
+  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => LedScanPayloadDto)
-  led_scans!: LedScanPayloadDto[];
+  led_scans?: LedScanPayloadDto[];
 
   @ApiProperty({ enum: ["OK", "NG"], example: "OK" })
   @IsIn(["OK", "NG"])

@@ -152,7 +152,16 @@ export class MachinesService {
       await this.notifications.createEvent({
         notiCode: "MACHINE_REGISTER_DUPLICATE",
         title: "Duplicated machine registration request",
+        titleVi: "Yêu cầu định danh máy bị trùng",
+        titleEn: "Duplicated machine registration request",
         message: `A local machine sent duplicated identity fields. Serial: ${serial}, UID: ${uid}. Detected IP: ${ipAddress}.`,
+        messageVi: `Máy local gửi thông tin định danh bị trùng. Serial: ${serial}, UID: ${uid}. IP phát hiện: ${ipAddress}.`,
+        messageEn: `A local machine sent duplicated identity fields. Serial: ${serial}, UID: ${uid}. Detected IP: ${ipAddress}.`,
+        payload: {
+          serial,
+          uid,
+          ip_address: ipAddress
+        },
         severity: "WARNING",
         errorCode: "MACHINE_REGISTER_DUPLICATE"
       });
@@ -188,7 +197,17 @@ export class MachinesService {
     await this.notifications.createEvent({
       notiCode: "MACHINE_REGISTER_REQUEST",
       title: "New local machine identification request",
+      titleVi: "Yêu cầu định danh máy local mới",
+      titleEn: "New local machine identification request",
       message: `A local machine requested identification. Serial: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
+      messageVi: `Máy local yêu cầu định danh. Serial: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
+      messageEn: `A local machine requested identification. Serial: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
+      payload: {
+        request_id: request.request_id,
+        serial: request.serial,
+        uid: request.uid,
+        ip_address: request.ip_address
+      },
       severity: "INFO"
     });
 
@@ -804,10 +823,26 @@ export class MachinesService {
       notiCode: dto.status === "ACK" ? "LOCAL_POST_COMMAND_ACK" : "LOCAL_POST_COMMAND_FAILED",
       machineId: machine.id,
       title: dto.status === "ACK" ? "Machine command acknowledged" : "Machine command failed",
+      titleVi: dto.status === "ACK" ? "Máy đã xác nhận lệnh" : "Máy báo lệnh thất bại",
+      titleEn: dto.status === "ACK" ? "Machine command acknowledged" : "Machine command failed",
       message:
         dto.status === "ACK"
           ? `Machine ${machine.machine_code} acknowledged command #${commandId}.`
           : `Machine ${machine.machine_code} marked command #${commandId} as failed${dto.error_message ? `: ${dto.error_message}` : "."}`,
+      messageVi:
+        dto.status === "ACK"
+          ? `Máy ${machine.machine_code} đã xác nhận lệnh #${commandId}.`
+          : `Máy ${machine.machine_code} báo lệnh #${commandId} thất bại${dto.error_message ? `: ${dto.error_message}` : "."}`,
+      messageEn:
+        dto.status === "ACK"
+          ? `Machine ${machine.machine_code} acknowledged command #${commandId}.`
+          : `Machine ${machine.machine_code} marked command #${commandId} as failed${dto.error_message ? `: ${dto.error_message}` : "."}`,
+      payload: {
+        machine_code: machine.machine_code,
+        command_id: commandId,
+        status: dto.status,
+        error_message: dto.error_message ?? null
+      },
       severity: dto.status === "ACK" ? "INFO" : "WARNING",
       errorCode: dto.status === "ACK" ? null : "MACHINE_COMMAND_FAILED"
     });
@@ -873,14 +908,6 @@ export class MachinesService {
         message: "Heartbeat received from local machine.",
         payload_json: JSON.parse(JSON.stringify({ ...dto, detected_ip_address: detectedIpAddress }))
       }
-    });
-
-    await this.notifications.createEvent({
-      notiCode: "LOCAL_POST_HEARTBEAT",
-      machineId: currentMachine.id,
-      title: "Heartbeat received",
-      message: `Machine ${currentMachine.machine_code} sent heartbeat from ${detectedIpAddress ?? "unknown IP"}. Pending sync: ${dto.local_pending_sync ?? 0}.`,
-      severity: "INFO"
     });
 
     return {

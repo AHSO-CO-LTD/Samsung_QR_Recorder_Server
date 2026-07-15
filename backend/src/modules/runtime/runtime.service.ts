@@ -109,7 +109,16 @@ export class RuntimeService {
       notiCode: "MACHINE_RUNTIME_DISCONNECTED",
       machineId: machine.id,
       title: "Local machine disconnected",
+      titleVi: "Máy local mất kết nối",
+      titleEn: "Local machine disconnected",
       message: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
+      messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối WebSocket runtime đã ngắt."}`,
+      messageEn: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
+      payload: {
+        machine_code: machine.machine_code,
+        socket_ip: socketIp ?? null,
+        reason: reason ?? null
+      },
       severity: "WARNING",
       errorCode: "MACHINE_RUNTIME_DISCONNECTED"
     });

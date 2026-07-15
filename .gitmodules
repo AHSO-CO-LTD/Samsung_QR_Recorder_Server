@@ -1,0 +1,3 @@
+[submodule "external/license-key"]
+	path = external/license-key
+	url = https://github.com/AHSO-CO-LTD/License-Key.git

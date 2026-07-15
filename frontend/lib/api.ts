@@ -98,6 +98,23 @@ export async function apiDelete<T>(path: string): Promise<ApiResult<T>> {
   return payload;
 }
 
+export async function apiDownloadBlob(path: string): Promise<{ blob: Blob; fileName: string }> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: buildAuthHeaders(),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const message = await readErrorMessage(response);
+    throw new Error(message || `API request failed: ${response.status}`);
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: getDownloadFileName(response.headers.get("content-disposition")) ?? "download.xlsx"
+  };
+}
+
 function buildAuthHeaders(baseHeaders: Record<string, string> = {}) {
   if (typeof window === "undefined") {
     return baseHeaders;
@@ -110,4 +127,32 @@ function buildAuthHeaders(baseHeaders: Record<string, string> = {}) {
         Authorization: `Bearer ${token}`
       }
     : baseHeaders;
+}
+
+async function readErrorMessage(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = (await response.json()) as Partial<ApiResult>;
+      return payload.message;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return response.text();
+}
+
+function getDownloadFileName(contentDisposition: string | null) {
+  if (!contentDisposition) {
+    return null;
+  }
+
+  const utfMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1]);
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+  return plainMatch?.[1] ?? null;
 }

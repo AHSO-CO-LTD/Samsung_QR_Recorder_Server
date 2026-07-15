@@ -208,9 +208,22 @@ export class SyncService {
       notiCode: hasDifference ? "LOCAL_POST_RECONCILE_DIFF" : "LOCAL_POST_RECONCILE_CHECK",
       machineId: machine.id,
       title: hasDifference ? "Sync difference found" : "Reconcile check received",
+      titleVi: hasDifference ? "Phát hiện lệch dữ liệu sync" : "Đã nhận reconcile check",
+      titleEn: hasDifference ? "Sync difference found" : "Reconcile check received",
       message: hasDifference
         ? `Machine ${machine.machine_code} reconcile check found data differences.`
         : `Machine ${machine.machine_code} reconcile check completed. Mode: ${response.data.comparison_mode}.`,
+      messageVi: hasDifference
+        ? `Máy ${machine.machine_code} reconcile check phát hiện lệch dữ liệu.`
+        : `Máy ${machine.machine_code} reconcile check hoàn tất. Chế độ: ${response.data.comparison_mode}.`,
+      messageEn: hasDifference
+        ? `Machine ${machine.machine_code} reconcile check found data differences.`
+        : `Machine ${machine.machine_code} reconcile check completed. Mode: ${response.data.comparison_mode}.`,
+      payload: {
+        machine_code: machine.machine_code,
+        comparison_mode: response.data.comparison_mode,
+        has_difference: hasDifference
+      },
       severity: hasDifference ? "WARNING" : "INFO",
       errorCode: hasDifference ? "SYNC_RECONCILE_DIFF_FOUND" : null
     });
@@ -266,7 +279,15 @@ export class SyncService {
       notiCode: "LOCAL_POST_RECONCILE_PULL",
       machineId: machine.id,
       title: "Reconcile pull received",
+      titleVi: "Đã nhận yêu cầu reconcile pull",
+      titleEn: "Reconcile pull received",
       message: `Machine ${machine.machine_code} requested ${response.data.records.length} server scan record(s) for local sync.`,
+      messageVi: `Máy ${machine.machine_code} yêu cầu ${response.data.records.length} record scan server để sync local.`,
+      messageEn: `Machine ${machine.machine_code} requested ${response.data.records.length} server scan record(s) for local sync.`,
+      payload: {
+        machine_code: machine.machine_code,
+        record_count: response.data.records.length
+      },
       severity: "INFO"
     });
     return response;
@@ -395,10 +416,27 @@ export class SyncService {
       machineId: machine.id,
       batchId: finalBatch.id,
       title: totalFailed > 0 ? "Local batch sync has failures" : "Local batch sync received",
+      titleVi: totalFailed > 0 ? "Batch sync local có lỗi" : "Đã nhận batch sync local",
+      titleEn: totalFailed > 0 ? "Local batch sync has failures" : "Local batch sync received",
       message:
         totalFailed > 0
           ? `Machine ${machine.machine_code} submitted batch ${dto.batch_code} with ${totalFailed} failed scan(s).`
           : `Machine ${machine.machine_code} submitted batch ${dto.batch_code}. OK: ${totalOk}, NG: ${totalNg}.`,
+      messageVi:
+        totalFailed > 0
+          ? `Máy ${machine.machine_code} gửi batch ${dto.batch_code} có ${totalFailed} scan lỗi.`
+          : `Máy ${machine.machine_code} đã gửi batch ${dto.batch_code}. OK: ${totalOk}, NG: ${totalNg}.`,
+      messageEn:
+        totalFailed > 0
+          ? `Machine ${machine.machine_code} submitted batch ${dto.batch_code} with ${totalFailed} failed scan(s).`
+          : `Machine ${machine.machine_code} submitted batch ${dto.batch_code}. OK: ${totalOk}, NG: ${totalNg}.`,
+      payload: {
+        machine_code: machine.machine_code,
+        batch_code: dto.batch_code,
+        total_ok: totalOk,
+        total_ng: totalNg,
+        total_failed: totalFailed
+      },
       severity: totalFailed > 0 ? "ERROR" : "INFO",
       errorCode: totalFailed > 0 ? "BATCH_SUBMIT_PARTIAL_FAILED" : null
     });

@@ -14,6 +14,26 @@ export class CreateNotificationTemplateDto {
   @IsString()
   message_template!: string;
 
+  @ApiPropertyOptional({ example: "Phát hiện trùng mã trên server" })
+  @IsOptional()
+  @IsString()
+  title_template_vi?: string;
+
+  @ApiPropertyOptional({ example: "Máy {{machine_code}} gửi duplicate key {{duplicate_key}}." })
+  @IsOptional()
+  @IsString()
+  message_template_vi?: string;
+
+  @ApiPropertyOptional({ example: "Server duplicate detected" })
+  @IsOptional()
+  @IsString()
+  title_template_en?: string;
+
+  @ApiPropertyOptional({ example: "Machine {{machine_code}} sent duplicate key {{duplicate_key}}." })
+  @IsOptional()
+  @IsString()
+  message_template_en?: string;
+
   @ApiProperty({ enum: ["INFO", "WARNING", "ERROR", "CRITICAL"], example: "ERROR" })
   @IsIn(["INFO", "WARNING", "ERROR", "CRITICAL"])
   severity!: "INFO" | "WARNING" | "ERROR" | "CRITICAL";
@@ -38,6 +58,26 @@ export class UpdateNotificationTemplateDto {
   @IsOptional()
   @IsString()
   message_template?: string;
+
+  @ApiPropertyOptional({ example: "Phát hiện trùng mã trên server" })
+  @IsOptional()
+  @IsString()
+  title_template_vi?: string;
+
+  @ApiPropertyOptional({ example: "Máy {{machine_code}} gửi duplicate key {{duplicate_key}}." })
+  @IsOptional()
+  @IsString()
+  message_template_vi?: string;
+
+  @ApiPropertyOptional({ example: "Server duplicate detected" })
+  @IsOptional()
+  @IsString()
+  title_template_en?: string;
+
+  @ApiPropertyOptional({ example: "Machine {{machine_code}} sent duplicate key {{duplicate_key}}." })
+  @IsOptional()
+  @IsString()
+  message_template_en?: string;
 
   @ApiPropertyOptional({ enum: ["INFO", "WARNING", "ERROR", "CRITICAL"], example: "ERROR" })
   @IsOptional()

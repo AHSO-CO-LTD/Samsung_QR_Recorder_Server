@@ -12,6 +12,7 @@ import { CheckboxField, SelectField, TextInputField } from "@/features/shared/fo
 import { ConfirmActionDialog } from "@/features/shared/confirm-action-dialog";
 import { DataTablePanel, DateText, StatusBadge, type Column } from "@/features/shared/data-view";
 import type { AppUser, UserRole } from "@/features/shared/types";
+import { RolePermissionsPanel } from "@/features/users/role-permissions-panel";
 import type { MessageKey } from "@/lib/i18n";
 
 type UserDraft = {
@@ -152,6 +153,8 @@ export function UsersView() {
           </Button>
         }
       />
+
+      <RolePermissionsPanel />
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent>
