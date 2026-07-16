@@ -36,7 +36,7 @@ export class UpsertServerSettingsDto {
   @Min(1)
   duplicate_days?: number;
 
-  @ApiPropertyOptional({ example: 60 })
+  @ApiPropertyOptional({ example: 300 })
   @IsOptional()
   @IsInt()
   @Min(1)

@@ -13,7 +13,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { apiGet, API_BASE_URL } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
-import { DateText, MonoText, StatusBadge } from "@/features/shared/data-view";
+import { MonoText, StatusBadge } from "@/features/shared/data-view";
 import type { Machine, MachineRuntimeSession } from "@/features/shared/types";
 
 const RUNTIME_REFRESH_MS = 5000;
@@ -94,7 +94,7 @@ export function LocalMachinesOverview() {
           throw machineResult.reason;
         }
 
-        const nextMachines = machineResult.value.data ?? [];
+        const nextMachines = (machineResult.value.data ?? []).filter((machine) => machine.is_active);
         const nextSessions = sessionResult.status === "fulfilled" ? sessionResult.value.data ?? [] : [];
         setMachines(nextMachines);
         setSessions(nextSessions);
@@ -241,6 +241,7 @@ function MachineRuntimeCard({ row, trendData, liveData }: { row: MachineRuntimeR
   const { machine, session, isConnected, isRunning } = row;
   const currentProduct = session?.current_product?.product_code ?? null;
   const connectionStatus = isConnected ? (isRunning ? "RUNNING" : machine.sync_state?.connection_status ?? "ONLINE") : "DISCONNECTED";
+  const runTime = session ? formatDuration(session.started_at, session.ended_at ?? session.last_seen_at) : "-";
   const { ok, ng } = resolveOkNgCounts(machine, session);
   const localChartData = buildLocalCumulativeChartData(liveData, ok, ng, machine.sync_state?.last_seen_at ?? session?.last_seen_at);
   const serverChartData = buildServerCumulativeChartData(trendData);
@@ -259,25 +260,20 @@ function MachineRuntimeCard({ row, trendData, liveData }: { row: MachineRuntimeR
       <div className={cn(!isConnected && "pt-6 grayscale")}>
         <CardHeader className="space-y-3">
           <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
               <CardTitle className="truncate text-base">{machine.machine_name || machine.machine_code}</CardTitle>
-              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                <MonoText value={machine.machine_code} />
-                <StatusBadge value={connectionStatus} />
-              </div>
+              <MonoText value={machine.machine_code} />
+              <StatusBadge value={connectionStatus} />
             </div>
             <Activity className={cn("h-5 w-5 shrink-0", isConnected ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+          </div>
+          <div className="grid gap-3 border-t pt-3 text-sm sm:grid-cols-2">
+            <HeaderMetric label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} />
+            <HeaderMetric label={t("colDuration")} value={runTime} />
           </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <InfoTile label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} />
-            <InfoTile label={t("colDuration")} value={session ? formatDuration(session.started_at, session.ended_at ?? session.last_seen_at) : "-"} />
-            <InfoTile label={t("colHeartbeat")} value={<DateText value={machine.sync_state?.last_seen_at ?? session?.last_seen_at} />} />
-            <InfoTile label={t("pendingSync")} value={String(machine.sync_state?.local_pending_sync ?? 0)} />
-          </div>
-
           <div className="space-y-3">
             {isConnected ? (
               <MetricTrendBlock title={t("liveOkNgGraph")} total={localTotal} data={localChartData} emptyLabel={t("waitingLiveRuntime")} />
@@ -292,6 +288,15 @@ function MachineRuntimeCard({ row, trendData, liveData }: { row: MachineRuntimeR
         </CardContent>
       </div>
     </Card>
+  );
+}
+
+function HeaderMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-medium">{value}</div>
+    </div>
   );
 }
 
@@ -329,15 +334,6 @@ function MachineScanTrendChart({ data }: { data: ScanTrendPoint[] }) {
   );
 }
 
-function InfoTile({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-md border bg-background/60 px-2 py-1.5">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-medium">{value}</div>
-    </div>
-  );
-}
-
 function OkNgBar({ ok, ng }: { ok: number; ng: number }) {
   const total = ok + ng;
   const okPercent = total > 0 ? Math.max(0, Math.min(100, (ok / total) * 100)) : 0;
@@ -358,6 +354,7 @@ function OkNgBar({ ok, ng }: { ok: number; ng: number }) {
 function buildMachineRows(machines: Machine[], sessions: MachineRuntimeSession[]) {
   const sessionByMachine = indexSessionsByMachine(sessions);
   return machines
+    .filter((machine) => machine.is_active)
     .map((machine): MachineRuntimeRow => {
       const session = sessionByMachine.get(machine.machine_code);
       const isRunning = session?.status === "RUNNING";

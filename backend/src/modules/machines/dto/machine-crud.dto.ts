@@ -13,7 +13,17 @@ export class CreateMachineDto {
   @ApiHideProperty()
   @IsOptional()
   @IsString()
-  ip_address?: string;
+  ip_address?: string | null;
+
+  @ApiPropertyOptional({ example: "Line A" })
+  @IsOptional()
+  @IsString()
+  line_name?: string | null;
+
+  @ApiPropertyOptional({ example: "Station 01" })
+  @IsOptional()
+  @IsString()
+  station_name?: string | null;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
@@ -31,6 +41,16 @@ export class UpdateMachineDto {
   @IsOptional()
   @IsString()
   ip_address?: string | null;
+
+  @ApiPropertyOptional({ example: "Line A" })
+  @IsOptional()
+  @IsString()
+  line_name?: string | null;
+
+  @ApiPropertyOptional({ example: "Station 01" })
+  @IsOptional()
+  @IsString()
+  station_name?: string | null;
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()

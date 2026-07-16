@@ -35,7 +35,7 @@ export class SettingsService {
       led_scan_length_default: dto.led_scan_length_default ?? 22,
       led_vendor_position_default: dto.led_vendor_position_default ?? 16,
       duplicate_days: dto.duplicate_days ?? 31,
-      heartbeat_timeout_seconds: dto.heartbeat_timeout_seconds ?? 60,
+      heartbeat_timeout_seconds: dto.heartbeat_timeout_seconds ?? 300,
       updated_by: dto.updated_by ?? actorUserId ?? null
     };
 
