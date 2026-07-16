@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Activity, Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { toast } from "sonner";
+import { AppLogo } from "@/components/layout/app-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,7 +50,10 @@ export function LoginScreen() {
   return (
     <main className="flex min-h-[100dvh] items-center justify-center bg-background px-3 py-6 sm:px-4 lg:py-8">
       <section className="flex w-full max-w-[460px] flex-col items-center gap-4">
-        <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal">{t("appName")}</h1>
+        <div className="flex max-w-full flex-col items-center gap-2">
+          <AppLogo className="h-12 w-12" imageClassName="h-8 w-8" />
+          <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal">{t("appName")}</h1>
+        </div>
 
         <Card className="w-full">
           <CardHeader className="space-y-0">

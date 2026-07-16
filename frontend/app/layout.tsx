@@ -5,7 +5,10 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "QR Recorder Server",
-  description: "Desktop server app for QR duplicate checking"
+  description: "Desktop server app for QR duplicate checking",
+  icons: {
+    icon: [{ url: "/favicon.ico" }]
+  }
 };
 
 const themeInitScript = `

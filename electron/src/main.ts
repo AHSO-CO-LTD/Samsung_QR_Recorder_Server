@@ -156,6 +156,11 @@ function getRuntimeFrontendRoot() {
   return path.join(getRuntimeRoot(), "frontend");
 }
 
+function getAppIconPath() {
+  const iconPath = app.isPackaged ? path.join(process.resourcesPath, "favicon.ico") : path.join(getProjectRoot(), "shared", "favicon.ico");
+  return fs.existsSync(iconPath) ? iconPath : undefined;
+}
+
 function getNpmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
@@ -685,6 +690,7 @@ function createStartupWindow() {
     minWidth: 560,
     minHeight: 360,
     title: "Starting QR Recorder Server",
+    icon: getAppIconPath(),
     show: true,
     resizable: false,
     maximizable: false,
@@ -794,6 +800,7 @@ function createTerminalWindow() {
     minWidth: 780,
     minHeight: 420,
     title: "QR Recorder Terminal",
+    icon: getAppIconPath(),
     show: false,
     backgroundColor: "#111827",
     webPreferences: {
@@ -1485,6 +1492,7 @@ function createMainWindow() {
     minWidth: 1180,
     minHeight: 720,
     title: APP_NAME,
+    icon: getAppIconPath(),
     show: false,
     frame: mainWindowHasFrame,
     alwaysOnTop: desktopDisplaySettings.alwaysOnTop,
