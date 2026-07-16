@@ -130,6 +130,14 @@ export class MachinesController {
     return this.machinesService.deactivateMachine(id, request.user?.id);
   }
 
+  @Delete(":id/purge")
+  @ApiTags("machines-admin")
+  @Roles("ADMIN", "DEV")
+  @ApiOkResponse({ description: "Permanently delete a local machine only when it has no scan records." })
+  deleteMachineIfNoScans(@Param("id", ParseIntPipe) id: number, @Req() request: AuthenticatedRequest) {
+    return this.machinesService.deleteMachineIfNoScans(id, request.user?.id);
+  }
+
   @Get("config")
   @ApiTags("local-machine")
   @Public()

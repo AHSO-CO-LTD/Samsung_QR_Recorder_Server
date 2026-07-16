@@ -31,6 +31,7 @@ type DataTablePanelProps<T> = {
   rowClassName?: string | ((item: T) => string);
   renderExpandedRow?: (item: T, index: number) => React.ReactNode;
   toolbarContent?: React.ReactNode;
+  filterItem?: (item: T) => boolean;
   searchableText?: (item: T) => string;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -52,6 +53,7 @@ export function DataTablePanel<T>({
   rowClassName,
   renderExpandedRow,
   toolbarContent,
+  filterItem,
   searchableText,
   searchPlaceholder,
   emptyText,
@@ -113,10 +115,11 @@ export function DataTablePanel<T>({
     setExpandedRows(new Set());
   };
 
+  const prefilteredItems = !isServerPaginated && filterItem ? items.filter(filterItem) : items;
   const filteredItems =
     !isServerPaginated && normalizedSearch && searchableText
-      ? items.filter((item) => searchableText(item).toLowerCase().includes(normalizedSearch))
-      : items;
+      ? prefilteredItems.filter((item) => searchableText(item).toLowerCase().includes(normalizedSearch))
+      : prefilteredItems;
   const totalItems = isServerPaginated ? (paginationMeta?.total ?? filteredItems.length) : filteredItems.length;
   const totalPages = isPaginationEnabled ? Math.max(1, Math.ceil(totalItems / pageSize)) : 1;
   const rowOffset = isPaginationEnabled ? (isServerPaginated ? (paginationMeta?.skip ?? (currentPage - 1) * pageSize) : (currentPage - 1) * pageSize) : 0;

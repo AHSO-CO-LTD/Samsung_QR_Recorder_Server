@@ -245,6 +245,14 @@ export class ProfilesService {
   }
 
   private async ensureLedCodes(tx: Prisma.TransactionClient, ledCodes: ProfileLedCodeInputDto[]) {
+    if (ledCodes.length < 1) {
+      throw new BadRequestException({
+        success: false,
+        code: "PROFILE_LED_CODES_REQUIRED",
+        message: "A product profile must use at least 1 LED code."
+      });
+    }
+
     if (ledCodes.length > MAX_PROFILE_LED_CODES) {
       throw new BadRequestException({
         success: false,
@@ -253,7 +261,36 @@ export class ProfilesService {
       });
     }
 
+    const ledCodeIds = new Set<number>();
+    const ledSlots = new Set<number>();
     for (const item of ledCodes) {
+      if (item.led_slot < 1 || item.led_slot > MAX_PROFILE_LED_CODES) {
+        throw new BadRequestException({
+          success: false,
+          code: "PROFILE_LED_SLOT_INVALID",
+          message: `LED slot must be between 1 and ${MAX_PROFILE_LED_CODES}.`
+        });
+      }
+
+      if (ledCodeIds.has(item.led_code_id)) {
+        throw new BadRequestException({
+          success: false,
+          code: "PROFILE_LED_CODE_DUPLICATED",
+          message: "A product profile cannot use the same LED code more than once."
+        });
+      }
+
+      if (ledSlots.has(item.led_slot)) {
+        throw new BadRequestException({
+          success: false,
+          code: "PROFILE_LED_SLOT_DUPLICATED",
+          message: "A product profile cannot use the same LED slot more than once."
+        });
+      }
+
+      ledCodeIds.add(item.led_code_id);
+      ledSlots.add(item.led_slot);
+
       const ledCode = await tx.ledCode.findUnique({ where: { id: item.led_code_id } });
       if (!ledCode || !ledCode.is_active) {
         throw new NotFoundException({

@@ -18,7 +18,7 @@ const fallbackSettings = {
   led_scan_length_default: 22,
   led_vendor_position_default: 16,
   duplicate_days: 31,
-  heartbeat_timeout_seconds: 60
+  heartbeat_timeout_seconds: 300
 };
 
 export function ServerSettingsForm() {
@@ -104,7 +104,7 @@ export function ServerSettingsForm() {
               <Input type="number" min={1} value={settings.led_vendor_position_default} onChange={(event) => setSettings({ ...settings, led_vendor_position_default: Number(event.target.value) })} />
             </Field>
             <Field label={t("fieldHeartbeatTimeoutSeconds")}>
-              <Input type="number" min={1} value={settings.heartbeat_timeout_seconds} onChange={(event) => setSettings({ ...settings, heartbeat_timeout_seconds: Number(event.target.value) })} />
+              <Input type="number" min={300} value={settings.heartbeat_timeout_seconds} onChange={(event) => setSettings({ ...settings, heartbeat_timeout_seconds: Number(event.target.value) })} />
             </Field>
             <div className="flex items-end">
               <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">

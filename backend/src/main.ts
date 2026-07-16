@@ -3,7 +3,12 @@ import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { createRequire } from "node:module";
 import { AppModule } from "./app.module";
+
+const runtimeRequire = createRequire(__filename);
+const backendPackage = runtimeRequire("../package.json") as { version?: string };
+const apiVersion = backendPackage.version?.trim() || "1.0.1";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -26,7 +31,7 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle("QR Recorder Server API")
     .setDescription("API contract for the Electron server app and Python local machines.")
-    .setVersion("0.1.0")
+    .setVersion(apiVersion)
     .addBearerAuth()
     .addTag("local-machine", "Endpoints called by Python local machines over LAN")
     .addTag("machines-admin", "Machine registration and management endpoints for the server UI")

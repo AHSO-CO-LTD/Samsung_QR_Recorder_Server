@@ -93,7 +93,7 @@ CREATE TABLE "server_settings" (
     "led_scan_length_default" INTEGER NOT NULL DEFAULT 22,
     "led_vendor_position_default" INTEGER NOT NULL DEFAULT 16,
     "duplicate_days" INTEGER NOT NULL DEFAULT 30,
-    "heartbeat_timeout_seconds" INTEGER NOT NULL DEFAULT 60,
+    "heartbeat_timeout_seconds" INTEGER NOT NULL DEFAULT 300,
     "updated_by" INTEGER,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,

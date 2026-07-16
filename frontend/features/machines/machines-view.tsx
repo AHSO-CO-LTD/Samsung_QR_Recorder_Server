@@ -1,22 +1,27 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { MessageSquarePlus, Pencil, Plus, Power, Send } from "lucide-react";
+import { ChevronDown, MessageSquarePlus, Pencil, Plus, Power, RotateCcw, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n-provider";
-import { SelectField, TextAreaField, TextInputField } from "@/features/shared/form-fields";
+import { CheckboxField, SelectField, TextAreaField, TextInputField } from "@/features/shared/form-fields";
 import { MachineRegistrationRequestsPanel } from "@/features/machines/machine-registration-requests-panel";
 import { ConfirmActionDialog } from "@/features/shared/confirm-action-dialog";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
 import type { Machine, MachineCommand } from "@/features/shared/types";
+import { cn } from "@/lib/utils";
 
 type MachineDraft = {
   machine_code: string;
   machine_name: string;
+  line_name: string;
+  station_name: string;
+  ip_address: string;
+  is_active: boolean;
 };
 
 type CommandDraft = {
@@ -24,9 +29,20 @@ type CommandDraft = {
   payload_text: string;
 };
 
+type MachineStatusTarget = {
+  machine: Machine;
+  isActive: boolean;
+};
+
+type MachineFilter = "ALL" | "ACTIVE" | "DISABLED" | "ONLINE" | "OFFLINE";
+
 const emptyMachineDraft: MachineDraft = {
   machine_code: "",
-  machine_name: ""
+  machine_name: "",
+  line_name: "",
+  station_name: "",
+  ip_address: "",
+  is_active: true
 };
 
 const emptyCommandDraft: CommandDraft = {
@@ -40,10 +56,13 @@ export function MachinesView() {
   const [refreshId, setRefreshId] = useState(0);
   const [commandRefreshId, setCommandRefreshId] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [machineFilter, setMachineFilter] = useState<MachineFilter>("ALL");
   const [draft, setDraft] = useState<MachineDraft>(emptyMachineDraft);
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
-  const [target, setTarget] = useState<Machine | null>(null);
+  const [target, setTarget] = useState<MachineStatusTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
   const [commandMachine, setCommandMachine] = useState<Machine | null>(null);
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(emptyCommandDraft);
   const canViewIdentity = user?.role === "DEV";
@@ -52,6 +71,8 @@ export function MachinesView() {
     () => [
       { key: "code", header: t("colMachineCode"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <MonoText value={item.machine_code} /> },
       { key: "name", header: t("colMachineName"), className: "min-w-[12rem]", render: (item) => item.machine_name },
+      { key: "line", header: t("fieldLine"), className: "min-w-[7rem] whitespace-nowrap", render: (item) => <MonoText value={item.line_name} /> },
+      { key: "station", header: t("fieldStation"), className: "min-w-[7rem] whitespace-nowrap", render: (item) => <MonoText value={item.station_name} /> },
       ...(canViewIdentity
         ? [
             { key: "serial", header: t("colSerial"), className: "min-w-[10rem] whitespace-nowrap", render: (item: Machine) => <MonoText value={item.serial} /> },
@@ -59,6 +80,7 @@ export function MachinesView() {
           ]
         : []),
       { key: "license", header: t("colLicense"), className: "w-28 min-w-[7rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.license_activated_at ? "ACTIVATED" : "NOT_ACTIVE"} /> },
+      { key: "scans", header: t("colScanRecords"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => getMachineScanCount(item) },
       { key: "ip", header: t("colIp"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <MonoText value={item.sync_state?.last_ip_address ?? item.ip_address} /> },
       { key: "connection", header: t("colConnection"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.sync_state?.connection_status || "UNKNOWN"} /> },
       { key: "pending", header: t("colPending"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => item.sync_state?.local_pending_sync ?? 0 },
@@ -78,10 +100,23 @@ export function MachinesView() {
               <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
               {t("commandButton")}
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setTarget(item)} disabled={!item.is_active}>
-              <Power className="h-4 w-4" aria-hidden="true" />
-              {t("deactivate")}
-            </Button>
+            {item.is_active ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setTarget({ machine: item, isActive: false })}>
+                <Power className="h-4 w-4" aria-hidden="true" />
+                {t("deactivate")}
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setTarget({ machine: item, isActive: true })}>
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                {t("reactivate")}
+              </Button>
+            )}
+            {canHardDeleteMachine(item) ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setDeleteTarget(item)}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                {t("delete")}
+              </Button>
+            ) : null}
           </div>
         )
       }
@@ -104,10 +139,15 @@ export function MachinesView() {
       machine
         ? {
             machine_code: machine.machine_code,
-            machine_name: machine.machine_name
+            machine_name: machine.machine_name,
+            line_name: machine.line_name ?? "",
+            station_name: machine.station_name ?? "",
+            ip_address: machine.ip_address ?? "",
+            is_active: machine.is_active
           }
         : emptyMachineDraft
     );
+    setIsAdvancedOpen(Boolean(machine));
     setIsFormOpen(true);
   };
 
@@ -123,13 +163,21 @@ export function MachinesView() {
     try {
       if (editingMachine) {
         await apiPatch(`/machines/${editingMachine.id}`, {
-          machine_name: draft.machine_name
+          machine_name: draft.machine_name,
+          line_name: cleanOptional(draft.line_name),
+          station_name: cleanOptional(draft.station_name),
+          ip_address: cleanOptional(draft.ip_address),
+          is_active: draft.is_active
         });
         toast.success(t("machineUpdated"));
       } else {
         await apiPost("/machines", {
           machine_code: draft.machine_code,
-          machine_name: draft.machine_name
+          machine_name: draft.machine_name,
+          line_name: cleanOptional(draft.line_name),
+          station_name: cleanOptional(draft.station_name),
+          ip_address: cleanOptional(draft.ip_address),
+          is_active: draft.is_active
         });
         toast.success(t("machineCreated"));
       }
@@ -142,19 +190,44 @@ export function MachinesView() {
     }
   };
 
-  const deactivateMachine = async () => {
+  const updateMachineStatus = async () => {
     if (!target) {
       return;
     }
 
     setIsSaving(true);
     try {
-      await apiDelete(`/machines/${target.id}`);
-      toast.success(t("machineDeactivated"));
+      if (target.isActive) {
+        await apiPatch(`/machines/${target.machine.id}`, {
+          is_active: true
+        });
+        toast.success(t("machineReactivated"));
+      } else {
+        await apiDelete(`/machines/${target.machine.id}`);
+        toast.success(t("machineDeactivated"));
+      }
       setTarget(null);
       setRefreshId((value) => value + 1);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("machineDeactivateFailed"));
+      toast.error(error instanceof Error ? error.message : target.isActive ? t("machineReactivateFailed") : t("machineDeactivateFailed"));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteMachine = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await apiDelete(`/machines/${deleteTarget.id}/purge`);
+      toast.success(t("machineDeleted"));
+      setDeleteTarget(null);
+      setRefreshId((value) => value + 1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("machineDeleteFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -189,7 +262,13 @@ export function MachinesView() {
         endpoint={`/machines?refresh=${refreshId}`}
         columns={columns}
         getRowKey={(item) => item.id}
-        searchableText={(item) => `${item.machine_code} ${item.machine_name} ${canViewIdentity ? `${item.serial ?? ""} ${item.uid ?? ""}` : ""} ${item.ip_address ?? ""} ${item.sync_state?.last_ip_address ?? ""}`}
+        filterItem={(item) => filterMachine(item, machineFilter)}
+        searchableText={(item) =>
+          `${item.machine_code} ${item.machine_name} ${item.line_name ?? ""} ${item.station_name ?? ""} ${canViewIdentity ? `${item.serial ?? ""} ${item.uid ?? ""}` : ""} ${item.ip_address ?? ""} ${
+            item.sync_state?.last_ip_address ?? ""
+          }`
+        }
+        toolbarContent={<MachineStatusFilter value={machineFilter} onChange={setMachineFilter} />}
         actions={
           <Button type="button" size="sm" onClick={() => openForm()}>
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -208,6 +287,23 @@ export function MachinesView() {
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveMachine}>
             <TextInputField required disabled={Boolean(editingMachine)} label={t("fieldMachineCode")} value={draft.machine_code} onChange={(event) => setDraft({ ...draft, machine_code: event.target.value })} />
             <TextInputField required label={t("fieldMachineName")} value={draft.machine_name} onChange={(event) => setDraft({ ...draft, machine_name: event.target.value })} />
+            <div className="rounded-md border sm:col-span-2">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                aria-expanded={isAdvancedOpen}
+                onClick={() => setIsAdvancedOpen((value) => !value)}
+              >
+                <span>{t("advancedSettings")}</span>
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isAdvancedOpen && "rotate-180")} aria-hidden="true" />
+              </button>
+              <div className={cn("grid gap-3 border-t p-3 sm:grid-cols-2", !isAdvancedOpen && "hidden")}>
+                <TextInputField label={t("fieldLine")} value={draft.line_name} onChange={(event) => setDraft({ ...draft, line_name: event.target.value })} />
+                <TextInputField label={t("fieldStation")} value={draft.station_name} onChange={(event) => setDraft({ ...draft, station_name: event.target.value })} />
+                <TextInputField label={t("fieldConfiguredIp")} value={draft.ip_address} onChange={(event) => setDraft({ ...draft, ip_address: event.target.value })} />
+                <CheckboxField label={t("machineActiveField")} checked={draft.is_active} onCheckedChange={(checked) => setDraft({ ...draft, is_active: checked })} />
+              </div>
+            </div>
             {editingMachine ? (
               <div className="grid gap-2 rounded-md border bg-muted/30 p-3 text-xs sm:col-span-2">
                 <IdentityValue label={t("colIp")} value={editingMachine.sync_state?.last_ip_address ?? editingMachine.ip_address} />
@@ -271,14 +367,81 @@ export function MachinesView() {
       <ConfirmActionDialog
         open={Boolean(target)}
         onOpenChange={(open) => !open && setTarget(null)}
-        title={t("machineDeactivateTitle")}
-        description={t("machineDeactivateDesc", { code: target?.machine_code ?? "" })}
-        confirmLabel={t("deactivate")}
+        title={target?.isActive ? t("machineReactivateTitle") : t("machineDeactivateTitle")}
+        description={
+          target?.isActive
+            ? t("machineReactivateDesc", { code: target.machine.machine_code })
+            : t("machineDeactivateDesc", { code: target?.machine.machine_code ?? "" })
+        }
+        confirmLabel={target?.isActive ? t("reactivate") : t("deactivate")}
         isRunning={isSaving}
-        onConfirm={() => void deactivateMachine()}
+        onConfirm={() => void updateMachineStatus()}
+      />
+
+      <ConfirmActionDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={t("machineDeleteTitle")}
+        description={t("machineDeleteDesc", { code: deleteTarget?.machine_code ?? "" })}
+        confirmLabel={t("delete")}
+        isRunning={isSaving}
+        onConfirm={() => void deleteMachine()}
       />
     </div>
   );
+}
+
+function MachineStatusFilter({ value, onChange }: { value: MachineFilter; onChange: (value: MachineFilter) => void }) {
+  const { t } = useI18n();
+  const options: Array<{ value: MachineFilter; label: string }> = [
+    { value: "ALL", label: t("machineFilterAll") },
+    { value: "ACTIVE", label: t("machineFilterActive") },
+    { value: "ONLINE", label: t("machineFilterOnline") },
+    { value: "OFFLINE", label: t("machineFilterOffline") },
+    { value: "DISABLED", label: t("machineFilterDisabled") }
+  ];
+
+  return (
+    <div className="flex min-w-0 flex-wrap gap-1 rounded-md bg-muted p-1">
+      {options.map((option) => (
+        <Button
+          key={option.value}
+          type="button"
+          variant={value === option.value ? "default" : "ghost"}
+          size="sm"
+          className="h-8 px-2 text-xs"
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function filterMachine(machine: Machine, filter: MachineFilter) {
+  if (filter === "ACTIVE") return machine.is_active;
+  if (filter === "DISABLED") return !machine.is_active;
+  if (filter === "ONLINE") return machine.is_active && isMachineOnline(machine);
+  if (filter === "OFFLINE") return machine.is_active && !isMachineOnline(machine);
+  return true;
+}
+
+function isMachineOnline(machine: Machine) {
+  return machine.sync_state?.connection_status === "ONLINE";
+}
+
+function getMachineScanCount(machine: Machine) {
+  return machine._count?.scan_records ?? 0;
+}
+
+function canHardDeleteMachine(machine: Machine) {
+  return getMachineScanCount(machine) === 0;
+}
+
+function cleanOptional(value: string) {
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function parsePayload(text: string) {

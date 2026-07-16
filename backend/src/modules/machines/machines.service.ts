@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -31,19 +31,45 @@ type IdentityDuplicate = {
   status?: string | null;
 };
 
+const MIN_HEARTBEAT_DISCONNECT_SECONDS = 5 * 60;
+const HEARTBEAT_STALE_SWEEP_INTERVAL_MS = 30 * 1000;
+
 @Injectable()
-export class MachinesService {
+export class MachinesService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(MachinesService.name);
+  private heartbeatSweepTimer?: ReturnType<typeof setInterval>;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService
   ) {}
 
+  onModuleInit() {
+    void this.markStaleHeartbeatMachinesOffline().catch((error) => this.logger.warn(`Initial heartbeat stale sweep failed: ${this.formatError(error)}`));
+    this.heartbeatSweepTimer = setInterval(() => {
+      void this.markStaleHeartbeatMachinesOffline().catch((error) => this.logger.warn(`Heartbeat stale sweep failed: ${this.formatError(error)}`));
+    }, HEARTBEAT_STALE_SWEEP_INTERVAL_MS);
+  }
+
+  onModuleDestroy() {
+    if (this.heartbeatSweepTimer) {
+      clearInterval(this.heartbeatSweepTimer);
+      this.heartbeatSweepTimer = undefined;
+    }
+  }
+
   async listMachines() {
+    await this.markStaleHeartbeatMachinesOffline();
     const machines = await this.prisma.machine.findMany({
       orderBy: [{ is_active: "desc" }, { machine_code: "asc" }],
       include: {
-        sync_state: true
+        sync_state: true,
+        _count: {
+          select: {
+            scan_records: true
+          }
+        }
       }
     });
 
@@ -60,6 +86,9 @@ export class MachinesService {
       data: {
         machine_code: dto.machine_code.trim(),
         machine_name: dto.machine_name.trim(),
+        line_name: this.optionalTrim(dto.line_name),
+        station_name: this.optionalTrim(dto.station_name),
+        ip_address: this.optionalTrim(dto.ip_address),
         is_active: dto.is_active ?? true
       },
       include: {
@@ -89,6 +118,9 @@ export class MachinesService {
       where: { id },
       data: {
         machine_name: dto.machine_name?.trim(),
+        line_name: dto.line_name === undefined ? undefined : this.optionalTrim(dto.line_name),
+        station_name: dto.station_name === undefined ? undefined : this.optionalTrim(dto.station_name),
+        ip_address: dto.ip_address === undefined ? undefined : this.optionalTrim(dto.ip_address),
         is_active: dto.is_active
       },
       include: {
@@ -135,6 +167,208 @@ export class MachinesService {
       code: "MACHINE_DEACTIVATED",
       message: "Machine deactivated.",
       data: machine
+    };
+  }
+
+  async deleteMachineIfNoScans(id: number, actorUserId?: number | null) {
+    const oldMachine = await this.ensureMachineById(id);
+    const [scanCount, recentDuplicateCount] = await Promise.all([
+      this.prisma.scanRecord.count({
+        where: { machine_id: id }
+      }),
+      this.prisma.recentDuplicateKey.count({
+        where: { first_machine_id: id }
+      })
+    ]);
+
+    if (scanCount > 0 || recentDuplicateCount > 0) {
+      throw new BadRequestException({
+        success: false,
+        code: "MACHINE_HAS_SCAN_RECORDS",
+        message: "Machine has scan history and cannot be permanently deleted. Disable it instead.",
+        data: {
+          scan_records: scanCount,
+          recent_duplicate_keys: recentDuplicateCount
+        }
+      });
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const relatedBatches = await tx.scanSyncBatch.count({
+        where: { machine_id: id }
+      });
+      const relatedRegistrationRequests = await tx.machineRegistrationRequest.count({
+        where: this.buildMachineRegistrationDeleteWhere(oldMachine)
+      });
+
+      await tx.scanSyncBatch.deleteMany({
+        where: { machine_id: id }
+      });
+      await tx.machineRegistrationRequest.deleteMany({
+        where: this.buildMachineRegistrationDeleteWhere(oldMachine)
+      });
+      const deletedMachine = await tx.machine.delete({
+        where: { id }
+      });
+
+      return {
+        deletedMachine,
+        relatedBatches,
+        relatedRegistrationRequests
+      };
+    });
+
+    await this.audit.write({
+      userId: actorUserId,
+      action: "DELETE_MACHINE",
+      tableName: "machines",
+      recordId: oldMachine.id,
+      oldValue: {
+        ...oldMachine,
+        deleted_scan_sync_batches: result.relatedBatches,
+        deleted_registration_requests: result.relatedRegistrationRequests
+      }
+    });
+
+    return {
+      success: true,
+      code: "MACHINE_DELETED",
+      message: "Machine permanently deleted.",
+      data: {
+        machine: result.deletedMachine,
+        deleted_scan_sync_batches: result.relatedBatches,
+        deleted_registration_requests: result.relatedRegistrationRequests
+      }
+    };
+  }
+
+  async markStaleHeartbeatMachinesOffline(now = new Date()) {
+    const timeoutSeconds = await this.resolveHeartbeatDisconnectSeconds();
+    const cutoff = new Date(now.getTime() - timeoutSeconds * 1000);
+    const staleStates = await this.prisma.machineSyncState.findMany({
+      where: {
+        connection_status: "ONLINE",
+        OR: [{ last_seen_at: null }, { last_seen_at: { lt: cutoff } }],
+        machine: {
+          is: {
+            is_active: true
+          }
+        }
+      },
+      select: {
+        id: true,
+        machine_id: true,
+        machine_code: true,
+        last_seen_at: true,
+        last_ip_address: true
+      }
+    });
+
+    if (staleStates.length === 0) {
+      return {
+        updated: 0,
+        cutoff
+      };
+    }
+
+    const syncStateIds = staleStates.map((state) => state.id);
+    const machineIds = [...new Set(staleStates.map((state) => state.machine_id))];
+    const staleByMachineId = new Map(staleStates.map((state) => [state.machine_id, state]));
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const runningSessions = await tx.machineRuntimeSession.findMany({
+        where: {
+          machine_id: {
+            in: machineIds
+          },
+          status: "RUNNING"
+        },
+        select: {
+          id: true,
+          machine_id: true,
+          machine_code: true,
+          current_product_id: true
+        }
+      });
+
+      const updatedStates = await tx.machineSyncState.updateMany({
+        where: {
+          id: {
+            in: syncStateIds
+          },
+          connection_status: "ONLINE",
+          OR: [{ last_seen_at: null }, { last_seen_at: { lt: cutoff } }]
+        },
+        data: {
+          connection_status: "OFFLINE"
+        }
+      });
+
+      await tx.machineConnectionLog.createMany({
+        data: staleStates.map((state) => ({
+          machine_id: state.machine_id,
+          machine_code: state.machine_code,
+          event_type: "DISCONNECTED",
+          ip_address: state.last_ip_address,
+          message: `No heartbeat received for ${timeoutSeconds} seconds. Machine marked disconnected.`,
+          payload_json: JSON.parse(
+            JSON.stringify({
+              reason: "HEARTBEAT_TIMEOUT",
+              timeout_seconds: timeoutSeconds,
+              last_seen_at: state.last_seen_at,
+              disconnected_at: now
+            })
+          )
+        }))
+      });
+
+      const updatedSessions = await tx.machineRuntimeSession.updateMany({
+        where: {
+          id: {
+            in: runningSessions.map((session) => session.id)
+          },
+          status: "RUNNING"
+        },
+        data: {
+          status: "DISCONNECTED",
+          disconnected_at: now
+        }
+      });
+
+      if (runningSessions.length > 0) {
+        await tx.machineRuntimeEvent.createMany({
+          data: runningSessions.map((session) => {
+            const staleState = staleByMachineId.get(session.machine_id);
+            return {
+              session_id: session.id,
+              product_id: session.current_product_id,
+              machine_id: session.machine_id,
+              machine_code: session.machine_code,
+              event_type: "SOCKET_DISCONNECTED",
+              ip_address: staleState?.last_ip_address ?? null,
+              payload_json: JSON.parse(
+                JSON.stringify({
+                  reason: "HEARTBEAT_TIMEOUT",
+                  timeout_seconds: timeoutSeconds,
+                  last_seen_at: staleState?.last_seen_at,
+                  disconnected_at: now
+                })
+              )
+            };
+          })
+        });
+      }
+
+      return {
+        states: updatedStates.count,
+        sessions: updatedSessions.count
+      };
+    });
+
+    return {
+      updated: result.states,
+      sessions: result.sessions,
+      cutoff
     };
   }
 
@@ -1121,6 +1355,32 @@ export class MachinesService {
   private buildRegistrationRequestId() {
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     return `MREQ-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
+  private async resolveHeartbeatDisconnectSeconds() {
+    const settings = await this.prisma.serverSetting.findFirst({
+      orderBy: { id: "asc" },
+      select: {
+        heartbeat_timeout_seconds: true
+      }
+    });
+    return Math.max(settings?.heartbeat_timeout_seconds ?? MIN_HEARTBEAT_DISCONNECT_SECONDS, MIN_HEARTBEAT_DISCONNECT_SECONDS);
+  }
+
+  private formatError(error: unknown) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  private buildMachineRegistrationDeleteWhere(machine: { id: number; machine_code: string; serial?: string | null; uid?: string | null }) {
+    return {
+      OR: [
+        { approved_machine_id: machine.id },
+        { approved_machine_code: machine.machine_code },
+        { requested_machine_code: machine.machine_code },
+        ...(machine.serial ? [{ serial: machine.serial }] : []),
+        ...(machine.uid ? [{ uid: machine.uid }] : [])
+      ]
+    };
   }
 
   private readImportedLicense(dto: ImportMachineRegistrationLicenseDto) {

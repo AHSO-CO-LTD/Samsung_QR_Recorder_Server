@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from "class-validator";
 
 export class ProfileLedCodeInputDto {
   @ApiProperty({ example: 1 })
@@ -11,6 +11,7 @@ export class ProfileLedCodeInputDto {
   @ApiProperty({ example: 1 })
   @IsInt()
   @Min(1)
+  @Max(2)
   led_slot!: number;
 
   @ApiPropertyOptional({ example: true })
@@ -53,8 +54,9 @@ export class CreateProfileDto {
   @Min(1)
   led_vendor_position?: number;
 
-  @ApiProperty({ type: [ProfileLedCodeInputDto], maxItems: 2 })
+  @ApiProperty({ type: [ProfileLedCodeInputDto], minItems: 1, maxItems: 2 })
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayMaxSize(2)
   @ValidateNested({ each: true })
   @Type(() => ProfileLedCodeInputDto)
@@ -102,9 +104,10 @@ export class UpdateProfileDto {
   @IsBoolean()
   is_active?: boolean;
 
-  @ApiPropertyOptional({ type: [ProfileLedCodeInputDto], maxItems: 2 })
+  @ApiPropertyOptional({ type: [ProfileLedCodeInputDto], minItems: 1, maxItems: 2 })
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayMaxSize(2)
   @ValidateNested({ each: true })
   @Type(() => ProfileLedCodeInputDto)

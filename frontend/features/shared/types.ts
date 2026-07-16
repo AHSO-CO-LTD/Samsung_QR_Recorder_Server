@@ -14,6 +14,9 @@ export type Machine = {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  _count?: {
+    scan_records?: number;
+  };
   sync_state?: {
     connection_status: string;
     last_seen_at?: string | null;

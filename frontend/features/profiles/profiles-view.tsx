@@ -48,10 +48,11 @@ const fallbackSettings = {
   led_scan_length_default: 22,
   led_vendor_position_default: 16,
   duplicate_days: 31,
-  heartbeat_timeout_seconds: 60
+  heartbeat_timeout_seconds: 300
 } satisfies ServerSettingsDraft;
 
 const MAX_PROFILE_LED_CODES = 2;
+const MIN_PROFILE_LED_CODES = 1;
 
 function buildEmptyDraft(settings = fallbackSettings): ProfileDraft {
   return {
@@ -243,9 +244,7 @@ export function ProfilesView() {
         is_required: item.is_required
       }));
 
-    const requiredLedCount = editingProfile ? 1 : MAX_PROFILE_LED_CODES;
-
-    if ((!editingProfile && !draft.chassis_code_id) || ledCodesPayload.length < requiredLedCount) {
+    if ((!editingProfile && !draft.chassis_code_id) || ledCodesPayload.length < MIN_PROFILE_LED_CODES) {
       toast.warning(t("profileMissingFields"));
       return;
     }
@@ -368,7 +367,7 @@ export function ProfilesView() {
               {draft.led_codes.map((slot) => (
                 <SelectField
                   key={slot.key}
-                  required={!editingProfile}
+                  required={false}
                   label={slot.led_slot === 1 ? t("colLedSlot1") : t("colLedSlot2")}
                   value={slot.led_code_id}
                   onChange={(event) => updateLedCodeSlot(slot.key, event.target.value)}

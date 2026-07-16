@@ -232,7 +232,7 @@ model ServerSetting {
   led_scan_length_default      Int      @default(22)
   led_vendor_position_default  Int      @default(16)
   duplicate_days               Int      @default(30)
-  heartbeat_timeout_seconds    Int      @default(60)
+  heartbeat_timeout_seconds    Int      @default(300)
   updated_by                   Int?
   created_at                   DateTime @default(now())
   updated_at                   DateTime @updatedAt
