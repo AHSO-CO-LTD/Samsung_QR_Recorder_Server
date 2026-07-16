@@ -11,11 +11,16 @@ extraResources:
     to: runtime
   - from: ../setup
     to: setup
+  - from: ../shared/favicon.ico
+    to: favicon.ico
 win:
+  icon: ../shared/favicon.ico
   requestedExecutionLevel: requireAdministrator
   target:
     - nsis
 nsis:
+  installerIcon: ../shared/favicon.ico
+  uninstallerIcon: ../shared/favicon.ico
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true

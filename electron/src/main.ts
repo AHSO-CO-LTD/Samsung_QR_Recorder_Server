@@ -156,6 +156,11 @@ function getRuntimeFrontendRoot() {
   return path.join(getRuntimeRoot(), "frontend");
 }
 
+function getAppIconPath() {
+  const iconPath = app.isPackaged ? path.join(process.resourcesPath, "favicon.ico") : path.join(getProjectRoot(), "shared", "favicon.ico");
+  return fs.existsSync(iconPath) ? iconPath : undefined;
+}
+
 function getNpmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
@@ -685,6 +690,7 @@ function createStartupWindow() {
     minWidth: 560,
     minHeight: 360,
     title: "Starting QR Recorder Server",
+    icon: getAppIconPath(),
     show: true,
     resizable: false,
     maximizable: false,
@@ -794,6 +800,7 @@ function createTerminalWindow() {
     minWidth: 780,
     minHeight: 420,
     title: "QR Recorder Terminal",
+    icon: getAppIconPath(),
     show: false,
     backgroundColor: "#111827",
     webPreferences: {
@@ -1240,6 +1247,26 @@ function downloadFile(url: string, targetPath: string) {
   });
 }
 
+function copyUpdateEnvBackup(sourcePath: string, targetPath: string) {
+  if (!fs.existsSync(sourcePath)) {
+    return null;
+  }
+
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.copyFileSync(sourcePath, targetPath);
+  return targetPath;
+}
+
+function createUpdateEnvBackup(installDir: string) {
+  const backupRoot = path.join(app.getPath("userData"), "updates", "env-backup");
+  fs.mkdirSync(backupRoot, { recursive: true });
+
+  return {
+    runtimeEnv: copyUpdateEnvBackup(path.join(installDir, "resources", "runtime", ".env"), path.join(backupRoot, "runtime.env")),
+    backendEnv: copyUpdateEnvBackup(path.join(installDir, "resources", "runtime", "backend", ".env"), path.join(backupRoot, "backend.env"))
+  };
+}
+
 async function installUpdate(tagName: string) {
   if (!app.isPackaged) {
     throw new Error("Update install is only available in packaged desktop builds.");
@@ -1261,8 +1288,19 @@ async function installUpdate(tagName: string) {
   appendServiceLog("SYSTEM", `Downloading update ${tagName} to ${targetPath}`);
   await downloadFile(asset.browser_download_url, targetPath);
 
-  appendServiceLog("SYSTEM", `Launching update installer ${targetPath}`);
-  const installer = spawn(targetPath, [], {
+  const installDir = path.dirname(process.execPath);
+  const envBackup = createUpdateEnvBackup(installDir);
+  const installerArgs = ["/S", "/UPDATE"];
+  if (envBackup.runtimeEnv) {
+    installerArgs.push(`/UPDATE_ENV=${envBackup.runtimeEnv}`);
+  }
+  if (envBackup.backendEnv) {
+    installerArgs.push(`/UPDATE_BACKEND_ENV=${envBackup.backendEnv}`);
+  }
+  installerArgs.push(`/D=${installDir}`);
+
+  appendServiceLog("SYSTEM", `Launching update installer ${targetPath} for ${installDir}`);
+  const installer = spawn(targetPath, installerArgs, {
     detached: true,
     stdio: "ignore",
     windowsHide: false
@@ -1454,6 +1492,7 @@ function createMainWindow() {
     minWidth: 1180,
     minHeight: 720,
     title: APP_NAME,
+    icon: getAppIconPath(),
     show: false,
     frame: mainWindowHasFrame,
     alwaysOnTop: desktopDisplaySettings.alwaysOnTop,

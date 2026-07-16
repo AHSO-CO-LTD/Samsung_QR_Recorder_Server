@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Activity } from "lucide-react";
+import { AppLogo } from "@/components/layout/app-logo";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { PrimaryNavbar } from "@/components/layout/primary-navbar";
 import { UserMenu } from "@/components/layout/user-menu";
@@ -55,9 +55,7 @@ export function AppHeader({
                 href="/"
                 className="flex min-w-0 max-w-[min(72vw,24rem)] flex-1 items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:max-w-none lg:gap-3"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                  <Activity className="h-5 w-5" aria-hidden="true" />
-                </span>
+                <AppLogo />
                 <span className="block min-w-0 truncate text-sm font-semibold">{t("appName")}</span>
               </Link>
             </TooltipTrigger>

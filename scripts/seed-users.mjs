@@ -208,23 +208,27 @@ try {
     console.log(`Seeded ${user.role.toLowerCase()} account: ${user.username}`);
   }
 
-  const settings = await prisma.serverSetting.findFirst({ orderBy: { id: "asc" } });
-  const factoryCode = (process.env.SEED_FACTORY_CODE || "DZLV").trim().toUpperCase();
-  const settingsData = {
-    factory_code_default: factoryCode,
-    full_code_length_default: 35,
-    full_vendor_position_default: 18,
-    led_scan_length_default: 22,
-    led_vendor_position_default: 16,
-    duplicate_days: Number(process.env.SEED_DUPLICATE_DAYS || 31),
-    heartbeat_timeout_seconds: Number(process.env.SEED_HEARTBEAT_TIMEOUT_SECONDS || 60)
-  };
-  if (settings) {
-    await prisma.serverSetting.update({ where: { id: settings.id }, data: settingsData });
+  if (process.env.SEED_SERVER_SETTINGS === "0") {
+    console.log("Skipped server settings seed");
   } else {
-    await prisma.serverSetting.create({ data: settingsData });
+    const settings = await prisma.serverSetting.findFirst({ orderBy: { id: "asc" } });
+    const factoryCode = (process.env.SEED_FACTORY_CODE || "DZLV").trim().toUpperCase();
+    const settingsData = {
+      factory_code_default: factoryCode,
+      full_code_length_default: 35,
+      full_vendor_position_default: 18,
+      led_scan_length_default: 22,
+      led_vendor_position_default: 16,
+      duplicate_days: Number(process.env.SEED_DUPLICATE_DAYS || 31),
+      heartbeat_timeout_seconds: Number(process.env.SEED_HEARTBEAT_TIMEOUT_SECONDS || 60)
+    };
+    if (settings) {
+      await prisma.serverSetting.update({ where: { id: settings.id }, data: settingsData });
+    } else {
+      await prisma.serverSetting.create({ data: settingsData });
+    }
+    console.log(`Seeded server settings with factory code: ${factoryCode}`);
   }
-  console.log(`Seeded server settings with factory code: ${factoryCode}`);
 
   const rolePermissionCount = await prisma.rolePermission.count();
   if (rolePermissionCount === 0) {

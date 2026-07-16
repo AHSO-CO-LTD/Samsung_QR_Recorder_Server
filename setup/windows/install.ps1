@@ -1,9 +1,11 @@
 param(
   [string] $InstallDir = (Get-Location).Path,
-  [ValidateSet("Full", "Scan", "InstallRequirements", "Database", "Preflight", "Finalize", "Rollback")]
+  [ValidateSet("Full", "Scan", "InstallRequirements", "Database", "Preflight", "Finalize", "Rollback", "Update")]
   [string] $Phase = "Full",
   [string] $StateFile = "",
   [string] $StatusFile = "",
+  [string] $EnvBackupFile = "",
+  [string] $BackendEnvBackupFile = "",
   [string] $LogFile = ""
 )
 
@@ -81,6 +83,8 @@ $ConfigPath = Join-Path $SetupRoot "config.json"
 $Config = Get-Content -Raw -Encoding UTF8 $ConfigPath | ConvertFrom-Json
 $RuntimeDir = Join-Path $InstallDir "resources\runtime"
 $BackendDir = Join-Path $RuntimeDir "backend"
+$EnvPath = Join-Path $RuntimeDir ".env"
+$BackendEnvPath = Join-Path $BackendDir ".env"
 $SupportFile = Join-Path $RuntimeDir ".matrix-cache\node.index"
 $CreatedDatabaseName = $null
 $DatabasePassword = $null
@@ -625,6 +629,83 @@ function Get-UpdateRepository {
   return ""
 }
 
+function Read-EnvFile([string] $Path) {
+  $values = @{}
+  if (-not $Path -or -not (Test-Path $Path)) {
+    return $values
+  }
+
+  foreach ($line in Get-Content -Path $Path -Encoding UTF8) {
+    $trimmed = $line.Trim()
+    if (-not $trimmed -or $trimmed.StartsWith("#")) {
+      continue
+    }
+
+    if ($trimmed -notmatch "^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$") {
+      continue
+    }
+
+    $key = $matches[1]
+    $value = $matches[2].Trim()
+    if (
+      ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+      ($value.StartsWith("'") -and $value.EndsWith("'"))
+    ) {
+      $value = $value.Substring(1, [Math]::Max(0, $value.Length - 2))
+    }
+
+    $values[$key] = $value
+  }
+
+  return $values
+}
+
+function Import-RuntimeEnv {
+  foreach ($path in @($EnvPath, $BackendEnvPath)) {
+    $values = Read-EnvFile $path
+    foreach ($key in $values.Keys) {
+      [Environment]::SetEnvironmentVariable([string] $key, [string] $values[$key], "Process")
+    }
+  }
+}
+
+function Copy-EnvFileIfAvailable([string] $TargetPath, [string[]] $CandidatePaths) {
+  if (Test-Path $TargetPath) {
+    return
+  }
+
+  foreach ($candidate in $CandidatePaths) {
+    if ($candidate -and (Test-Path $candidate)) {
+      $directory = Split-Path -Parent $TargetPath
+      if ($directory) {
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+      }
+      Copy-Item -LiteralPath $candidate -Destination $TargetPath -Force
+      Write-SetupLog "Restored env file $TargetPath from $candidate."
+      return
+    }
+  }
+}
+
+function Ensure-UpdateRuntimeEnv {
+  $candidates = @($EnvPath, $BackendEnvPath, $EnvBackupFile, $BackendEnvBackupFile) | Where-Object { $_ }
+  Copy-EnvFileIfAvailable $EnvPath $candidates
+  Copy-EnvFileIfAvailable $BackendEnvPath @($BackendEnvPath, $EnvPath, $BackendEnvBackupFile, $EnvBackupFile)
+
+  $runtimeEnv = Read-EnvFile $EnvPath
+  $backendEnv = Read-EnvFile $BackendEnvPath
+  $databaseUrl = $backendEnv["DATABASE_URL"]
+  if (-not $databaseUrl) {
+    $databaseUrl = $runtimeEnv["DATABASE_URL"]
+  }
+
+  if (-not $databaseUrl) {
+    throw "Existing DATABASE_URL was not found. Update cannot continue without the installed runtime .env."
+  }
+
+  Import-RuntimeEnv
+}
+
 function Write-RuntimeEnv([string] $DatabaseName, [string] $Password, [string] $FactoryCode) {
   $databaseUrl = "postgresql://$($Config.database.defaultUser):$Password@$($Config.database.host):$($Config.database.port)/$DatabaseName"
   $updateRepository = Get-UpdateRepository
@@ -643,8 +724,8 @@ UPDATE_REPOSITORY="$updateRepository"
 "@
 
   New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-  Set-Content -Path (Join-Path $RuntimeDir ".env") -Value $content -Encoding UTF8
-  Set-Content -Path (Join-Path $BackendDir ".env") -Value $content -Encoding UTF8
+  Set-Content -Path $EnvPath -Value $content -Encoding UTF8
+  Set-Content -Path $BackendEnvPath -Value $content -Encoding UTF8
 }
 
 function Get-RequiredStateFile {
@@ -722,16 +803,26 @@ function Remove-NewDatabaseOnFailure {
 }
 
 function Invoke-RuntimeDatabaseSetup {
+  param(
+    [bool] $SeedData = $true,
+    [bool] $PreserveServerSettings = $false,
+    [bool] $SeedDevSupport = $true
+  )
+
   if (-not (Test-Path $BackendDir)) {
     throw "Runtime backend was not found at $BackendDir."
   }
 
   Push-Location $BackendDir
   try {
+    Import-RuntimeEnv
     $env:AHSO_RUNTIME_ROOT = $RuntimeDir
     $env:AHSO_SUPPORT_FILE = $SupportFile
     $env:SEED_DEFAULT_ADMINS = "0"
-    $env:SEED_DEV_SUPPORT = "1"
+    $env:SEED_DEV_SUPPORT = if ($SeedDevSupport) { "1" } else { "0" }
+    if ($PreserveServerSettings) {
+      $env:SEED_SERVER_SETTINGS = "0"
+    }
 
     $prisma = Join-Path $BackendDir "node_modules\.bin\prisma.cmd"
     if (-not (Test-Path $prisma)) {
@@ -742,9 +833,11 @@ function Invoke-RuntimeDatabaseSetup {
       throw "Prisma migration failed."
     }
 
-    & node (Join-Path $BackendDir "scripts\seed-users.mjs")
-    if ($LASTEXITCODE -ne 0) {
-      throw "Seed runtime data failed."
+    if ($SeedData) {
+      & node (Join-Path $BackendDir "scripts\seed-users.mjs")
+      if ($LASTEXITCODE -ne 0) {
+        throw "Seed runtime data failed."
+      }
     }
   } finally {
     Pop-Location
@@ -752,6 +845,7 @@ function Invoke-RuntimeDatabaseSetup {
     Remove-Item Env:\AHSO_SUPPORT_FILE -ErrorAction SilentlyContinue
     Remove-Item Env:\SEED_DEFAULT_ADMINS -ErrorAction SilentlyContinue
     Remove-Item Env:\SEED_DEV_SUPPORT -ErrorAction SilentlyContinue
+    Remove-Item Env:\SEED_SERVER_SETTINGS -ErrorAction SilentlyContinue
   }
 }
 
@@ -795,6 +889,13 @@ function Invoke-FullPhase {
   Show-Message "Setup is ready.`n`nDatabase: $($state.DatabaseName)`nFactory code: $($state.FactoryCode)`nNext step: open the app and create the first admin account."
 }
 
+function Invoke-UpdatePhase {
+  Write-SetupLog "Update phase started."
+  Ensure-UpdateRuntimeEnv
+  Invoke-RuntimeDatabaseSetup -SeedData $true -PreserveServerSettings $true -SeedDevSupport $false
+  Write-SetupLog "Update phase completed. Existing runtime env and database were preserved."
+}
+
 function Invoke-RollbackPhase {
   Write-SetupLog "Rollback started."
   $state = Load-SetupState
@@ -814,6 +915,7 @@ try {
     "Preflight" { Invoke-PreflightPhase; break }
     "Finalize" { Invoke-FinalizePhase; break }
     "Rollback" { Invoke-RollbackPhase; break }
+    "Update" { Invoke-UpdatePhase; break }
     default { Invoke-FullPhase; break }
   }
 } catch {
@@ -825,7 +927,7 @@ try {
     }
   }
   Remove-NewDatabaseOnFailure
-  if ($Phase -notin @("Scan", "InstallRequirements")) {
+  if ($Phase -notin @("Scan", "InstallRequirements", "Update")) {
     Show-Message "Setup was not completed:`n`n$($_.Exception.Message)`n`nLog: $LogFile" $Config.appName "Error"
   }
   exit 1

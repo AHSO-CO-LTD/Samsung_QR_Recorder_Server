@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, Languages } from "lucide-react";
 import { toast } from "sonner";
+import { AppLogo } from "@/components/layout/app-logo";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { getDesktopApp, type DesktopLicenseStatus } from "@/lib/desktop-app";
@@ -125,7 +126,10 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
       <main className="flex min-h-[100dvh] items-center justify-center bg-background px-3 py-6 sm:px-4 lg:py-8">
         <section className="flex w-full max-w-3xl flex-col items-center gap-4">
           <div className="flex w-full min-w-0 flex-col items-center gap-3 sm:flex-row sm:justify-between">
-            <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal sm:text-left">{t("appName")}</h1>
+            <div className="flex max-w-full min-w-0 items-center gap-3">
+              <AppLogo />
+              <h1 className="max-w-full truncate text-center text-2xl font-semibold tracking-normal sm:text-left">{t("appName")}</h1>
+            </div>
             <div className="flex shrink-0 items-center gap-2 rounded-md border bg-card p-1">
               <Languages className="ml-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <Button

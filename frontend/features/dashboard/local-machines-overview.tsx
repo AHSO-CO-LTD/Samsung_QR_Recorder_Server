@@ -221,7 +221,7 @@ export function LocalMachinesOverview() {
       {!isLoading && !error && rows.length === 0 ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("empty")}</div> : null}
 
       {!isLoading && !error && rows.length > 0 ? (
-        <div className="grid min-w-0 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 34rem), 1fr))" }}>
           {rows.map((row) => (
             <MachineRuntimeCard
               key={row.machine.id}
