@@ -6,6 +6,9 @@
 !ifndef BUILD_UNINSTALLER
 !include nsDialogs.nsh
 !include LogicLib.nsh
+!include FileFunc.nsh
+!insertmacro GetParameters
+!insertmacro GetOptions
 
 !define MUI_CUSTOMFUNCTION_ABORT AhsoOnAbort
 
@@ -27,10 +30,27 @@ Var AhsoEnvBodyBox
 Var AhsoEnvStatusBox
 Var AhsoEnvActionLabel
 Var AhsoEnvRecheckButton
+Var AhsoUpdateMode
+Var AhsoUpdateEnvBackupFile
+Var AhsoUpdateBackendEnvBackupFile
 
 !macro customWelcomePage
   Page custom AhsoSetupIntroPageCreate AhsoSetupIntroPageLeave
   Page custom AhsoEnvironmentReviewPageCreate AhsoEnvironmentReviewPageLeave
+!macroend
+
+!macro customInit
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/UPDATE" $1
+  ${IfNot} ${Errors}
+    StrCpy $AhsoUpdateMode "1"
+  ${EndIf}
+
+  ClearErrors
+  ${GetOptions} $0 "/UPDATE_ENV=" $AhsoUpdateEnvBackupFile
+  ClearErrors
+  ${GetOptions} $0 "/UPDATE_BACKEND_ENV=" $AhsoUpdateBackendEnvBackupFile
 !macroend
 
 !macro customHeader
@@ -84,11 +104,18 @@ Var AhsoEnvRecheckButton
   FunctionEnd
 
   Function AhsoOnAbort
+    ${If} $AhsoUpdateMode == "1"
+      Return
+    ${EndIf}
     Call AhsoRollbackSetupState
     RMDir "$INSTDIR"
   FunctionEnd
 
   Function AhsoSetupIntroPageCreate
+    ${If} $AhsoUpdateMode == "1"
+      Abort
+    ${EndIf}
+
     !insertmacro MUI_HEADER_TEXT "Setup check" "Check required runtime frameworks before installing"
     nsDialogs::Create 1018
     Pop $0
@@ -114,6 +141,10 @@ Var AhsoEnvRecheckButton
   FunctionEnd
 
   Function AhsoEnvironmentReviewPageCreate
+    ${If} $AhsoUpdateMode == "1"
+      Abort
+    ${EndIf}
+
     ${If} $AhsoEnvState == ""
       Abort
     ${EndIf}
@@ -215,6 +246,22 @@ Var AhsoEnvRecheckButton
 !macroend
 
 !macro customInstall
+  ${If} $AhsoUpdateMode == "1"
+    StrCmp $AhsoSetupLogFile "" 0 +2
+      StrCpy $AhsoSetupLogFile "$TEMP\QRRecorderServer-setup.log"
+
+    DetailPrint "Applying QR Recorder update..."
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\resources\setup\windows\install.ps1" -Phase Update -InstallDir "$INSTDIR" -LogFile "$AhsoSetupLogFile" -EnvBackupFile "$AhsoUpdateEnvBackupFile" -BackendEnvBackupFile "$AhsoUpdateBackendEnvBackupFile"' $0
+    IntCmp $0 0 update_done
+      IfSilent update_failed_silent update_failed_visible
+      update_failed_visible:
+        MessageBox MB_ICONSTOP|MB_TOPMOST "QR Recorder update assistant failed.$\r$\nLog: $AhsoSetupLogFile"
+      update_failed_silent:
+        Abort "QR Recorder update assistant failed."
+    update_done:
+      Return
+  ${EndIf}
+
   DetailPrint "Finalizing QR Recorder setup..."
   ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\resources\setup\windows\install.ps1" -Phase Finalize -InstallDir "$INSTDIR" -StateFile "$AhsoSetupStateFile" -LogFile "$AhsoSetupLogFile"' $0
   IntCmp $0 0 setup_done

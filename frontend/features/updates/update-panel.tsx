@@ -33,7 +33,7 @@ const copy = {
     checkFailed: "Không kiểm tra được bản cập nhật.",
     installUnavailable: "Chức năng cập nhật chỉ hoạt động trong Electron desktop.",
     installing: "Đang tải {tag}...",
-    installStarted: "Đã mở bộ cài cập nhật. App sẽ đóng để tiếp tục.",
+    installStarted: "Cập nhật đã bắt đầu. App sẽ đóng; mở lại app sau khi installer chạy xong.",
     installFailed: "Không cài được bản cập nhật.",
     updateDisabledInDev: "Cài cập nhật chỉ khả dụng trong bản đã đóng gói."
   },
@@ -58,7 +58,7 @@ const copy = {
     checkFailed: "Unable to check for updates.",
     installUnavailable: "Updates are only available in the Electron desktop app.",
     installing: "Downloading {tag}...",
-    installStarted: "Update installer opened. The app will close to continue.",
+    installStarted: "Update started. The app will close; reopen it after the installer finishes.",
     installFailed: "Unable to install update.",
     updateDisabledInDev: "Installing updates is only available in packaged builds."
   }

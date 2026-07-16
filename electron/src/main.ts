@@ -1240,6 +1240,26 @@ function downloadFile(url: string, targetPath: string) {
   });
 }
 
+function copyUpdateEnvBackup(sourcePath: string, targetPath: string) {
+  if (!fs.existsSync(sourcePath)) {
+    return null;
+  }
+
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.copyFileSync(sourcePath, targetPath);
+  return targetPath;
+}
+
+function createUpdateEnvBackup(installDir: string) {
+  const backupRoot = path.join(app.getPath("userData"), "updates", "env-backup");
+  fs.mkdirSync(backupRoot, { recursive: true });
+
+  return {
+    runtimeEnv: copyUpdateEnvBackup(path.join(installDir, "resources", "runtime", ".env"), path.join(backupRoot, "runtime.env")),
+    backendEnv: copyUpdateEnvBackup(path.join(installDir, "resources", "runtime", "backend", ".env"), path.join(backupRoot, "backend.env"))
+  };
+}
+
 async function installUpdate(tagName: string) {
   if (!app.isPackaged) {
     throw new Error("Update install is only available in packaged desktop builds.");
@@ -1261,8 +1281,19 @@ async function installUpdate(tagName: string) {
   appendServiceLog("SYSTEM", `Downloading update ${tagName} to ${targetPath}`);
   await downloadFile(asset.browser_download_url, targetPath);
 
-  appendServiceLog("SYSTEM", `Launching update installer ${targetPath}`);
-  const installer = spawn(targetPath, [], {
+  const installDir = path.dirname(process.execPath);
+  const envBackup = createUpdateEnvBackup(installDir);
+  const installerArgs = ["/S", "/UPDATE"];
+  if (envBackup.runtimeEnv) {
+    installerArgs.push(`/UPDATE_ENV=${envBackup.runtimeEnv}`);
+  }
+  if (envBackup.backendEnv) {
+    installerArgs.push(`/UPDATE_BACKEND_ENV=${envBackup.backendEnv}`);
+  }
+  installerArgs.push(`/D=${installDir}`);
+
+  appendServiceLog("SYSTEM", `Launching update installer ${targetPath} for ${installDir}`);
+  const installer = spawn(targetPath, installerArgs, {
     detached: true,
     stdio: "ignore",
     windowsHide: false
