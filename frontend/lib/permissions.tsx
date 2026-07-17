@@ -34,13 +34,16 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   const [permissionKeys, setPermissionKeys] = useState<ScreenPermissionKey[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedUserScope, setLoadedUserScope] = useState<string | null>(null);
+  const currentUserScope = user ? `${user.id}:${user.role}` : null;
 
   const loadPermissions = useCallback(async () => {
-    if (!user) {
+    if (!user || !currentUserScope) {
       setDefinitions([]);
       setPermissionKeys([]);
       setError(null);
       setIsLoading(false);
+      setLoadedUserScope(null);
       return;
     }
 
@@ -55,36 +58,48 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
       const data = result.data;
       setDefinitions(data?.definitions ?? []);
       setPermissionKeys(data?.permission_keys ?? (user.role === "DEV" ? [...screenPermissionKeys] : []));
+      setLoadedUserScope(currentUserScope);
     } catch (currentError) {
-      const message = currentError instanceof Error ? currentError.message : "Unable to load role permissions.";
+      const message = currentError instanceof Error ? currentError.message : "Không tải được phân quyền vai trò.";
       setError(message);
       setDefinitions([]);
       setPermissionKeys(user.role === "DEV" ? [...screenPermissionKeys] : []);
+      setLoadedUserScope(currentUserScope);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [currentUserScope, user]);
 
   useEffect(() => {
     void loadPermissions();
   }, [loadPermissions]);
 
+  const hasLoadedCurrentUserPermissions = !currentUserScope || loadedUserScope === currentUserScope;
+  const effectivePermissionKeys = useMemo<ScreenPermissionKey[]>(() => {
+    if (user?.role === "DEV") {
+      return [...screenPermissionKeys];
+    }
+
+    return hasLoadedCurrentUserPermissions ? permissionKeys : [];
+  }, [hasLoadedCurrentUserPermissions, permissionKeys, user?.role]);
+  const effectiveIsLoading = isLoading || Boolean(currentUserScope && !hasLoadedCurrentUserPermissions);
+
   const canAccess = useCallback(
-    (permissionKey: ScreenPermissionKey) => user?.role === "DEV" || permissionKeys.includes(permissionKey),
-    [permissionKeys, user?.role]
+    (permissionKey: ScreenPermissionKey) => user?.role === "DEV" || effectivePermissionKeys.includes(permissionKey),
+    [effectivePermissionKeys, user?.role]
   );
 
   const value = useMemo<PermissionsContextValue>(
     () => ({
       definitions,
-      permissionKeys,
-      isLoading,
+      permissionKeys: effectivePermissionKeys,
+      isLoading: effectiveIsLoading,
       error,
       canAccess,
-      firstAccessiblePath: getFirstRouteForPermissions(permissionKeys),
+      firstAccessiblePath: getFirstRouteForPermissions(effectivePermissionKeys),
       refreshPermissions: loadPermissions
     }),
-    [definitions, permissionKeys, isLoading, error, canAccess, loadPermissions]
+    [definitions, effectivePermissionKeys, effectiveIsLoading, error, canAccess, loadPermissions]
   );
 
   return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>;

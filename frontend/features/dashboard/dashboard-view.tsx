@@ -46,7 +46,7 @@ export function DashboardView() {
     { key: "todayOk", value: String(summary.ok), tone: "default" },
     { key: "todayNg", value: String(summary.ng), tone: "destructive" },
     { key: "pendingSync", value: String(summary.pending_sync), tone: "secondary" },
-    { key: "duplicateWindow", value: `${summary.duplicate_days}D`, tone: "outline" }
+    { key: "duplicateWindow", value: `${summary.duplicate_days} ${t("daysUnit")}`, tone: "outline" }
   ] as const;
 
   return (

@@ -5,16 +5,16 @@ export const configurableRoles = [UserRole.OPERATOR, UserRole.ENGINEER, UserRole
 
 export const screenPermissionDefinitions = [
   { key: "dashboard", group: "monitoring", label_vi: "Tổng quan", label_en: "Dashboard" },
-  { key: "machines", group: "operation", label_vi: "Máy local", label_en: "Local machines" },
+  { key: "machines", group: "operation", label_vi: "Máy cục bộ", label_en: "Local machines" },
   { key: "runtime", group: "operation", label_vi: "Phiên chạy", label_en: "Runtime sessions" },
-  { key: "scans", group: "operation", label_vi: "Lịch sử scan", label_en: "Scan history" },
+  { key: "scans", group: "operation", label_vi: "Lịch sử quét", label_en: "Scan history" },
   { key: "reports", group: "operation", label_vi: "Báo cáo", label_en: "Reports" },
-  { key: "master-data", group: "system", label_vi: "Master data", label_en: "Master data" },
+  { key: "master-data", group: "system", label_vi: "Dữ liệu nền", label_en: "Master data" },
   { key: "sync", group: "system", label_vi: "Đồng bộ", label_en: "Sync" },
-  { key: "duplicate-audit", group: "system", label_vi: "Audit duplicate", label_en: "Duplicate audit" },
-  { key: "duplicates", group: "system", label_vi: "Duplicate", label_en: "Duplicates" },
-  { key: "users", group: "system", label_vi: "Users và role", label_en: "Users and roles" },
-  { key: "audit-logs", group: "system", label_vi: "Audit logs", label_en: "Audit logs" },
+  { key: "duplicate-audit", group: "system", label_vi: "Kiểm tra trùng lặp", label_en: "Duplicate audit" },
+  { key: "duplicates", group: "system", label_vi: "Trùng lặp", label_en: "Duplicates" },
+  { key: "users", group: "system", label_vi: "Người dùng và vai trò", label_en: "Users and roles" },
+  { key: "audit-logs", group: "system", label_vi: "Nhật ký kiểm tra", label_en: "Audit logs" },
   { key: "notifications", group: "system", label_vi: "Thông báo", label_en: "Notifications" },
   { key: "settings", group: "system", label_vi: "Cài đặt", label_en: "Settings" },
   { key: "api-docs", group: "system", label_vi: "Swagger", label_en: "Swagger" }

@@ -18,7 +18,7 @@ if (-not $LogFile) {
 function Write-SetupLog([string] $Message) {
   try {
     $directory = Split-Path -Parent $LogFile
-    if ($directory) {
+    if ($directory  ) {
       New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
     Add-Content -Path $LogFile -Value "$(Get-Date -Format o) $Message" -Encoding UTF8

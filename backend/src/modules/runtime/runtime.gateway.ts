@@ -48,7 +48,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
     this.logger.log(`Runtime socket connected: ${client.id}`);
     client.emit("server:hello-required", {
       code: "RUNTIME_HELLO_REQUIRED",
-      message: "Send machine:hello with machine_code, serial, and uid before runtime events."
+      message: "Hãy gửi machine:hello kèm machine_code, serial và uid trước các sự kiện phiên chạy."
     });
   }
 
@@ -59,7 +59,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return;
     }
 
-    const session = await this.runtimeService.markDisconnected(machine, "Socket disconnected.", this.getClientIp(client));
+    const session = await this.runtimeService.markDisconnected(machine, "Socket đã ngắt kết nối.", this.getClientIp(client));
     this.server.emit("server:runtime-updated", {
       event: "SOCKET_DISCONNECTED",
       machine_code: machine.machine_code,
@@ -84,7 +84,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleStart(@MessageBody() dto: RuntimeStartDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.start(machine, dto, this.getClientIp(client));
-    const response = this.ok("RUNTIME_SESSION_STARTED", "Runtime session started.", session);
+    const response = this.ok("RUNTIME_SESSION_STARTED", "Đã bắt đầu phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "STARTED",
       machine_code: machine.machine_code,
@@ -97,7 +97,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleUpdate(@MessageBody() dto: RuntimeUpdateDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.update(machine, dto, this.getClientIp(client), "UPDATED");
-    const response = this.ok("RUNTIME_SESSION_UPDATED", "Runtime session updated.", session);
+    const response = this.ok("RUNTIME_SESSION_UPDATED", "Đã cập nhật phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "UPDATED",
       machine_code: machine.machine_code,
@@ -110,7 +110,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleSnapshot(@MessageBody() dto: RuntimeUpdateDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.update(machine, dto, this.getClientIp(client), "SNAPSHOT");
-    const response = this.ok("RUNTIME_SESSION_SNAPSHOT_SAVED", "Runtime snapshot saved.", session);
+    const response = this.ok("RUNTIME_SESSION_SNAPSHOT_SAVED", "Đã lưu ảnh chụp phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "SNAPSHOT",
       machine_code: machine.machine_code,
@@ -123,7 +123,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleStop(@MessageBody() dto: RuntimeStopDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.stop(machine, dto, this.getClientIp(client));
-    const response = this.ok("RUNTIME_SESSION_STOPPED", "Runtime session stopped.", session);
+    const response = this.ok("RUNTIME_SESSION_STOPPED", "Đã dừng phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "STOPPED",
       machine_code: machine.machine_code,
@@ -136,7 +136,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleError(@MessageBody() dto: RuntimeErrorDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.recordError(machine, dto, this.getClientIp(client));
-    const response = this.ok("RUNTIME_SESSION_ERROR_RECORDED", "Runtime error recorded.", session);
+    const response = this.ok("RUNTIME_SESSION_ERROR_RECORDED", "Đã ghi nhận lỗi phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "ERROR",
       machine_code: machine.machine_code,
@@ -151,7 +151,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
       throw new WsException({
         success: false,
         code: "RUNTIME_HELLO_REQUIRED",
-        message: "machine:hello is required before runtime events."
+        message: "Cần gửi machine:hello trước các sự kiện phiên chạy."
       });
     }
 

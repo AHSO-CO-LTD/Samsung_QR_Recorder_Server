@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { ChevronDown, MessageSquarePlus, Pencil, Plus, Power, RotateCcw, Send, Trash2 } from "lucide-react";
+import { ChevronDown, MessageSquarePlus, Plus, Power, RotateCcw, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,6 +50,8 @@ const emptyCommandDraft: CommandDraft = {
   payload_text: ""
 };
 
+const MACHINE_AUTO_REFRESH_MS = 30 * 1000;
+
 export function MachinesView() {
   const { user } = useAuth();
   const { t } = useI18n();
@@ -83,7 +85,6 @@ export function MachinesView() {
       { key: "scans", header: t("colScanRecords"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => getMachineScanCount(item) },
       { key: "ip", header: t("colIp"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <MonoText value={item.sync_state?.last_ip_address ?? item.ip_address} /> },
       { key: "connection", header: t("colConnection"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.sync_state?.connection_status || "UNKNOWN"} /> },
-      { key: "pending", header: t("colPending"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => item.sync_state?.local_pending_sync ?? 0 },
       { key: "last_seen", header: t("colHeartbeat"), className: "min-w-[10rem] whitespace-nowrap", render: (item) => <DateText value={item.sync_state?.last_seen_at} /> },
       { key: "active", header: t("colStatus"), className: "w-28 min-w-[7rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.is_active} /> },
       {
@@ -92,27 +93,56 @@ export function MachinesView() {
         className: "w-56 text-right",
         render: (item) => (
           <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => openForm(item)}>
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-              {t("edit")}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => openCommandDialog(item)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                openCommandDialog(item);
+              }}
+            >
               <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
               {t("commandButton")}
             </Button>
             {item.is_active ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => setTarget({ machine: item, isActive: false })}>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setTarget({ machine: item, isActive: false });
+                }}
+              >
                 <Power className="h-4 w-4" aria-hidden="true" />
                 {t("deactivate")}
               </Button>
             ) : (
-              <Button type="button" variant="outline" size="sm" onClick={() => setTarget({ machine: item, isActive: true })}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setTarget({ machine: item, isActive: true });
+                }}
+              >
                 <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 {t("reactivate")}
               </Button>
             )}
             {canHardDeleteMachine(item) ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => setDeleteTarget(item)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeleteTarget(item);
+                }}
+              >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                 {t("delete")}
               </Button>
@@ -262,6 +292,9 @@ export function MachinesView() {
         endpoint={`/machines?refresh=${refreshId}`}
         columns={columns}
         getRowKey={(item) => item.id}
+        autoRefreshMs={MACHINE_AUTO_REFRESH_MS}
+        onRowClick={openForm}
+        rowClassName={(item) => cn("hover:bg-muted/40", !item.is_active && "bg-muted/20")}
         filterItem={(item) => filterMachine(item, machineFilter)}
         searchableText={(item) =>
           `${item.machine_code} ${item.machine_name} ${item.line_name ?? ""} ${item.station_name ?? ""} ${canViewIdentity ? `${item.serial ?? ""} ${item.uid ?? ""}` : ""} ${item.ip_address ?? ""} ${

@@ -36,6 +36,7 @@ type DataTablePanelProps<T> = {
   searchPlaceholder?: string;
   emptyText?: string;
   singleExpandedRow?: boolean;
+  autoRefreshMs?: number;
   pagination?: {
     pageSize: number;
     mode?: "client" | "server";
@@ -58,6 +59,7 @@ export function DataTablePanel<T>({
   searchPlaceholder,
   emptyText,
   singleExpandedRow,
+  autoRefreshMs,
   pagination
 }: DataTablePanelProps<T>) {
   const { t } = useI18n();
@@ -81,9 +83,11 @@ export function DataTablePanel<T>({
       })
     : endpoint;
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const load = useCallback(async (background = false) => {
+    if (!background) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const result = await apiGet<T[] | T>(requestEndpoint);
       const nextItems = Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
@@ -91,18 +95,37 @@ export function DataTablePanel<T>({
       setExpandedRows(new Set());
       setPaginationMeta(isServerPaginated ? (result.meta ?? null) : null);
       onData?.(nextItems);
+      setError(null);
     } catch (currentError) {
       const message = currentError instanceof Error ? currentError.message : t("error");
-      setError(message);
-      toast.error(message);
+      if (!background) {
+        setError(message);
+        toast.error(message);
+      }
     } finally {
-      setIsLoading(false);
+      if (!background) {
+        setIsLoading(false);
+      }
     }
   }, [requestEndpoint, isServerPaginated, onData, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!autoRefreshMs || autoRefreshMs <= 0) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void load(true);
+    }, autoRefreshMs);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [autoRefreshMs, load]);
 
   useEffect(() => {
     setCurrentPage(1);

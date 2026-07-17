@@ -31,7 +31,7 @@ export class RolePermissionsService {
     return {
       success: true,
       code: "ROLE_PERMISSIONS_LISTED",
-      message: "Role permissions loaded.",
+      message: "Đã tải phân quyền vai trò.",
       data: {
         definitions: screenPermissionDefinitions,
         roles: roles.map((role) => ({
@@ -47,7 +47,7 @@ export class RolePermissionsService {
     return {
       success: true,
       code: "ROLE_PERMISSIONS_CURRENT",
-      message: "Current role permissions loaded.",
+      message: "Đã tải phân quyền vai trò hiện tại.",
       data: {
         role,
         definitions: screenPermissionDefinitions,
@@ -80,7 +80,7 @@ export class RolePermissionsService {
       throw new ForbiddenException({
         success: false,
         code: "DEV_ROLE_FULL_ACCESS",
-        message: "Dev role always has full access and cannot be edited."
+        message: "Vai trò Dev luôn có toàn quyền và không thể chỉnh sửa."
       });
     }
 
@@ -88,7 +88,7 @@ export class RolePermissionsService {
       throw new BadRequestException({
         success: false,
         code: "ROLE_NOT_CONFIGURABLE",
-        message: "Role is not configurable."
+        message: "Vai trò này không cho phép cấu hình."
       });
     }
 
@@ -117,7 +117,7 @@ export class RolePermissionsService {
     return {
       success: true,
       code: "ROLE_PERMISSIONS_UPDATED",
-      message: "Role permissions updated.",
+      message: "Đã cập nhật phân quyền vai trò.",
       data: {
         role,
         editable: true,
@@ -152,7 +152,7 @@ export class RolePermissionsService {
       throw new BadRequestException({
         success: false,
         code: "ROLE_PERMISSION_INVALID_KEY",
-        message: `Invalid permission keys: ${invalidKeys.join(", ")}`
+        message: `Khóa phân quyền không hợp lệ: ${invalidKeys.join(", ")}`
       });
     }
 
@@ -165,7 +165,7 @@ export class RolePermissionsService {
       throw new BadRequestException({
         success: false,
         code: "ROLE_INVALID",
-        message: "Role is invalid."
+        message: "Vai trò không hợp lệ."
       });
     }
 

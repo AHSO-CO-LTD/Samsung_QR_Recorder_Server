@@ -60,7 +60,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "RECENT_DUPLICATE_KEYS_LISTED",
-      message: "Recent duplicate keys loaded.",
+      message: "Đã tải khóa trùng lặp gần đây.",
       data: keys
     };
   }
@@ -82,7 +82,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "HISTORICAL_DUPLICATES_LISTED",
-      message: "Historical duplicate results loaded.",
+      message: "Đã tải kết quả trùng lặp lịch sử.",
       data: results
     };
   }
@@ -137,7 +137,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "FULL_AUDIT_JOBS_LISTED",
-      message: "Full database duplicate audit jobs loaded.",
+      message: "Đã tải tác vụ kiểm trùng toàn DB.",
       data: jobs,
       meta: {
         total,
@@ -149,7 +149,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
 
   async getFullAuditJobDetail(jobId: number) {
     if (!Number.isInteger(jobId) || jobId < 1) {
-      throw new BadRequestException("Invalid audit job id.");
+      throw new BadRequestException("ID tác vụ kiểm tra không hợp lệ.");
     }
 
     const job = await this.prisma.historicalDuplicateJob.findFirst({
@@ -162,7 +162,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!job) {
-      throw new NotFoundException("Full database duplicate audit job was not found.");
+      throw new NotFoundException("Không tìm thấy tác vụ kiểm trùng toàn DB.");
     }
 
     const scanWhere = {
@@ -261,7 +261,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "FULL_AUDIT_JOB_DETAIL_LOADED",
-      message: "Full database duplicate audit job detail loaded.",
+      message: "Đã tải chi tiết tác vụ kiểm trùng toàn DB.",
       data: {
         job,
         total_scanned_codes,
@@ -315,7 +315,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "FULL_AUDIT_RESULTS_LISTED",
-      message: "Full database duplicate audit results loaded.",
+      message: "Đã tải kết quả kiểm trùng toàn DB.",
       data: results,
       meta: {
         total,
@@ -333,7 +333,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "FULL_AUDIT_SCHEDULE_LOADED",
-      message: "Full database duplicate audit schedule loaded.",
+      message: "Đã tải lịch kiểm trùng toàn DB.",
       data: {
         schedule: schedule ?? getDefaultSchedule(),
         latest_job: latestJob
@@ -376,7 +376,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "FULL_AUDIT_SCHEDULE_SAVED",
-      message: "Full database duplicate audit schedule saved.",
+      message: "Đã lưu lịch kiểm trùng toàn DB.",
       data: schedule
     };
   }
@@ -466,7 +466,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "HISTORICAL_DUPLICATE_JOB_DONE",
-      message: "Historical duplicate job completed.",
+      message: "Đã hoàn tất tác vụ trùng lặp lịch sử.",
       data: {
         job: finalJob,
         results
@@ -487,7 +487,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
         recordId: failedJob.id,
         newValue: {
           job: failedJob,
-          error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Lỗi không xác định"
         }
       });
       throw error;

@@ -25,7 +25,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "VENDORS_LISTED",
-      message: "Vendors loaded.",
+      message: "Đã tải danh sách nhà cung cấp.",
       data: vendors
     };
   }
@@ -49,7 +49,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "VENDOR_CREATED",
-      message: "Vendor created.",
+      message: "Đã tạo nhà cung cấp.",
       data: vendor
     };
   }
@@ -76,7 +76,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "VENDOR_UPDATED",
-      message: "Vendor updated.",
+      message: "Đã cập nhật nhà cung cấp.",
       data: vendor
     };
   }
@@ -99,7 +99,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "VENDOR_DISABLED",
-      message: "Vendor disabled.",
+      message: "Đã tắt nhà cung cấp.",
       data: vendor
     };
   }
@@ -115,7 +115,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "CHASSIS_CODES_LISTED",
-      message: "Chassis codes loaded.",
+      message: "Đã tải danh sách mã khung.",
       data: chassisCodes
     };
   }
@@ -140,7 +140,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "CHASSIS_CODE_CREATED",
-      message: "Chassis code created.",
+      message: "Đã tạo mã khung.",
       data: chassisCode
     };
   }
@@ -168,7 +168,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "CHASSIS_CODE_UPDATED",
-      message: "Chassis code updated.",
+      message: "Đã cập nhật mã khung.",
       data: chassisCode
     };
   }
@@ -191,7 +191,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "CHASSIS_CODE_DEACTIVATED",
-      message: "Chassis code deactivated.",
+      message: "Đã tắt mã khung.",
       data: chassisCode
     };
   }
@@ -204,7 +204,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "LED_CODES_LISTED",
-      message: "LED codes loaded.",
+      message: "Đã tải danh sách mã LED.",
       data: ledCodes
     };
   }
@@ -230,7 +230,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "LED_CODE_CREATED",
-      message: "LED code created.",
+      message: "Đã tạo mã LED.",
       data: ledCode
     };
   }
@@ -259,7 +259,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "LED_CODE_UPDATED",
-      message: "LED code updated.",
+      message: "Đã cập nhật mã LED.",
       data: ledCode
     };
   }
@@ -282,7 +282,7 @@ export class MasterDataService {
     return {
       success: true,
       code: "LED_CODE_DEACTIVATED",
-      message: "LED code deactivated.",
+      message: "Đã tắt mã LED.",
       data: ledCode
     };
   }
@@ -293,7 +293,7 @@ export class MasterDataService {
       throw new NotFoundException({
         success: false,
         code: "VENDOR_NOT_FOUND",
-        message: "Vendor was not found."
+        message: "Không tìm thấy nhà cung cấp."
       });
     }
 
@@ -306,7 +306,7 @@ export class MasterDataService {
       throw new NotFoundException({
         success: false,
         code: "CHASSIS_CODE_NOT_FOUND",
-        message: "Chassis code was not found."
+        message: "Không tìm thấy mã khung."
       });
     }
 
@@ -319,7 +319,7 @@ export class MasterDataService {
       throw new NotFoundException({
         success: false,
         code: "LED_CODE_NOT_FOUND",
-        message: "LED code was not found."
+        message: "Không tìm thấy mã LED."
       });
     }
 
@@ -337,7 +337,7 @@ export class MasterDataService {
       throw new BadRequestException({
         success: false,
         code: "CODE_INPUT_INVALID",
-        message: "Code input must be exactly 6 alphanumeric characters."
+        message: "Mã nhập phải có đúng 6 ký tự chữ hoặc số."
       });
     }
 

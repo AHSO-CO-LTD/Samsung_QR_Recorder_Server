@@ -76,7 +76,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINES_LISTED",
-      message: "Machines loaded.",
+      message: "Đã tải danh sách máy.",
       data: machines
     };
   }
@@ -106,7 +106,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_CREATED",
-      message: "Machine created.",
+      message: "Đã tạo máy.",
       data: machine
     };
   }
@@ -139,7 +139,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_UPDATED",
-      message: "Machine updated.",
+      message: "Đã cập nhật máy.",
       data: machine
     };
   }
@@ -165,7 +165,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_DEACTIVATED",
-      message: "Machine deactivated.",
+      message: "Đã vô hiệu hóa máy.",
       data: machine
     };
   }
@@ -185,7 +185,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_HAS_SCAN_RECORDS",
-        message: "Machine has scan history and cannot be permanently deleted. Disable it instead.",
+        message: "Máy đã có lịch sử quét nên không thể xóa vĩnh viễn. Hãy vô hiệu hóa máy thay vì xóa.",
         data: {
           scan_records: scanCount,
           recent_duplicate_keys: recentDuplicateCount
@@ -233,7 +233,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_DELETED",
-      message: "Machine permanently deleted.",
+      message: "Đã xóa vĩnh viễn máy.",
       data: {
         machine: result.deletedMachine,
         deleted_scan_sync_batches: result.relatedBatches,
@@ -310,7 +310,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
           machine_code: state.machine_code,
           event_type: "DISCONNECTED",
           ip_address: state.last_ip_address,
-          message: `No heartbeat received for ${timeoutSeconds} seconds. Machine marked disconnected.`,
+        message: `Không nhận được nhịp kết nối trong ${timeoutSeconds} giây. Máy đã được đánh dấu mất kết nối.`,
           payload_json: JSON.parse(
             JSON.stringify({
               reason: "HEARTBEAT_TIMEOUT",
@@ -331,11 +331,25 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         },
         data: {
           status: "DISCONNECTED",
-          disconnected_at: now
+          disconnected_at: now,
+          ended_at: now,
+          last_seen_at: now
         }
       });
 
       if (runningSessions.length > 0) {
+        await tx.machineRuntimeProduct.updateMany({
+          where: {
+            session_id: {
+              in: runningSessions.map((session) => session.id)
+            },
+            ended_at: null
+          },
+          data: {
+            ended_at: now
+          }
+        });
+
         await tx.machineRuntimeEvent.createMany({
           data: runningSessions.map((session) => {
             const staleState = staleByMachineId.get(session.machine_id);
@@ -385,11 +399,11 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     if (duplicates.length > 0) {
       await this.notifications.createEvent({
         notiCode: "MACHINE_REGISTER_DUPLICATE",
-        title: "Duplicated machine registration request",
+        title: "Yêu cầu định danh máy bị trùng",
         titleVi: "Yêu cầu định danh máy bị trùng",
         titleEn: "Duplicated machine registration request",
-        message: `A local machine sent duplicated identity fields. Serial: ${serial}, UID: ${uid}. Detected IP: ${ipAddress}.`,
-        messageVi: `Máy local gửi thông tin định danh bị trùng. Serial: ${serial}, UID: ${uid}. IP phát hiện: ${ipAddress}.`,
+        message: `Một máy cục bộ gửi trường định danh bị trùng. Seri: ${serial}, UID: ${uid}. IP phát hiện: ${ipAddress}.`,
+        messageVi: `Máy cục bộ gửi thông tin định danh bị trùng. Seri: ${serial}, UID: ${uid}. IP phát hiện: ${ipAddress}.`,
         messageEn: `A local machine sent duplicated identity fields. Serial: ${serial}, UID: ${uid}. Detected IP: ${ipAddress}.`,
         payload: {
           serial,
@@ -403,7 +417,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException({
         success: false,
         code: "MACHINE_REGISTER_DUPLICATE",
-        message: "Machine registration request has duplicated identity fields.",
+        message: "Yêu cầu đăng ký máy có trường định danh bị trùng.",
         data: {
           status: "DUPLICATE",
           duplicates
@@ -430,11 +444,11 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
 
     await this.notifications.createEvent({
       notiCode: "MACHINE_REGISTER_REQUEST",
-      title: "New local machine identification request",
-      titleVi: "Yêu cầu định danh máy local mới",
+      title: "Yêu cầu định danh máy cục bộ mới",
+      titleVi: "Yêu cầu định danh máy cục bộ mới",
       titleEn: "New local machine identification request",
-      message: `A local machine requested identification. Serial: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
-      messageVi: `Máy local yêu cầu định danh. Serial: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
+      message: `Máy cục bộ yêu cầu định danh. Seri: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
+      messageVi: `Máy cục bộ yêu cầu định danh. Seri: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
       messageEn: `A local machine requested identification. Serial: ${request.serial}, UID: ${request.uid}, IP: ${request.ip_address}.`,
       payload: {
         request_id: request.request_id,
@@ -448,7 +462,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_REGISTER_REQUEST_SENT",
-      message: "Machine registration request was sent. Waiting for server identification.",
+      message: "Đã gửi yêu cầu đăng ký máy. Đang chờ máy chủ định danh.",
       data: {
         request_id: request.request_id,
         status: request.status,
@@ -474,7 +488,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_FOUND",
-        message: "Machine registration request was not found."
+        message: "Không tìm thấy yêu cầu đăng ký máy."
       });
     }
 
@@ -482,7 +496,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_REGISTER_IDENTITY_MISMATCH",
-        message: "Serial or uid does not match this registration request."
+        message: "Seri hoặc UID không khớp yêu cầu đăng ký này."
       });
     }
 
@@ -495,10 +509,10 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
 
     const message =
       request.status === "APPROVED"
-        ? "Machine registration request was approved."
+        ? "Yêu cầu đăng ký máy đã được duyệt."
         : request.status === "REJECTED"
-          ? "Machine registration request was rejected."
-          : "Machine registration request is waiting for server identification.";
+          ? "Yêu cầu đăng ký máy đã bị từ chối."
+          : "Yêu cầu đăng ký máy đang chờ máy chủ định danh.";
 
     return {
       success: true,
@@ -537,7 +551,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       return {
         success: true,
         code: exactMachine.is_active ? "MACHINE_IDENTITY_APPROVED" : "MACHINE_IDENTITY_DISABLED",
-        message: exactMachine.is_active ? "Machine identity was found and approved." : "Machine identity exists but is disabled.",
+        message: exactMachine.is_active ? "Đã tìm thấy và duyệt định danh máy." : "Định danh máy tồn tại nhưng đã bị tắt.",
         data: {
           status: exactMachine.is_active ? "APPROVED" : "DISABLED",
           machine_code: exactMachine.machine_code,
@@ -564,7 +578,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException({
         success: false,
         code: "MACHINE_IDENTITY_MISMATCH",
-        message: "Serial or uid is already assigned to another machine identity.",
+        message: "Seri hoặc UID đã được gán cho định danh máy khác.",
         data: {
           status: "MISMATCH",
           matches: partialMachines
@@ -598,10 +612,10 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         code: statusCode,
         message:
           request.status === "APPROVED"
-            ? "Machine registration request was approved."
+            ? "Yêu cầu đăng ký máy đã được duyệt."
             : request.status === "REJECTED"
-              ? "Machine registration request was rejected."
-              : "Machine registration request is waiting for server identification.",
+              ? "Yêu cầu đăng ký máy đã bị từ chối."
+              : "Yêu cầu đăng ký máy đang chờ máy chủ định danh.",
         data: {
           status: request.status,
           request_id: request.request_id,
@@ -618,7 +632,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_IDENTITY_NOT_REGISTERED",
-      message: "Machine identity was not registered on the server.",
+      message: "Định danh máy chưa được đăng ký trên máy chủ.",
       data: {
         status: "NOT_REGISTERED",
         machine_code: null,
@@ -642,7 +656,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_REGISTER_REQUESTS_LISTED",
-      message: "Machine registration requests loaded.",
+      message: "Đã tải yêu cầu đăng ký máy.",
       data: requests
     };
   }
@@ -668,7 +682,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_LICENSE_INFO_EXPORTED",
-      message: "Machine identity file content was generated.",
+      message: "Đã tạo nội dung tệp định danh máy.",
       data: {
         file_name: fileName,
         content
@@ -683,7 +697,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_PENDING",
-        message: "Only pending registration requests can import a license."
+        message: "Chỉ yêu cầu đăng ký đang chờ mới được nhập giấy phép."
       });
     }
 
@@ -712,7 +726,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_LICENSE_ACTIVATED",
-      message: "Machine license imported. The registration request can now be approved.",
+      message: "Đã nhập giấy phép máy. Yêu cầu đăng ký hiện có thể được duyệt.",
       data: {
         request_id: request.request_id,
         status: request.status,
@@ -732,7 +746,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_FOUND",
-        message: "Machine registration request was not found."
+        message: "Không tìm thấy yêu cầu đăng ký máy."
       });
     }
 
@@ -740,7 +754,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_PENDING",
-        message: "Only pending registration requests can be approved."
+        message: "Chỉ yêu cầu đăng ký đang chờ mới được duyệt."
       });
     }
 
@@ -748,7 +762,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_LICENSE_NOT_IMPORTED",
-        message: "Machine registration license must be imported before approval."
+        message: "Phải nhập giấy phép đăng ký máy trước khi duyệt."
       });
     }
 
@@ -764,7 +778,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException({
         success: false,
         code: "MACHINE_REGISTER_DUPLICATE",
-        message: "Machine identity or machine code is already used.",
+        message: "Định danh máy hoặc mã máy đã được sử dụng.",
         data: {
           status: "DUPLICATE",
           duplicates
@@ -817,7 +831,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_REGISTER_APPROVED",
-      message: "Machine registration request approved and machine identified.",
+      message: "Đã duyệt yêu cầu đăng ký và định danh máy.",
       data: result
     };
   }
@@ -831,7 +845,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_FOUND",
-        message: "Machine registration request was not found."
+        message: "Không tìm thấy yêu cầu đăng ký máy."
       });
     }
 
@@ -839,7 +853,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_PENDING",
-        message: "Only pending registration requests can be rejected."
+        message: "Chỉ yêu cầu đăng ký đang chờ mới được từ chối."
       });
     }
 
@@ -864,7 +878,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_REGISTER_REJECTED",
-      message: "Machine registration request rejected.",
+      message: "Đã từ chối yêu cầu đăng ký máy.",
       data: request
     };
   }
@@ -913,7 +927,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_CONFIG_LOADED",
-      message: "Machine server configuration loaded.",
+      message: "Đã tải cấu hình máy chủ cho máy.",
       data: {
         machine,
         settings,
@@ -946,7 +960,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_COMMANDS_LISTED",
-      message: "Machine commands loaded.",
+      message: "Đã tải lệnh máy.",
       data: commands
     };
   }
@@ -983,7 +997,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_COMMAND_CREATED",
-      message: "Machine command created.",
+      message: "Đã tạo lệnh máy.",
       data: command
     };
   }
@@ -1019,7 +1033,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: "MACHINE_COMMANDS_POLLED",
-      message: "Pending machine commands loaded.",
+      message: "Đã tải lệnh máy đang chờ.",
       data: commands
     };
   }
@@ -1040,7 +1054,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_COMMAND_NOT_FOUND",
-        message: "Machine command was not found for this machine."
+        message: "Không tìm thấy lệnh cho máy này."
       });
     }
 
@@ -1056,13 +1070,13 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     await this.notifications.createEvent({
       notiCode: dto.status === "ACK" ? "LOCAL_POST_COMMAND_ACK" : "LOCAL_POST_COMMAND_FAILED",
       machineId: machine.id,
-      title: dto.status === "ACK" ? "Machine command acknowledged" : "Machine command failed",
+      title: dto.status === "ACK" ? "Máy đã xác nhận lệnh" : "Máy báo lệnh thất bại",
       titleVi: dto.status === "ACK" ? "Máy đã xác nhận lệnh" : "Máy báo lệnh thất bại",
       titleEn: dto.status === "ACK" ? "Machine command acknowledged" : "Machine command failed",
       message:
         dto.status === "ACK"
-          ? `Machine ${machine.machine_code} acknowledged command #${commandId}.`
-          : `Machine ${machine.machine_code} marked command #${commandId} as failed${dto.error_message ? `: ${dto.error_message}` : "."}`,
+          ? `Máy ${machine.machine_code} đã xác nhận lệnh #${commandId}.`
+          : `Máy ${machine.machine_code} báo lệnh #${commandId} thất bại${dto.error_message ? `: ${dto.error_message}` : "."}`,
       messageVi:
         dto.status === "ACK"
           ? `Máy ${machine.machine_code} đã xác nhận lệnh #${commandId}.`
@@ -1084,7 +1098,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return {
       success: true,
       code: dto.status === "ACK" ? "MACHINE_COMMAND_ACKED" : "MACHINE_COMMAND_FAILED",
-      message: dto.status === "ACK" ? "Machine command acknowledged." : "Machine command marked as failed.",
+      message: dto.status === "ACK" ? "Máy đã xác nhận lệnh." : "Lệnh máy đã được đánh dấu thất bại.",
       data: updatedCommand
     };
   }
@@ -1103,6 +1117,13 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       : machine;
 
     const now = new Date();
+    const previousSyncState = await this.prisma.machineSyncState.findUnique({
+      where: { machine_id: currentMachine.id },
+      select: {
+        connection_status: true,
+        last_seen_at: true
+      }
+    });
     const syncState = await this.prisma.machineSyncState.upsert({
       where: { machine_id: currentMachine.id },
       create: {
@@ -1139,20 +1160,200 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         machine_code: currentMachine.machine_code,
         event_type: "HEARTBEAT",
         ip_address: detectedIpAddress,
-        message: "Heartbeat received from local machine.",
+        message: "Đã nhận nhịp kết nối từ máy cục bộ.",
         payload_json: JSON.parse(JSON.stringify({ ...dto, detected_ip_address: detectedIpAddress }))
       }
     });
 
+    const runtimeSession = await this.ensureHeartbeatRuntimeSession(
+      currentMachine,
+      dto,
+      detectedIpAddress,
+      now,
+      previousSyncState?.connection_status ?? null
+    );
+
     return {
       success: true,
       code: "HEARTBEAT_ACCEPTED",
-      message: "Heartbeat accepted.",
+      message: "Đã nhận nhịp kết nối.",
       data: {
         machine: currentMachine,
-        sync_state: syncState
+        sync_state: syncState,
+        runtime_session: runtimeSession
       }
     };
+  }
+
+  private async ensureHeartbeatRuntimeSession(
+    machine: { id: number; machine_code: string },
+    dto: HeartbeatDto,
+    ipAddress: string | null,
+    now: Date,
+    previousConnectionStatus: string | null
+  ) {
+    const runningSession = await this.prisma.machineRuntimeSession.findFirst({
+      where: {
+        machine_id: machine.id,
+        status: "RUNNING",
+        ended_at: null
+      },
+      orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        current_product_id: true
+      }
+    });
+
+    if (!runningSession) {
+      await this.closeUnendedRuntimeSessionsForHeartbeat(machine.id, now);
+      return this.createHeartbeatRuntimeSession(machine, dto, ipAddress, now, previousConnectionStatus);
+    }
+
+    await this.prisma.machineRuntimeSession.update({
+      where: { id: runningSession.id },
+      data: {
+        status: "RUNNING",
+        total_count: dto.local_total_record ?? undefined,
+        ok_count: dto.local_ok_record ?? undefined,
+        ng_count: dto.local_ng_record ?? undefined,
+        disconnected_at: null,
+        last_seen_at: now
+      }
+    });
+
+    if (runningSession.current_product_id) {
+      await this.prisma.machineRuntimeProduct.update({
+        where: { id: runningSession.current_product_id },
+        data: {
+          total_count: dto.local_total_record ?? undefined,
+          ok_count: dto.local_ok_record ?? undefined,
+          ng_count: dto.local_ng_record ?? undefined
+        }
+      });
+    }
+
+    return this.prisma.machineRuntimeSession.findUnique({
+      where: { id: runningSession.id },
+      include: {
+        current_product: true
+      }
+    });
+  }
+
+  private async createHeartbeatRuntimeSession(
+    machine: { id: number; machine_code: string },
+    dto: HeartbeatDto,
+    ipAddress: string | null,
+    now: Date,
+    previousConnectionStatus: string | null
+  ) {
+    const session = await this.prisma.machineRuntimeSession.create({
+      data: {
+        session_code: this.buildRuntimeSessionCode(machine.machine_code),
+        machine_id: machine.id,
+        machine_code: machine.machine_code,
+        status: "RUNNING",
+        total_count: dto.local_total_record ?? 0,
+        ok_count: dto.local_ok_record ?? 0,
+        ng_count: dto.local_ng_record ?? 0,
+        started_at: now,
+        last_seen_at: now
+      }
+    });
+
+    const product = await this.prisma.machineRuntimeProduct.create({
+      data: {
+        session_id: session.id,
+        machine_id: machine.id,
+        machine_code: machine.machine_code,
+        product_code: "UNKNOWN",
+        total_count: dto.local_total_record ?? 0,
+        ok_count: dto.local_ok_record ?? 0,
+        ng_count: dto.local_ng_record ?? 0,
+        started_at: now
+      }
+    });
+
+    await this.prisma.machineRuntimeSession.update({
+      where: { id: session.id },
+      data: {
+        current_product_id: product.id
+      }
+    });
+
+    await this.prisma.machineRuntimeEvent.create({
+      data: {
+        session_id: session.id,
+        product_id: product.id,
+        machine_id: machine.id,
+        machine_code: machine.machine_code,
+        event_type: "STARTED",
+        product_code: "UNKNOWN",
+        total_count: dto.local_total_record ?? null,
+        ok_count: dto.local_ok_record ?? null,
+        ng_count: dto.local_ng_record ?? null,
+        ip_address: ipAddress,
+        payload_json: JSON.parse(
+          JSON.stringify({
+            source: "HEARTBEAT",
+            previous_connection_status: previousConnectionStatus,
+            detected_ip_address: ipAddress,
+            ...dto
+          })
+        )
+      }
+    });
+
+    return this.prisma.machineRuntimeSession.findUnique({
+      where: { id: session.id },
+      include: {
+        current_product: true
+      }
+    });
+  }
+
+  private async closeUnendedRuntimeSessionsForHeartbeat(machineId: number, now: Date) {
+    const sessions = await this.prisma.machineRuntimeSession.findMany({
+      where: {
+        machine_id: machineId,
+        ended_at: null,
+        status: {
+          in: ["DISCONNECTED", "ERROR"]
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (sessions.length === 0) {
+      return;
+    }
+
+    const sessionIds = sessions.map((session) => session.id);
+    await this.prisma.machineRuntimeProduct.updateMany({
+      where: {
+        session_id: {
+          in: sessionIds
+        },
+        ended_at: null
+      },
+      data: {
+        ended_at: now
+      }
+    });
+    await this.prisma.machineRuntimeSession.updateMany({
+      where: {
+        id: {
+          in: sessionIds
+        }
+      },
+      data: {
+        ended_at: now,
+        last_seen_at: now
+      }
+    });
   }
 
   private async ensureMachineById(id: number) {
@@ -1164,7 +1365,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_NOT_FOUND",
-        message: "Machine was not found."
+        message: "Không tìm thấy máy."
       });
     }
 
@@ -1180,7 +1381,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_NOT_FOUND",
-        message: "Machine code does not exist or is inactive."
+        message: "Mã máy không tồn tại hoặc đã bị tắt."
       });
     }
 
@@ -1190,7 +1391,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_IDENTITY_MISMATCH",
-        message: "Machine code, serial, and uid do not match the server identification."
+        message: "Mã máy, seri và UID không khớp định danh trên máy chủ."
       });
     }
 
@@ -1219,7 +1420,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_NOT_FOUND",
-        message: "Machine not found or inactive."
+        message: "Không tìm thấy máy hoặc máy đã bị tắt."
       });
     }
 
@@ -1239,7 +1440,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_IDENTITY_MISMATCH",
-        message: "Serial and uid do not match one approved machine identity.",
+        message: "Seri và UID không khớp với một định danh máy đã được duyệt.",
         data: {
           status: "MISMATCH",
           matches: partialMatches
@@ -1250,7 +1451,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     throw new NotFoundException({
       success: false,
       code: "MACHINE_NOT_FOUND",
-      message: "Machine not found or inactive."
+      message: "Không tìm thấy máy hoặc máy đã bị tắt."
     });
   }
 
@@ -1266,7 +1467,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException({
         success: false,
         code: "MACHINE_REGISTER_REQUEST_NOT_FOUND",
-        message: "Machine registration request was not found."
+        message: "Không tìm thấy yêu cầu đăng ký máy."
       });
     }
 
@@ -1357,6 +1558,11 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return `MREQ-${date}-${randomUUID().slice(0, 8).toUpperCase()}`;
   }
 
+  private buildRuntimeSessionCode(machineCode: string) {
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    return `RUN-${date}-${machineCode}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
   private async resolveHeartbeatDisconnectSeconds() {
     const settings = await this.prisma.serverSetting.findFirst({
       orderBy: { id: "asc" },
@@ -1396,7 +1602,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "MACHINE_LICENSE_INVALID",
-        message: "License file content is required."
+        message: "Cần có nội dung tệp giấy phép."
       });
     }
 
@@ -1444,7 +1650,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException({
         success: false,
         code: "PAYLOAD_INVALID",
-        message: `${fieldName} is required.`
+        message: `Bắt buộc nhập ${fieldName}.`
       });
     }
 

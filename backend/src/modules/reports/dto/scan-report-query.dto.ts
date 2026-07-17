@@ -43,7 +43,7 @@ function IsCsvOf(allowedValues: readonly string[], maxItems: number, validationO
         },
         defaultMessage(args: ValidationArguments) {
           const [allowed, max] = args.constraints as [readonly string[], number];
-          return `${args.property} must be a comma-separated list with at most ${max} unique values from: ${allowed.join(", ")}`;
+          return `${args.property} phải là danh sách phân tách bằng dấu phẩy, tối đa ${max} giá trị duy nhất thuộc: ${allowed.join(", ")}`;
         }
       }
     },
@@ -69,7 +69,7 @@ function IsCsvPositiveIntegerList(maxItems: number, validationOptions?: Validati
         },
         defaultMessage(args: ValidationArguments) {
           const [max] = args.constraints as [number];
-          return `${args.property} must contain at most ${max} unique positive integer ids`;
+          return `${args.property} chỉ được chứa tối đa ${max} ID số nguyên dương duy nhất`;
         }
       }
     },
@@ -95,7 +95,7 @@ function IsCsvMachineCodeList(maxItems: number, validationOptions?: ValidationOp
         },
         defaultMessage(args: ValidationArguments) {
           const [max] = args.constraints as [number];
-          return `${args.property} must contain at most ${max} unique machine codes using letters, numbers, underscore, or dash`;
+          return `${args.property} chỉ được chứa tối đa ${max} mã máy duy nhất, dùng chữ, số, dấu gạch dưới hoặc dấu gạch ngang`;
         }
       }
     },
@@ -114,13 +114,13 @@ export class ScanReportQueryDto {
   @ApiPropertyOptional({ example: "2026-07-01T00:00:00+07:00" })
   @Transform(normalizeOptionalQueryValue)
   @IsOptional()
-  @IsISO8601({ strict: true }, { message: "from must be a valid ISO-8601 datetime" })
+  @IsISO8601({ strict: true }, { message: "from phải là thời gian ISO-8601 hợp lệ" })
   from?: string;
 
   @ApiPropertyOptional({ example: "2026-07-15T23:59:59+07:00" })
   @Transform(normalizeOptionalQueryValue)
   @IsOptional()
-  @IsISO8601({ strict: true }, { message: "to must be a valid ISO-8601 datetime" })
+  @IsISO8601({ strict: true }, { message: "to phải là thời gian ISO-8601 hợp lệ" })
   to?: string;
 
   @ApiPropertyOptional({ description: "Comma-separated machine codes.", example: "LOCAL01,LOCAL02" })
@@ -153,7 +153,7 @@ export class ScanReportQueryDto {
   @ApiPropertyOptional({ description: "Include workbook summary sheet.", example: "true" })
   @Transform(normalizeOptionalQueryValue)
   @IsOptional()
-  @IsIn(["true", "false", "1", "0"], { message: "include_summary must be true, false, 1, or 0" })
+  @IsIn(["true", "false", "1", "0"], { message: "include_summary phải là true, false, 1 hoặc 0" })
   include_summary?: string;
 
   @ApiPropertyOptional({ enum: ["vi", "en"], example: "vi" })

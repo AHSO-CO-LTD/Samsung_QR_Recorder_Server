@@ -51,7 +51,7 @@ export class RuntimeService {
         machine_code: machine.machine_code,
         event_type: "CONNECTED",
         ip_address: ipAddress,
-        message: "WebSocket runtime connection accepted.",
+        message: "Đã chấp nhận kết nối phiên chạy WebSocket.",
         payload_json: this.toJson(dto)
       }
     });
@@ -66,7 +66,7 @@ export class RuntimeService {
     return {
       success: true,
       code: "RUNTIME_SOCKET_ACCEPTED",
-      message: "Machine runtime WebSocket accepted.",
+      message: "Đã chấp nhận WebSocket phiên chạy của máy.",
       data: {
         machine,
         server_time: now.toISOString()
@@ -100,7 +100,7 @@ export class RuntimeService {
         machine_code: machine.machine_code,
         event_type: "DISCONNECTED",
         ip_address: socketIp ?? null,
-        message: reason || "WebSocket runtime connection disconnected.",
+        message: reason || "Kết nối phiên chạy WebSocket đã ngắt.",
         payload_json: this.toJson({ reason })
       }
     });
@@ -108,11 +108,11 @@ export class RuntimeService {
     await this.notifications.createEvent({
       notiCode: "MACHINE_RUNTIME_DISCONNECTED",
       machineId: machine.id,
-      title: "Local machine disconnected",
-      titleVi: "Máy local mất kết nối",
+      title: "Máy cục bộ mất kết nối",
+      titleVi: "Máy cục bộ mất kết nối",
       titleEn: "Local machine disconnected",
-      message: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
-      messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối WebSocket runtime đã ngắt."}`,
+      message: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối phiên chạy WebSocket đã ngắt."}`,
+      messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối phiên chạy WebSocket đã ngắt."}`,
       messageEn: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
       payload: {
         machine_code: machine.machine_code,
@@ -221,7 +221,7 @@ export class RuntimeService {
       throw new BadRequestException({
         success: false,
         code: "RUNTIME_SESSION_NOT_FOUND",
-        message: "No open runtime session was found for this machine."
+        message: "Không tìm thấy phiên chạy đang mở cho máy này."
       });
     }
 
@@ -292,7 +292,7 @@ export class RuntimeService {
     return updatedSession;
   }
 
-  async listSessions(query: { take: number; machine_code?: string; status?: string }) {
+  async listSessions(query: { take: number; machine_code?: string; status?: string; include_scans?: boolean }) {
     const sessions = await (this.prisma as any).machineRuntimeSession.findMany({
       where: {
         machine_code: this.clean(query.machine_code) ?? undefined,
@@ -300,14 +300,16 @@ export class RuntimeService {
       },
       take: Math.min(Math.max(query.take || 50, 1), 200),
       orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
-      include: this.sessionInclude()
+      include: this.sessionInclude(query.include_scans)
     });
+    const normalizedSessions = await this.normalizeSessionCounters(sessions);
+    const sessionsWithLatestScan = await this.attachLatestMachineScanRecords(normalizedSessions);
 
     return {
       success: true,
       code: "RUNTIME_SESSIONS_LISTED",
-      message: "Machine runtime sessions loaded.",
-      data: sessions
+      message: "Đã tải phiên chạy của máy.",
+      data: sessionsWithLatestScan
     };
   }
 
@@ -317,14 +319,14 @@ export class RuntimeService {
       throw new BadRequestException({
         success: false,
         code: "RUNTIME_SESSION_NOT_FOUND",
-        message: "Runtime session was not found."
+        message: "Không tìm thấy phiên chạy."
       });
     }
 
     return {
       success: true,
       code: "RUNTIME_SESSION_LOADED",
-      message: "Machine runtime session loaded.",
+      message: "Đã tải phiên chạy của máy.",
       data: session
     };
   }
@@ -538,7 +540,7 @@ export class RuntimeService {
   }
 
   private async getSessionEntity(id: number) {
-    return (this.prisma as any).machineRuntimeSession.findUnique({
+    const session = await (this.prisma as any).machineRuntimeSession.findUnique({
       where: { id },
       include: {
         ...this.sessionInclude(),
@@ -572,10 +574,128 @@ export class RuntimeService {
         }
       }
     });
+    const normalizedSession = await this.normalizeSessionCounter(session);
+    if (!normalizedSession) {
+      return normalizedSession;
+    }
+
+    const [sessionWithLatestScan] = await this.attachLatestMachineScanRecords([normalizedSession]);
+    return sessionWithLatestScan ?? normalizedSession;
   }
 
-  private sessionInclude() {
-    return {
+  private async normalizeSessionCounter<T extends { id?: number; machine_id?: number } | null>(session: T): Promise<T> {
+    if (!session?.id) {
+      return session;
+    }
+
+    const [normalizedSession] = await this.normalizeSessionCounters([session]);
+    return normalizedSession as T;
+  }
+
+  private async normalizeSessionCounters<T extends { id?: number; machine_id?: number; total_count?: number; ok_count?: number; ng_count?: number }>(sessions: T[]): Promise<T[]> {
+    const sessionIds = sessions
+      .map((session) => session.id)
+      .filter((id): id is number => typeof id === "number");
+
+    if (sessionIds.length === 0) {
+      return sessions;
+    }
+
+    const baselineEvents = await (this.prisma as any).machineRuntimeEvent.findMany({
+      where: {
+        session_id: {
+          in: sessionIds
+        },
+        OR: [
+          { total_count: { not: null } },
+          { ok_count: { not: null } },
+          { ng_count: { not: null } }
+        ]
+      },
+      orderBy: [{ created_at: "asc" }, { id: "asc" }],
+      select: {
+        session_id: true,
+        total_count: true,
+        ok_count: true,
+        ng_count: true
+      }
+    });
+
+    const baselineBySessionId = new Map<number, { total_count?: number | null; ok_count?: number | null; ng_count?: number | null }>();
+    for (const event of baselineEvents) {
+      if (typeof event.session_id === "number" && !baselineBySessionId.has(event.session_id)) {
+        baselineBySessionId.set(event.session_id, event);
+      }
+    }
+
+    return sessions.map((session) => {
+      if (!session.id) {
+        return session;
+      }
+
+      const baseline = baselineBySessionId.get(session.id);
+      if (!baseline) {
+        return session;
+      }
+
+      return {
+        ...session,
+        total_count: this.subtractCounterBaseline(session.total_count, baseline.total_count),
+        ok_count: this.subtractCounterBaseline(session.ok_count, baseline.ok_count),
+        ng_count: this.subtractCounterBaseline(session.ng_count, baseline.ng_count)
+      };
+    });
+  }
+
+  private subtractCounterBaseline(current?: number, baseline?: number | null) {
+    if (typeof current !== "number" || !Number.isFinite(current)) {
+      return 0;
+    }
+    if (typeof baseline !== "number" || !Number.isFinite(baseline)) {
+      return Math.max(0, current);
+    }
+    return Math.max(0, current - baseline);
+  }
+
+  private async attachLatestMachineScanRecords<T extends { machine_id?: number }>(sessions: T[]): Promise<Array<T & { latest_scan_record?: unknown }>> {
+    const machineIds = Array.from(
+      new Set(
+        sessions
+          .map((session) => session.machine_id)
+          .filter((machineId): machineId is number => typeof machineId === "number")
+      )
+    );
+
+    if (machineIds.length === 0) {
+      return sessions.map((session) => ({ ...session, latest_scan_record: null }));
+    }
+
+    const latestScans = await this.prisma.scanRecord.findMany({
+      where: {
+        machine_id: {
+          in: machineIds
+        }
+      },
+      orderBy: [{ machine_id: "asc" }, { scan_at: "desc" }, { id: "desc" }],
+      distinct: ["machine_id"],
+      include: {
+        profile: {
+          include: {
+            chassis_code: true
+          }
+        }
+      }
+    });
+    const latestScanByMachineId = new Map(latestScans.map((scan) => [scan.machine_id, scan]));
+
+    return sessions.map((session) => ({
+      ...session,
+      latest_scan_record: typeof session.machine_id === "number" ? latestScanByMachineId.get(session.machine_id) ?? null : null
+    }));
+  }
+
+  private sessionInclude(includeScanRecords = false) {
+    const include: any = {
       machine: true,
       current_product: true,
       products: {
@@ -589,6 +709,22 @@ export class RuntimeService {
         }
       }
     };
+
+    if (includeScanRecords) {
+      include.scan_records = {
+        take: 300,
+        orderBy: { scan_at: "asc" },
+        include: {
+          profile: {
+            include: {
+              chassis_code: true
+            }
+          }
+        }
+      };
+    }
+
+    return include;
   }
 
   private async resolveProductIdentity(dto: { profile_id?: number; product_code?: string }, fallback?: { profile_id?: number | null; product_code?: string | null }): Promise<ProductIdentity> {

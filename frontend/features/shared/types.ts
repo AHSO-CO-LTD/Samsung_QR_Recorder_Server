@@ -345,6 +345,7 @@ export type MachineRuntimeSession = {
   products?: MachineRuntimeProduct[];
   events?: MachineRuntimeEvent[];
   scan_records?: ScanRecord[];
+  latest_scan_record?: ScanRecord | null;
   adjustments?: MachineRuntimeAdjustmentLog[];
 };
 

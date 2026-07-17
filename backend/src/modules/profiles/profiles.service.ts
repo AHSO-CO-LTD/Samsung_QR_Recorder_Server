@@ -32,7 +32,7 @@ export class ProfilesService {
     return {
       success: true,
       code: "PROFILES_LISTED",
-      message: "Product profiles loaded.",
+      message: "Đã tải danh sách hồ sơ sản phẩm.",
       data: profiles
     };
   }
@@ -43,7 +43,7 @@ export class ProfilesService {
     return {
       success: true,
       code: "PROFILE_LOADED",
-      message: "Product profile loaded.",
+      message: "Đã tải hồ sơ sản phẩm.",
       data: profile
     };
   }
@@ -89,7 +89,7 @@ export class ProfilesService {
     return {
       success: true,
       code: "PROFILE_CREATED",
-      message: "Product profile created.",
+      message: "Đã tạo hồ sơ sản phẩm.",
       data: profile
     };
   }
@@ -155,7 +155,7 @@ export class ProfilesService {
     return {
       success: true,
       code: "PROFILE_UPDATED",
-      message: "Product profile updated.",
+      message: "Đã cập nhật hồ sơ sản phẩm.",
       data: profile
     };
   }
@@ -179,7 +179,7 @@ export class ProfilesService {
     return {
       success: true,
       code: "PROFILE_DEACTIVATED",
-      message: "Product profile deactivated.",
+      message: "Đã tắt hồ sơ sản phẩm.",
       data: profile
     };
   }
@@ -194,7 +194,7 @@ export class ProfilesService {
       throw new NotFoundException({
         success: false,
         code: "PROFILE_NOT_FOUND",
-        message: "Product profile was not found."
+        message: "Không tìm thấy hồ sơ sản phẩm."
       });
     }
 
@@ -228,7 +228,7 @@ export class ProfilesService {
       throw new NotFoundException({
         success: false,
         code: "PROFILE_NOT_FOUND",
-        message: "Product profile was not found."
+        message: "Không tìm thấy hồ sơ sản phẩm."
       });
     }
   }
@@ -239,7 +239,7 @@ export class ProfilesService {
       throw new NotFoundException({
         success: false,
         code: "CHASSIS_CODE_NOT_FOUND",
-        message: "Active chassis code was not found."
+        message: "Không tìm thấy mã khung đang hoạt động."
       });
     }
   }
@@ -249,7 +249,7 @@ export class ProfilesService {
       throw new BadRequestException({
         success: false,
         code: "PROFILE_LED_CODES_REQUIRED",
-        message: "A product profile must use at least 1 LED code."
+        message: "Hồ sơ sản phẩm phải dùng ít nhất 1 mã LED."
       });
     }
 
@@ -257,7 +257,7 @@ export class ProfilesService {
       throw new BadRequestException({
         success: false,
         code: "PROFILE_LED_CODES_LIMIT_EXCEEDED",
-        message: `A product profile can use at most ${MAX_PROFILE_LED_CODES} LED codes.`
+        message: `Hồ sơ sản phẩm chỉ được dùng tối đa ${MAX_PROFILE_LED_CODES} mã LED.`
       });
     }
 
@@ -268,7 +268,7 @@ export class ProfilesService {
         throw new BadRequestException({
           success: false,
           code: "PROFILE_LED_SLOT_INVALID",
-          message: `LED slot must be between 1 and ${MAX_PROFILE_LED_CODES}.`
+          message: `Vị trí LED phải nằm trong khoảng 1 đến ${MAX_PROFILE_LED_CODES}.`
         });
       }
 
@@ -276,7 +276,7 @@ export class ProfilesService {
         throw new BadRequestException({
           success: false,
           code: "PROFILE_LED_CODE_DUPLICATED",
-          message: "A product profile cannot use the same LED code more than once."
+          message: "Hồ sơ sản phẩm không được dùng cùng một mã LED nhiều lần."
         });
       }
 
@@ -284,7 +284,7 @@ export class ProfilesService {
         throw new BadRequestException({
           success: false,
           code: "PROFILE_LED_SLOT_DUPLICATED",
-          message: "A product profile cannot use the same LED slot more than once."
+          message: "Hồ sơ sản phẩm không được dùng cùng một vị trí LED nhiều lần."
         });
       }
 
@@ -296,7 +296,7 @@ export class ProfilesService {
         throw new NotFoundException({
           success: false,
           code: "LED_CODE_NOT_FOUND",
-          message: `Active LED code was not found: ${item.led_code_id}.`
+          message: `Không tìm thấy mã LED đang hoạt động: ${item.led_code_id}.`
         });
       }
     }

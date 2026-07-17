@@ -42,7 +42,8 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navMonitoringDesc",
     icon: Gauge,
     items: [
-      { href: "/", key: "dashboard", descriptionKey: "dashboardNavDesc", icon: Gauge, permissionKey: "dashboard" }
+      { href: "/", key: "dashboard", descriptionKey: "dashboardNavDesc", icon: Gauge, permissionKey: "dashboard" },
+      { href: "/runtime-monitor", key: "runtimeMonitor", descriptionKey: "runtimeMonitorDesc", icon: Activity, permissionKey: "runtime" }
     ]
   },
   {

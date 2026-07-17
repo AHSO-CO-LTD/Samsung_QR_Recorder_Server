@@ -19,21 +19,22 @@ const copy = {
     loginDesc: "Kiểm tra bản mới trước khi đăng nhập.",
     check: "Kiểm tra",
     checking: "Đang kiểm tra...",
-    release: "Release",
-    update: "Update",
+    release: "Bản phát hành",
+    preRelease: "Bản thử nghiệm",
+    update: "Cập nhật",
     currentVersion: "Phiên bản hiện tại",
     source: "Nguồn cập nhật",
     mode: "Chế độ",
     packaged: "Bản cài đặt",
-    devRuntime: "Dev runtime",
+    devRuntime: "Môi trường dev",
     noSource: "Chưa cấu hình",
     noUpdate: "Chưa có bản mới hơn bản hiện tại.",
     notChecked: "Chưa kiểm tra cập nhật.",
-    unavailable: "Chức năng cập nhật chỉ hoạt động trong Electron desktop.",
+    unavailable: "Chức năng cập nhật chỉ hoạt động trong ứng dụng desktop Electron.",
     checkFailed: "Không kiểm tra được bản cập nhật.",
-    installUnavailable: "Chức năng cập nhật chỉ hoạt động trong Electron desktop.",
+    installUnavailable: "Chức năng cập nhật chỉ hoạt động trong ứng dụng desktop Electron.",
     installing: "Đang tải {tag}...",
-    installStarted: "Cập nhật đã bắt đầu. App sẽ đóng; mở lại app sau khi installer chạy xong.",
+    installStarted: "Cập nhật đã bắt đầu. Ứng dụng sẽ đóng; mở lại ứng dụng sau khi trình cài đặt chạy xong.",
     installFailed: "Không cài được bản cập nhật.",
     updateDisabledInDev: "Cài cập nhật chỉ khả dụng trong bản đã đóng gói."
   },
@@ -45,6 +46,7 @@ const copy = {
     check: "Check",
     checking: "Checking...",
     release: "Release",
+    preRelease: "Pre-release",
     update: "Update",
     currentVersion: "Current version",
     source: "Update source",
@@ -234,7 +236,7 @@ function UpdateReleaseRow({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="truncate text-sm font-semibold">{release.name}</p>
           <span className="rounded-sm border px-2 py-0.5 text-xs text-muted-foreground">{release.tagName}</span>
-          {release.prerelease ? <span className="rounded-sm border border-amber-500/40 px-2 py-0.5 text-xs">Pre-release</span> : null}
+          {release.prerelease ? <span className="rounded-sm border border-amber-500/40 px-2 py-0.5 text-xs">{text.preRelease}</span> : null}
         </div>
         <p className="text-xs text-muted-foreground">
           {release.assetName} | {formatFileSize(release.assetSize)}

@@ -11,12 +11,14 @@ export class RuntimeController {
   @ApiQuery({ name: "take", required: false, example: 100 })
   @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
   @ApiQuery({ name: "status", required: false, enum: ["RUNNING", "STOPPED", "DISCONNECTED", "ERROR"] })
+  @ApiQuery({ name: "include_scans", required: false, example: false })
   @ApiOkResponse({ description: "List machine runtime sessions captured by WebSocket." })
-  listSessions(@Query("take") take?: string, @Query("machine_code") machineCode?: string, @Query("status") status?: string) {
+  listSessions(@Query("take") take?: string, @Query("machine_code") machineCode?: string, @Query("status") status?: string, @Query("include_scans") includeScans?: string) {
     return this.runtimeService.listSessions({
       take: Number(take || 100),
       machine_code: machineCode,
-      status
+      status,
+      include_scans: includeScans === "true" || includeScans === "1"
     });
   }
 

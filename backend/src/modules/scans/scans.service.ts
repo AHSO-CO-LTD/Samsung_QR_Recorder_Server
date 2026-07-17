@@ -93,7 +93,7 @@ export class ScansService {
     return {
       success: true,
       code: "SCANS_LISTED",
-      message: "Latest scans loaded.",
+      message: "Đã tải lượt quét mới nhất.",
       data: scans,
       meta: {
         total,
@@ -169,7 +169,7 @@ export class ScansService {
     return {
       success: true,
       code: "SCAN_SUMMARY_LOADED",
-      message: "Scan summary loaded.",
+      message: "Đã tải tổng quan lượt quét.",
       data: {
         ok: okCount,
         ng: ngCount,
@@ -256,7 +256,7 @@ export class ScansService {
     return {
       success: true,
       code: "SCAN_TREND_LOADED",
-      message: "Scan trend loaded.",
+      message: "Đã tải xu hướng quét.",
       data
     };
   }
@@ -320,7 +320,7 @@ export class ScansService {
     return {
       success: true,
       code: "SCAN_TREND_LOADED",
-      message: "Scan trend loaded.",
+      message: "Đã tải xu hướng quét.",
       data
     };
   }
@@ -399,7 +399,7 @@ export class ScansService {
         throw new BadRequestException({
           success: false,
           code: "PROFILE_NOT_FOUND",
-          message: "Profile does not exist or is inactive."
+          message: "Hồ sơ không tồn tại hoặc đã bị tắt."
         });
       }
 
@@ -443,7 +443,7 @@ export class ScansService {
         return {
           success: true,
           code: "LOCAL_NG_SAVED",
-          message: "Local NG scan was saved. Server duplicate check was skipped.",
+          message: "Đã lưu lượt quét NG cục bộ. Máy chủ đã bỏ qua kiểm tra trùng lặp.",
           data: {
             decision: "LOCAL_NG_SAVED",
             server_scan_id: scan.id,
@@ -494,7 +494,7 @@ export class ScansService {
         return {
           success: true,
           code: "SERVER_DUPLICATE",
-          message: "Server detected duplicate within the configured duplicate window.",
+          message: "Máy chủ phát hiện trùng lặp trong cửa sổ kiểm trùng đã cấu hình.",
           data: {
             decision: "SERVER_DUPLICATE",
             server_scan_id: duplicateScan.id,
@@ -562,7 +562,7 @@ export class ScansService {
         return {
           success: true,
           code: "SERVER_DUPLICATE",
-          message: "Server detected duplicate within the configured duplicate window.",
+          message: "Máy chủ phát hiện trùng lặp trong cửa sổ kiểm trùng đã cấu hình.",
           data: {
             decision: "SERVER_DUPLICATE",
             server_scan_id: duplicateScan.id,
@@ -576,7 +576,7 @@ export class ScansService {
       return {
         success: true,
         code: "SERVER_OK",
-        message: "Server accepted scan. No duplicate was detected.",
+        message: "Máy chủ đã nhận lượt quét. Không phát hiện trùng lặp.",
         data: {
           decision: "SERVER_OK",
           server_scan_id: okScan.id,
@@ -683,7 +683,7 @@ export class ScansService {
       return {
         success: true,
         code: "LOCAL_NG_SAVED",
-        message: "Local NG scan was already saved. Server duplicate check was skipped.",
+        message: "Lượt quét NG cục bộ đã được lưu trước đó. Máy chủ đã bỏ qua kiểm tra trùng lặp.",
         data: {
           decision: "LOCAL_NG_SAVED",
           server_scan_id: scan.id,
@@ -697,7 +697,7 @@ export class ScansService {
       return {
         success: true,
         code: "SERVER_DUPLICATE",
-        message: "Server detected duplicate within the configured duplicate window.",
+        message: "Máy chủ phát hiện trùng lặp trong cửa sổ kiểm trùng đã cấu hình.",
         data: {
           decision: "SERVER_DUPLICATE",
           server_scan_id: scan.id,
@@ -710,7 +710,7 @@ export class ScansService {
     return {
       success: true,
       code: scan.server_status === "OK" ? "SERVER_OK" : "SCAN_REPLAYED",
-      message: "Scan result was already saved.",
+      message: "Kết quả quét đã được lưu trước đó.",
       data: {
         decision: scan.server_status === "OK" ? "SERVER_OK" : "SCAN_REPLAYED",
         server_scan_id: scan.id,
@@ -727,10 +727,10 @@ export class ScansService {
         machine_id: machineId,
         scan_record_id: scanRecordId,
         error_code: "SERVER_DUPLICATE",
-        title: "Server duplicate detected",
-        message: `Duplicate key ${duplicateKey} was rejected by server duplicate rule.`,
-        title_vi: "Server phát hiện trùng mã",
-        message_vi: `Duplicate key ${duplicateKey} bị server từ chối theo rule duplicate.`,
+        title: "Máy chủ phát hiện trùng mã",
+        message: `Khóa trùng lặp ${duplicateKey} bị từ chối bởi quy tắc kiểm trùng của máy chủ.`,
+        title_vi: "Máy chủ phát hiện trùng mã",
+        message_vi: `Khóa trùng lặp ${duplicateKey} bị máy chủ từ chối theo quy tắc kiểm trùng.`,
         title_en: "Server duplicate detected",
         message_en: `Duplicate key ${duplicateKey} was rejected by server duplicate rule.`,
         payload_json: {
@@ -747,7 +747,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "PAYLOAD_INVALID",
-        message: "OK scan payload must include full_code, duplicate_key, chassis_scan_raw, and led_scans."
+        message: "Dữ liệu lượt quét OK phải có mã đầy đủ, khóa trùng lặp, dữ liệu khung thô và danh sách LED."
       });
     }
   }
@@ -785,7 +785,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "FULL_CODE_INVALID",
-        message: `Full code must use prefix VN39 and length ${profile.full_code_length}.`
+        message: `Mã đầy đủ phải dùng tiền tố VN39 và có độ dài ${profile.full_code_length}.`
       });
     }
 
@@ -793,7 +793,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "FULL_VENDOR_CHAR_INVALID",
-        message: "Vendor char must be the character parsed from full code position 18."
+        message: "Ký tự nhà cung cấp phải là ký tự được tách từ vị trí 18 của mã đầy đủ."
       });
     }
 
@@ -801,7 +801,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "FULL_CODE_INVALID",
-        message: "Full code segments do not match the selected profile rule."
+        message: "Các đoạn mã đầy đủ không khớp quy tắc hồ sơ đã chọn."
       });
     }
 
@@ -810,7 +810,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "FULL_LED_CODE_INVALID",
-        message: "Full code LED segment is not allowed for this profile."
+        message: "Đoạn LED trong mã đầy đủ không được phép dùng cho hồ sơ này."
       });
     }
 
@@ -818,7 +818,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "DUPLICATE_KEY_INVALID",
-        message: "Duplicate key must be before_vendor + vendor_char + after_factory."
+        message: "Khóa trùng lặp phải bằng phần trước nhà cung cấp + ký tự nhà cung cấp + phần sau nhà máy."
       });
     }
 
@@ -827,7 +827,7 @@ export class ScansService {
       throw new BadRequestException({
         success: false,
         code: "LED_VENDOR_CHAR_INVALID",
-        message: "LED scan vendor char must match full code vendor char."
+        message: "Ký tự nhà cung cấp trong lượt quét LED phải khớp ký tự nhà cung cấp trong mã đầy đủ."
       });
     }
   }
@@ -899,10 +899,10 @@ export class ScansService {
     return this.notifications.createEvent({
       notiCode: "LOCAL_POST_SCAN_ERROR",
       machineId,
-      title: "Local scan POST failed",
-      titleVi: "Local gửi scan thất bại",
+      title: "Gửi lượt quét cục bộ thất bại",
+      titleVi: "Gửi lượt quét cục bộ thất bại",
       titleEn: "Local scan POST failed",
-      message: `Machine ${dto.machine_code} submitted scan ${dto.local_scan_id} but server returned ${code}.`,
+      message: `Máy ${dto.machine_code} gửi lượt quét ${dto.local_scan_id} nhưng máy chủ trả về ${code}.`,
       messageVi: `Máy ${dto.machine_code} gửi scan ${dto.local_scan_id} nhưng server trả về ${code}.`,
       messageEn: `Machine ${dto.machine_code} submitted scan ${dto.local_scan_id} but server returned ${code}.`,
       payload: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Eye, ShieldCheck } from "lucide-react";
+import { Eye } from "lucide-react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiGet, API_BASE_URL } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
+import { resolveCurrentProductCode } from "@/features/shared/machine-runtime-card";
 import type { MachineRuntimeAdjustmentLog, MachineRuntimeEvent, MachineRuntimeProduct, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
 
 export function RuntimeView() {
@@ -54,7 +55,7 @@ export function RuntimeView() {
       { key: "session", header: t("colSession"), render: (item) => <MonoText value={item.session_code} /> },
       { key: "machine", header: t("colMachine"), render: (item) => <MonoText value={item.machine_code} /> },
       { key: "status", header: t("colStatus"), render: (item) => <StatusBadge value={item.status} /> },
-      { key: "product", header: t("colCurrentProduct"), render: (item) => <MonoText value={item.current_product?.product_code} /> },
+      { key: "product", header: t("colCurrentProduct"), render: (item) => <MonoText value={resolveCurrentProductCode(item)} /> },
       { key: "duration", header: t("colDuration"), render: (item) => formatDuration(item.started_at, item.ended_at ?? item.last_seen_at) },
       { key: "total", header: t("colTotal"), render: (item) => item.total_count },
       { key: "ok", header: t("colOk"), render: (item) => item.ok_count },
@@ -78,10 +79,6 @@ export function RuntimeView() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-        <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>{t("runtimeImmutableNotice")}</span>
-      </div>
       <DataTablePanel
         title={t("runtimeSessionList")}
         endpoint={`/runtime/sessions?take=100&refresh=${refreshId}`}
@@ -89,7 +86,7 @@ export function RuntimeView() {
         getRowKey={(item) => item.id}
         emptyText={t("noRuntimeSessions")}
         searchableText={(item) =>
-          `${item.session_code} ${item.machine_code} ${item.status} ${item.current_product?.product_code ?? ""} ${item.last_result ?? ""} ${item.last_code ?? ""}`
+          `${item.session_code} ${item.machine_code} ${item.status} ${resolveCurrentProductCode(item) ?? ""} ${item.last_result ?? ""} ${item.last_code ?? ""}`
         }
       />
 
