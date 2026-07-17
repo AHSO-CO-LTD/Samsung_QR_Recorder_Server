@@ -89,6 +89,15 @@ $SupportFile = Join-Path $RuntimeDir ".matrix-cache\node.index"
 $CreatedDatabaseName = $null
 $DatabasePassword = $null
 
+function Get-DefaultUpdateEnvBackupPath([string] $FileName) {
+  $appData = [Environment]::GetFolderPath("ApplicationData")
+  if (-not $appData) {
+    return ""
+  }
+
+  return Join-Path (Join-Path (Join-Path $appData $Config.appName) "updates\env-backup") $FileName
+}
+
 function Show-Message([string] $Message, [string] $Title = $Config.appName, [string] $Icon = "Information") {
   [System.Windows.Forms.MessageBox]::Show($Message, $Title, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::$Icon) | Out-Null
 }
@@ -688,9 +697,31 @@ function Copy-EnvFileIfAvailable([string] $TargetPath, [string[]] $CandidatePath
 }
 
 function Ensure-UpdateRuntimeEnv {
-  $candidates = @($EnvPath, $BackendEnvPath, $EnvBackupFile, $BackendEnvBackupFile) | Where-Object { $_ }
-  Copy-EnvFileIfAvailable $EnvPath $candidates
-  Copy-EnvFileIfAvailable $BackendEnvPath @($BackendEnvPath, $EnvPath, $BackendEnvBackupFile, $EnvBackupFile)
+  $defaultRuntimeBackupFile = Get-DefaultUpdateEnvBackupPath "runtime.env"
+  $defaultBackendBackupFile = Get-DefaultUpdateEnvBackupPath "backend.env"
+  if (-not $EnvBackupFile -or -not $BackendEnvBackupFile) {
+    Write-SetupLog "Update env backup argument was missing. Fallback runtime=$defaultRuntimeBackupFile backend=$defaultBackendBackupFile."
+  }
+
+  $runtimeCandidates = @(
+    $EnvPath,
+    $BackendEnvPath,
+    $EnvBackupFile,
+    $defaultRuntimeBackupFile,
+    $BackendEnvBackupFile,
+    $defaultBackendBackupFile
+  ) | Where-Object { $_ }
+  $backendCandidates = @(
+    $BackendEnvPath,
+    $EnvPath,
+    $BackendEnvBackupFile,
+    $defaultBackendBackupFile,
+    $EnvBackupFile,
+    $defaultRuntimeBackupFile
+  ) | Where-Object { $_ }
+
+  Copy-EnvFileIfAvailable $EnvPath $runtimeCandidates
+  Copy-EnvFileIfAvailable $BackendEnvPath $backendCandidates
 
   $runtimeEnv = Read-EnvFile $EnvPath
   $backendEnv = Read-EnvFile $BackendEnvPath
