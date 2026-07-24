@@ -20,7 +20,7 @@ export class ScansController {
   @ApiTags("scan-dashboard")
   @ApiQuery({ name: "from", required: false, example: "2026-07-10T00:00:00+07:00" })
   @ApiQuery({ name: "to", required: false, example: "2026-07-10T23:59:59+07:00" })
-  @ApiOkResponse({ description: "Get scan summary counters for dashboard/reporting." })
+  @ApiOkResponse({ description: "Get scan summary counters. Without a range, daily counters use the current GMT+7 day." })
   getScanSummary(@Query("from") from?: string, @Query("to") to?: string) {
     return this.scansService.getScanSummary({ from, to });
   }

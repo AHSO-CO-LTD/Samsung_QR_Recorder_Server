@@ -82,7 +82,7 @@ export class NotificationsService {
     return {
       success: true,
       code: "NOTIFICATIONS_LISTED",
-      message: "Notification events loaded.",
+      message: "Đã tải sự kiện thông báo.",
       data: notifications
     };
   }
@@ -112,7 +112,7 @@ export class NotificationsService {
     return {
       success: true,
       code: "NOTIFICATION_STATUS_UPDATED",
-      message: "Notification status updated.",
+      message: "Đã cập nhật trạng thái thông báo.",
       data: event
     };
   }
@@ -125,7 +125,7 @@ export class NotificationsService {
     return {
       success: true,
       code: "NOTIFICATION_TEMPLATES_LISTED",
-      message: "Notification templates loaded.",
+      message: "Đã tải mẫu thông báo.",
       data: templates
     };
   }
@@ -156,7 +156,7 @@ export class NotificationsService {
     return {
       success: true,
       code: "NOTIFICATION_TEMPLATE_CREATED",
-      message: "Notification template created.",
+      message: "Đã tạo mẫu thông báo.",
       data: template
     };
   }
@@ -189,7 +189,7 @@ export class NotificationsService {
     return {
       success: true,
       code: "NOTIFICATION_TEMPLATE_UPDATED",
-      message: "Notification template updated.",
+      message: "Đã cập nhật mẫu thông báo.",
       data: template
     };
   }
@@ -214,7 +214,7 @@ export class NotificationsService {
     return {
       success: true,
       code: "NOTIFICATION_TEMPLATE_DEACTIVATED",
-      message: "Notification template deactivated.",
+      message: "Đã tắt mẫu thông báo.",
       data: template
     };
   }
@@ -228,7 +228,7 @@ export class NotificationsService {
       throw new NotFoundException({
         success: false,
         code: "NOTIFICATION_NOT_FOUND",
-        message: "Notification event was not found."
+        message: "Không tìm thấy sự kiện thông báo."
       });
     }
 
@@ -244,7 +244,7 @@ export class NotificationsService {
       throw new NotFoundException({
         success: false,
         code: "NOTIFICATION_TEMPLATE_NOT_FOUND",
-        message: "Notification template was not found."
+        message: "Không tìm thấy mẫu thông báo."
       });
     }
 

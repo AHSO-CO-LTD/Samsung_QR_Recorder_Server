@@ -24,7 +24,7 @@ export class MachinesController {
 
   @Get()
   @ApiTags("machines-admin")
-  @ApiOkResponse({ description: "List registered server machines." })
+  @ApiOkResponse({ description: "Liệt kê các máy đã đăng ký trên máy chủ." })
   listMachines() {
     return this.machinesService.listMachines();
   }
@@ -32,7 +32,7 @@ export class MachinesController {
   @Post("register-request")
   @ApiTags("local-machine")
   @Public()
-  @ApiOkResponse({ description: "Send a pairing/identification request from a new local machine." })
+  @ApiOkResponse({ description: "Gửi yêu cầu ghép cặp/định danh từ máy cục bộ mới." })
   createRegistrationRequest(@Body() dto: CreateMachineRegistrationRequestDto, @Req() request: RequestWithClientIp) {
     return this.machinesService.createRegistrationRequest(dto, getClientIp(request));
   }
@@ -40,7 +40,7 @@ export class MachinesController {
   @Get("register-requests/:request_id/status")
   @ApiTags("local-machine")
   @Public()
-  @ApiOkResponse({ description: "Check whether a local machine registration request has been approved or rejected." })
+  @ApiOkResponse({ description: "Kiểm tra yêu cầu đăng ký máy cục bộ đã được duyệt hay bị từ chối." })
   getRegistrationRequestStatus(@Param("request_id") requestId: string, @Query() query: CheckMachineRegistrationStatusQueryDto) {
     return this.machinesService.getRegistrationRequestStatus(requestId, query);
   }
@@ -48,7 +48,7 @@ export class MachinesController {
   @Get("identity/status")
   @ApiTags("local-machine")
   @Public()
-  @ApiOkResponse({ description: "Resolve the approved machine identity from stable local serial and uid." })
+  @ApiOkResponse({ description: "Xác định định danh máy đã duyệt từ seri và UID cục bộ ổn định." })
   getMachineIdentityStatus(@Query() query: ResolveMachineIdentityQueryDto) {
     return this.machinesService.getMachineIdentityStatus(query);
   }
@@ -57,7 +57,7 @@ export class MachinesController {
   @ApiTags("machines-admin")
   @ApiQuery({ name: "take", required: false, example: 50 })
   @ApiQuery({ name: "status", required: false, enum: ["PENDING", "APPROVED", "REJECTED"] })
-  @ApiOkResponse({ description: "List machine registration requests waiting for server identification." })
+  @ApiOkResponse({ description: "Liệt kê yêu cầu đăng ký máy đang chờ máy chủ định danh." })
   listRegistrationRequests(@Query("take") take?: string, @Query("status") status?: "PENDING" | "APPROVED" | "REJECTED") {
     return this.machinesService.listRegistrationRequests(Number(take || 50), status);
   }
@@ -65,7 +65,7 @@ export class MachinesController {
   @Get("register-requests/:id/license-export")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "DEV")
-  @ApiOkResponse({ description: "Export raw serial/uid information for external license generation." })
+  @ApiOkResponse({ description: "Xuất thông tin seri/UID thô để tạo giấy phép bên ngoài." })
   exportRegistrationLicenseInfo(@Param("id", ParseIntPipe) id: number) {
     return this.machinesService.exportRegistrationLicenseInfo(id);
   }
@@ -73,7 +73,7 @@ export class MachinesController {
   @Post("register-requests/:id/license/import")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "DEV")
-  @ApiOkResponse({ description: "Import a raw license file and verify it against the registration serial/uid." })
+  @ApiOkResponse({ description: "Nhập tệp giấy phép thô và kiểm tra với seri/UID đăng ký." })
   importRegistrationLicense(
     @Param("id", ParseIntPipe) id: number,
     @Body() dto: ImportMachineRegistrationLicenseDto,
@@ -85,7 +85,7 @@ export class MachinesController {
   @Post("register-requests/:id/approve")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "ENGINEER", "DEV")
-  @ApiOkResponse({ description: "Approve a local machine registration request and create the official machine identity." })
+  @ApiOkResponse({ description: "Duyệt yêu cầu đăng ký máy cục bộ và tạo định danh máy chính thức." })
   approveRegistrationRequest(
     @Param("id", ParseIntPipe) id: number,
     @Body() dto: ApproveMachineRegistrationRequestDto,
@@ -97,7 +97,7 @@ export class MachinesController {
   @Post("register-requests/:id/reject")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "ENGINEER", "DEV")
-  @ApiOkResponse({ description: "Reject a local machine registration request." })
+  @ApiOkResponse({ description: "Từ chối yêu cầu đăng ký máy cục bộ." })
   rejectRegistrationRequest(
     @Param("id", ParseIntPipe) id: number,
     @Body() dto: RejectMachineRegistrationRequestDto,
@@ -109,7 +109,7 @@ export class MachinesController {
   @Post()
   @ApiTags("machines-admin")
   @Roles("ADMIN", "ENGINEER", "DEV")
-  @ApiOkResponse({ description: "Create a local machine registration." })
+  @ApiOkResponse({ description: "Tạo đăng ký máy cục bộ." })
   createMachine(@Body() dto: CreateMachineDto, @Req() request: AuthenticatedRequest) {
     return this.machinesService.createMachine(dto, request.user?.id);
   }
@@ -117,7 +117,7 @@ export class MachinesController {
   @Patch(":id")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "ENGINEER", "DEV")
-  @ApiOkResponse({ description: "Update a local machine registration." })
+  @ApiOkResponse({ description: "Cập nhật đăng ký máy cục bộ." })
   updateMachine(@Param("id", ParseIntPipe) id: number, @Body() dto: UpdateMachineDto, @Req() request: AuthenticatedRequest) {
     return this.machinesService.updateMachine(id, dto, request.user?.id);
   }
@@ -125,7 +125,7 @@ export class MachinesController {
   @Delete(":id")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "ENGINEER", "DEV")
-  @ApiOkResponse({ description: "Deactivate a local machine registration." })
+  @ApiOkResponse({ description: "Vô hiệu hóa đăng ký máy cục bộ." })
   deactivateMachine(@Param("id", ParseIntPipe) id: number, @Req() request: AuthenticatedRequest) {
     return this.machinesService.deactivateMachine(id, request.user?.id);
   }
@@ -133,7 +133,7 @@ export class MachinesController {
   @Delete(":id/purge")
   @ApiTags("machines-admin")
   @Roles("ADMIN", "DEV")
-  @ApiOkResponse({ description: "Permanently delete a local machine only when it has no scan records." })
+  @ApiOkResponse({ description: "Xóa vĩnh viễn máy cục bộ chỉ khi máy chưa có bản ghi quét." })
   deleteMachineIfNoScans(@Param("id", ParseIntPipe) id: number, @Req() request: AuthenticatedRequest) {
     return this.machinesService.deleteMachineIfNoScans(id, request.user?.id);
   }
@@ -143,7 +143,7 @@ export class MachinesController {
   @Public()
   @ApiQuery({ name: "serial", required: true, example: "SN-LOCAL01-2026" })
   @ApiQuery({ name: "uid", required: true, example: "UID-8f8f2f1c-local01" })
-  @ApiOkResponse({ description: "Load server config by stable local serial and uid." })
+  @ApiOkResponse({ description: "Tải cấu hình máy chủ theo seri và UID cục bộ ổn định." })
   getMachineConfigByIdentity(@Query("serial") serial: string, @Query("uid") uid: string) {
     return this.machinesService.getMachineConfigByIdentity({ serial, uid });
   }
@@ -151,7 +151,7 @@ export class MachinesController {
   @Get(":id/commands")
   @ApiTags("machine-commands-admin")
   @ApiQuery({ name: "take", required: false, example: 50 })
-  @ApiOkResponse({ description: "List queued commands for one machine." })
+  @ApiOkResponse({ description: "Liệt kê lệnh đang xếp hàng cho một máy." })
   listCommands(@Param("id", ParseIntPipe) id: number, @Query("take") take?: string) {
     return this.machinesService.listCommands(id, Number(take || 50));
   }
@@ -159,7 +159,7 @@ export class MachinesController {
   @Post(":id/commands")
   @ApiTags("machine-commands-admin")
   @Roles("ADMIN", "ENGINEER", "DEV")
-  @ApiOkResponse({ description: "Queue a command for a local machine to poll." })
+  @ApiOkResponse({ description: "Xếp hàng lệnh để máy cục bộ lấy về." })
   createCommand(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateMachineCommandDto, @Req() request: AuthenticatedRequest) {
     return this.machinesService.createCommand(id, dto, request.user?.id);
   }
@@ -170,7 +170,7 @@ export class MachinesController {
   @ApiQuery({ name: "take", required: false, example: 20 })
   @ApiQuery({ name: "serial", required: true, example: "SN-LOCAL01-2026" })
   @ApiQuery({ name: "uid", required: true, example: "UID-8f8f2f1c-local01" })
-  @ApiOkResponse({ description: "Poll pending commands by stable local serial and uid." })
+  @ApiOkResponse({ description: "Lấy lệnh đang chờ theo seri và UID cục bộ ổn định." })
   pollCommandsByIdentity(@Query("serial") serial: string, @Query("uid") uid: string, @Query("take") take?: string) {
     return this.machinesService.pollCommandsByIdentity(Number(take || 20), { serial, uid });
   }
@@ -178,7 +178,7 @@ export class MachinesController {
   @Post("commands/:id/ack")
   @ApiTags("local-machine")
   @Public()
-  @ApiOkResponse({ description: "Acknowledge or fail a command from a local machine." })
+  @ApiOkResponse({ description: "Xác nhận hoặc báo lỗi lệnh từ máy cục bộ." })
   ackCommand(@Param("id", ParseIntPipe) id: number, @Body() dto: AckMachineCommandDto) {
     return this.machinesService.ackCommand(id, dto);
   }
@@ -186,7 +186,7 @@ export class MachinesController {
   @Post("heartbeat")
   @ApiTags("local-machine")
   @Public()
-  @ApiOkResponse({ description: "Update current connection/sync state for a local machine." })
+  @ApiOkResponse({ description: "Cập nhật trạng thái kết nối/đồng bộ hiện tại cho máy cục bộ." })
   heartbeat(@Body() dto: HeartbeatDto, @Req() request: RequestWithClientIp) {
     return this.machinesService.heartbeat(dto, getClientIp(request));
   }

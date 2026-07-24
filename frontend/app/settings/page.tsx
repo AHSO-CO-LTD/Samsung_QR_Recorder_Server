@@ -1,7 +1,5 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -49,12 +47,6 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <a href="http://127.0.0.1:3979/api/docs" target="_blank" rel="noreferrer">
-              <Button className="w-full">
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                {t("openSwagger")}
-              </Button>
-            </a>
             <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div className="flex min-w-0 items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm font-medium">
                 <span className="truncate">{t("duplicateWindow")}</span>

@@ -61,6 +61,10 @@ export function getScreenPermissionKeyForPath(pathname: string): ScreenPermissio
     return "dashboard";
   }
 
+  if (pathname === "/runtime-monitor" || pathname.startsWith("/runtime-monitor/")) {
+    return "runtime";
+  }
+
   const routeEntries = Object.entries(routeByPermissionKey)
     .filter((entry): entry is [ScreenPermissionKey, string] => Boolean(entry[1]))
     .sort((left, right) => right[1].length - left[1].length);

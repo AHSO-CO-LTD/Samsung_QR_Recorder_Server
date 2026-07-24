@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiGet, type ApiPaginationMeta } from "@/lib/api";
+import { formatAppDateTime } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,9 @@ type DataTablePanelProps<T> = {
   searchPlaceholder?: string;
   emptyText?: string;
   singleExpandedRow?: boolean;
+  autoRefreshMs?: number;
+  refreshSignal?: string | number;
+  showTopHorizontalScrollbar?: boolean;
   pagination?: {
     pageSize: number;
     mode?: "client" | "server";
@@ -58,6 +62,9 @@ export function DataTablePanel<T>({
   searchPlaceholder,
   emptyText,
   singleExpandedRow,
+  autoRefreshMs,
+  refreshSignal,
+  showTopHorizontalScrollbar,
   pagination
 }: DataTablePanelProps<T>) {
   const { t } = useI18n();
@@ -68,6 +75,7 @@ export function DataTablePanel<T>({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [paginationMeta, setPaginationMeta] = useState<ApiPaginationMeta | null>(null);
+  const previousRefreshSignal = useRef(refreshSignal);
   const trimmedSearch = searchText.trim();
   const normalizedSearch = trimmedSearch.toLowerCase();
   const pageSize = Math.max(pagination?.pageSize ?? 0, 0);
@@ -81,9 +89,11 @@ export function DataTablePanel<T>({
       })
     : endpoint;
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const load = useCallback(async (background = false) => {
+    if (!background) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const result = await apiGet<T[] | T>(requestEndpoint);
       const nextItems = Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
@@ -91,18 +101,46 @@ export function DataTablePanel<T>({
       setExpandedRows(new Set());
       setPaginationMeta(isServerPaginated ? (result.meta ?? null) : null);
       onData?.(nextItems);
+      setError(null);
     } catch (currentError) {
       const message = currentError instanceof Error ? currentError.message : t("error");
-      setError(message);
-      toast.error(message);
+      if (!background) {
+        setError(message);
+        toast.error(message);
+      }
     } finally {
-      setIsLoading(false);
+      if (!background) {
+        setIsLoading(false);
+      }
     }
   }, [requestEndpoint, isServerPaginated, onData, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!autoRefreshMs || autoRefreshMs <= 0) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void load(true);
+    }, autoRefreshMs);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [autoRefreshMs, load]);
+
+  useEffect(() => {
+    if (previousRefreshSignal.current === refreshSignal) {
+      return;
+    }
+
+    previousRefreshSignal.current = refreshSignal;
+    void load(true);
+  }, [load, refreshSignal]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -221,8 +259,8 @@ export function DataTablePanel<T>({
         ) : null}
         {renderPaginationControls("top")}
         {!isLoading && !error && visibleItems.length > 0 ? (
-          <div className="overflow-x-auto">
-            <Table>
+          <div>
+            <Table showTopScrollbar={showTopHorizontalScrollbar} topScrollbarLabel={t("tableTopScrollbar")}>
               <TableHeader>
                 <TableRow>
                   {hasExpandedRows ? (
@@ -361,7 +399,7 @@ export function DateText({ value }: { value?: string | Date | null }) {
     return <span className="text-muted-foreground">-</span>;
   }
 
-  return <span className="whitespace-nowrap">{new Date(value).toLocaleString(locale === "vi" ? "vi-VN" : "en-US")}</span>;
+  return <span className="whitespace-nowrap">{formatAppDateTime(value, locale)}</span>;
 }
 
 export function MonoText({ value }: { value?: string | number | null }) {

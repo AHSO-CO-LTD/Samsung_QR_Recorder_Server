@@ -12,7 +12,7 @@ export class HealthController {
     return {
       success: true,
       code: "HEALTH_OK",
-      message: "Server API is running.",
+      message: "API máy chủ đang chạy.",
       data: {
         status: "ok",
         service: "qr-recorder-server-api",

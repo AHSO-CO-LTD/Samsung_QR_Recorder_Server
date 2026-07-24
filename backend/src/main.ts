@@ -8,7 +8,7 @@ import { AppModule } from "./app.module";
 
 const runtimeRequire = createRequire(__filename);
 const backendPackage = runtimeRequire("../package.json") as { version?: string };
-const apiVersion = backendPackage.version?.trim() || "1.0.2";
+const apiVersion = backendPackage.version?.trim() || "1.1.1";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -30,17 +30,17 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("QR Recorder Server API")
-    .setDescription("API contract for the Electron server app and Python local machines.")
+    .setDescription("Hợp đồng API cho ứng dụng máy chủ Electron và máy cục bộ Python.")
     .setVersion(apiVersion)
     .addBearerAuth()
-    .addTag("local-machine", "Endpoints called by Python local machines over LAN")
-    .addTag("machines-admin", "Machine registration and management endpoints for the server UI")
-    .addTag("machine-commands-admin", "Endpoints used by the server UI to inspect and queue machine commands")
-    .addTag("machine-runtime", "Runtime WebSocket session history and monitoring endpoints")
-    .addTag("scan-dashboard", "Scan history and summary endpoints for the server UI")
-    .addTag("reports", "Excel report export endpoints for the server UI")
-    .addTag("sync-dashboard", "Sync batch and request log endpoints for the server UI")
-    .addTag("server-ui", "Endpoints used by the Electron/Next.js UI")
+    .addTag("local-machine", "Điểm cuối do máy cục bộ Python gọi qua LAN")
+    .addTag("machines-admin", "Điểm cuối đăng ký và quản lý máy cho giao diện máy chủ")
+    .addTag("machine-commands-admin", "Điểm cuối để giao diện máy chủ xem và xếp hàng lệnh máy")
+    .addTag("machine-runtime", "Điểm cuối lịch sử phiên WebSocket và giám sát phiên chạy")
+    .addTag("scan-dashboard", "Điểm cuối lịch sử quét và tổng quan cho giao diện máy chủ")
+    .addTag("reports", "Điểm cuối xuất báo cáo Excel cho giao diện máy chủ")
+    .addTag("sync-dashboard", "Điểm cuối đợt đồng bộ và nhật ký yêu cầu cho giao diện máy chủ")
+    .addTag("server-ui", "Điểm cuối dùng bởi giao diện Electron/Next.js")
     .build();
 
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);

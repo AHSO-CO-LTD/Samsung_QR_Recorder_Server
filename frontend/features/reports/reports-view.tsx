@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiDownloadBlob, apiGet } from "@/lib/api";
+import { appDatetimeLocalToIso, toAppDatetimeLocal } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
@@ -113,20 +114,20 @@ const reportStatuses: ReportStatus[] = ["OK", "NG", "PENDING"];
 const copy = {
   vi: {
     title: "Báo cáo Excel",
-    desc: "Chọn khoảng thời gian, máy, profile, trạng thái và các cột cần xuất.",
+    desc: "Chọn khoảng thời gian, máy, hồ sơ, trạng thái và các cột cần xuất.",
     filterTitle: "Bộ lọc báo cáo",
     fieldMachine: "Máy",
-    fieldProfile: "Profile",
+    fieldProfile: "Hồ sơ",
     allMachines: "Tất cả máy",
-    allProfiles: "Tất cả profile",
+    allProfiles: "Tất cả hồ sơ",
     from: "Từ ngày",
     to: "Đến ngày",
     statusTitle: "Trạng thái cần xuất",
-    statusDesc: "Bỏ chọn trạng thái nào thì record trạng thái đó sẽ không có trong file.",
-    includeSummary: "Thêm sheet tổng quan",
-    includeSummaryDesc: "Sheet tổng quan ghi bộ lọc và tổng OK/NG/PENDING của file.",
+    statusDesc: "Bỏ chọn trạng thái nào thì bản ghi trạng thái đó sẽ không có trong tệp.",
+    includeSummary: "Thêm trang tổng quan",
+    includeSummaryDesc: "Trang tổng quan ghi bộ lọc và tổng OK/NG/PENDING của tệp.",
     columnsTitle: "Thông số xuất ra",
-    columnsDesc: "Tích các cột người dùng muốn thấy trong file Excel.",
+    columnsDesc: "Tích các cột người dùng muốn thấy trong tệp Excel.",
     selectAll: "Chọn tất cả",
     clearAll: "Bỏ chọn",
     resetFilters: "Xóa lọc",
@@ -134,7 +135,7 @@ const copy = {
     exporting: "Đang xuất...",
     exportDone: "Đã xuất báo cáo Excel.",
     exportFailed: "Không xuất được báo cáo.",
-    filtersLoadFailed: "Không tải được máy/profile.",
+    filtersLoadFailed: "Không tải được máy/hồ sơ.",
     noColumn: "Chọn ít nhất một cột trước khi xuất.",
     noStatus: "Chọn ít nhất một trạng thái trước khi xuất.",
     invalidRange: "Từ ngày phải nhỏ hơn đến ngày.",
@@ -144,45 +145,45 @@ const copy = {
     result: "Kết quả OK/NG",
     codes: "Toàn bộ mã",
     led: "Chi tiết LED",
-    runtime: "Runtime/server trace",
-    scan_record_id: "ID record",
-    scan_at: "Thời gian scan",
+    runtime: "Dấu vết phiên/máy chủ",
+    scan_record_id: "ID bản ghi",
+    scan_at: "Thời gian quét",
     machine_code: "Mã máy",
     machine_name: "Tên máy",
-    line_name: "Line",
+    line_name: "Dây chuyền",
     station_name: "Trạm",
-    profile: "Profile",
-    profile_version: "Version profile",
-    local_scan_id: "Local scan ID",
-    local_status: "Local",
-    server_status: "Server",
-    final_status: "Final",
-    ng_stage: "NG stage",
+    profile: "Hồ sơ",
+    profile_version: "Phiên bản hồ sơ",
+    local_scan_id: "ID quét cục bộ",
+    local_status: "Cục bộ",
+    server_status: "Máy chủ",
+    final_status: "Cuối cùng",
+    ng_stage: "Bước NG",
     ng_reason: "Lý do NG",
-    full_code_raw: "Full code",
-    chassis_scan_raw: "Chassis raw",
-    full_chassis_code: "Chassis",
-    full_before_vendor: "Before vendor",
-    full_vendor_char: "Vendor char",
-    full_led_code: "LED trong full code",
-    full_factory_code: "Factory",
-    full_after_factory: "After factory",
-    duplicate_key: "Duplicate key",
-    led_slot_1_code: "LED 1 code",
-    led_slot_1_raw: "LED 1 raw",
-    led_slot_1_lot_no: "LED 1 lot",
-    led_slot_1_status: "LED 1 local",
+    full_code_raw: "Mã đầy đủ",
+    chassis_scan_raw: "Dữ liệu khung thô",
+    full_chassis_code: "Mã khung",
+    full_before_vendor: "Trước nhà cung cấp",
+    full_vendor_char: "Ký tự nhà cung cấp",
+    full_led_code: "LED trong mã đầy đủ",
+    full_factory_code: "Nhà máy",
+    full_after_factory: "Sau nhà máy",
+    duplicate_key: "Khóa trùng lặp",
+    led_slot_1_code: "Mã LED 1",
+    led_slot_1_raw: "Dữ liệu thô LED 1",
+    led_slot_1_lot_no: "Lô LED 1",
+    led_slot_1_status: "Cục bộ LED 1",
     led_slot_1_ng_reason: "LED 1 NG",
-    led_slot_2_code: "LED 2 code",
-    led_slot_2_raw: "LED 2 raw",
-    led_slot_2_lot_no: "LED 2 lot",
-    led_slot_2_status: "LED 2 local",
+    led_slot_2_code: "Mã LED 2",
+    led_slot_2_raw: "Dữ liệu thô LED 2",
+    led_slot_2_lot_no: "Lô LED 2",
+    led_slot_2_status: "Cục bộ LED 2",
     led_slot_2_ng_reason: "LED 2 NG",
-    led_all_raw: "Tất cả LED raw",
-    runtime_session_code: "Runtime session",
+    led_all_raw: "Tất cả dữ liệu LED thô",
+    runtime_session_code: "Phiên chạy",
     runtime_product_code: "Mã đang chạy",
-    sync_batch_id: "Sync batch ID",
-    created_at: "Server ghi lúc"
+    sync_batch_id: "ID đợt đồng bộ",
+    created_at: "Máy chủ ghi lúc"
   },
   en: {
     title: "Excel reports",
@@ -266,8 +267,8 @@ export function ReportsView() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [machineCode, setMachineCode] = useState("");
   const [profileId, setProfileId] = useState("");
-  const [fromDate, setFromDate] = useState(toDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
-  const [toDate, setToDate] = useState(toDatetimeLocal(new Date()));
+  const [fromDate, setFromDate] = useState(toAppDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+  const [toDate, setToDate] = useState(toAppDatetimeLocal(new Date()));
   const [selectedStatuses, setSelectedStatuses] = useState<Set<ReportStatus>>(new Set(["OK", "NG"]));
   const [selectedColumns, setSelectedColumns] = useState<Set<ReportColumnKey>>(new Set(defaultSelectedColumns));
   const [includeSummary, setIncludeSummary] = useState(true);
@@ -344,7 +345,7 @@ export function ReportsView() {
       toast.warning(text.noStatus);
       return;
     }
-    if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+    if (fromDate && toDate && appDatetimeLocalToIso(fromDate) > appDatetimeLocalToIso(toDate)) {
       toast.warning(text.invalidRange);
       return;
     }
@@ -359,8 +360,8 @@ export function ReportsView() {
         locale
       });
 
-      if (fromDate) params.set("from", new Date(fromDate).toISOString());
-      if (toDate) params.set("to", new Date(toDate).toISOString());
+      if (fromDate) params.set("from", appDatetimeLocalToIso(fromDate));
+      if (toDate) params.set("to", appDatetimeLocalToIso(toDate));
       if (machineCode) params.set("machine_codes", machineCode);
       if (profileId) params.set("profile_ids", profileId);
 
@@ -421,8 +422,8 @@ export function ReportsView() {
                 onClick={() => {
                   setMachineCode("");
                   setProfileId("");
-                  setFromDate(toDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
-                  setToDate(toDatetimeLocal(new Date()));
+                  setFromDate(toAppDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+                  setToDate(toAppDatetimeLocal(new Date()));
                 }}
               >
                 <FilterX className="h-4 w-4" aria-hidden="true" />
@@ -536,9 +537,4 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 function formatCount(template: string, count: number) {
   return template.replace("{count}", String(count));
-}
-
-function toDatetimeLocal(date: Date) {
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }

@@ -103,21 +103,21 @@ function buildUsers() {
 const users = buildUsers();
 
 const errorCodes = [
-  ["SERVER_DUPLICATE", "duplicate", Severity.ERROR, "Server detected duplicate key in duplicate window."],
-  ["LED_SUFFIX_NOT_MATCH", "local-parse", Severity.ERROR, "LED suffix does not match profile rule."],
-  ["MACHINE_NOT_FOUND", "machine", Severity.ERROR, "Machine code does not exist or is inactive."],
-  ["PROFILE_NOT_FOUND", "profile", Severity.ERROR, "Profile does not exist or is inactive."],
-  ["LOCAL_DUPLICATE", "local-duplicate", Severity.WARNING, "Local app detected duplicate in local scope."],
-  ["PAYLOAD_INVALID", "api", Severity.ERROR, "Payload is invalid."]
+  ["SERVER_DUPLICATE", "duplicate", Severity.ERROR, "Máy chủ phát hiện khóa trùng lặp trong cửa sổ kiểm trùng."],
+  ["LED_SUFFIX_NOT_MATCH", "local-parse", Severity.ERROR, "Hậu tố LED không khớp quy tắc hồ sơ."],
+  ["MACHINE_NOT_FOUND", "machine", Severity.ERROR, "Mã máy không tồn tại hoặc đã bị tắt."],
+  ["PROFILE_NOT_FOUND", "profile", Severity.ERROR, "Hồ sơ không tồn tại hoặc đã bị tắt."],
+  ["LOCAL_DUPLICATE", "local-duplicate", Severity.WARNING, "Ứng dụng cục bộ phát hiện trùng lặp trong phạm vi cục bộ."],
+  ["PAYLOAD_INVALID", "api", Severity.ERROR, "Dữ liệu gửi lên không hợp lệ."]
 ];
 
 const notificationTemplates = [
   [
     "SERVER_DUPLICATE",
-    "Server duplicate detected",
-    "Machine {{machine_code}} sent duplicate key {{duplicate_key}}.",
-    "Server phát hiện trùng mã",
-    "Máy {{machine_code}} gửi duplicate key {{duplicate_key}}.",
+    "Máy chủ phát hiện mã trùng",
+    "Máy {{machine_code}} gửi khóa trùng lặp {{duplicate_key}}.",
+    "Máy chủ phát hiện mã trùng",
+    "Máy {{machine_code}} gửi khóa trùng lặp {{duplicate_key}}.",
     "Server duplicate detected",
     "Machine {{machine_code}} sent duplicate key {{duplicate_key}}.",
     Severity.ERROR,
@@ -125,10 +125,10 @@ const notificationTemplates = [
   ],
   [
     "MACHINE_OFFLINE",
-    "Machine offline",
-    "Machine {{machine_code}} has not sent heartbeat in time.",
-    "Máy offline",
-    "Máy {{machine_code}} không gửi heartbeat đúng hạn.",
+    "Máy mất kết nối",
+    "Máy {{machine_code}} không gửi nhịp kết nối đúng hạn.",
+    "Máy mất kết nối",
+    "Máy {{machine_code}} không gửi nhịp kết nối đúng hạn.",
     "Machine offline",
     "Machine {{machine_code}} has not sent heartbeat in time.",
     Severity.WARNING,
@@ -136,10 +136,10 @@ const notificationTemplates = [
   ],
   [
     "OFFLINE_SYNC_HAS_NG",
-    "Offline sync has NG",
-    "Batch {{batch_code}} contains NG or failed records.",
-    "Offline sync có NG",
-    "Batch {{batch_code}} có record NG hoặc thất bại.",
+    "Đồng bộ khi mất kết nối có NG",
+    "Đợt {{batch_code}} có bản ghi NG hoặc thất bại.",
+    "Đồng bộ khi mất kết nối có NG",
+    "Đợt {{batch_code}} có bản ghi NG hoặc thất bại.",
     "Offline sync has NG",
     "Batch {{batch_code}} contains NG or failed records.",
     Severity.WARNING,

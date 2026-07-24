@@ -12,15 +12,15 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("login")
-  @ApiOkResponse({ description: "Login with a server UI user account." })
-  @ApiUnauthorizedResponse({ description: "Invalid username/password or inactive account." })
+  @ApiOkResponse({ description: "Đăng nhập bằng tài khoản giao diện máy chủ." })
+  @ApiUnauthorizedResponse({ description: "Sai tên đăng nhập/mật khẩu hoặc tài khoản đã bị tắt." })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 
   @Post("validate")
-  @ApiOkResponse({ description: "Validate a remembered/session token." })
-  @ApiUnauthorizedResponse({ description: "Token is invalid, expired, or user is inactive." })
+  @ApiOkResponse({ description: "Kiểm tra token phiên hoặc token đã nhớ." })
+  @ApiUnauthorizedResponse({ description: "Token không hợp lệ, đã hết hạn hoặc người dùng đã bị tắt." })
   validate(@Body() dto: ValidateSessionDto) {
     return this.authService.validateToken(dto.token);
   }

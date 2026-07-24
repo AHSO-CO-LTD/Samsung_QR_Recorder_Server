@@ -17,7 +17,7 @@ export class SetupService {
     return {
       success: true,
       code: "SETUP_STATUS",
-      message: "Setup status loaded.",
+      message: "Đã tải trạng thái thiết lập.",
       data: {
         initialized: adminCount > 0,
         requiresAdminSetup: adminCount === 0,
@@ -34,7 +34,7 @@ export class SetupService {
       throw new ConflictException({
         success: false,
         code: "SETUP_ADMIN_ALREADY_EXISTS",
-        message: "Admin account already exists."
+        message: "Tài khoản quản trị đã tồn tại."
       });
     }
 
@@ -60,7 +60,7 @@ export class SetupService {
     return {
       success: true,
       code: "SETUP_FIRST_ADMIN_CREATED",
-      message: "First admin account created.",
+      message: "Đã tạo tài khoản quản trị đầu tiên.",
       data: user
     };
   }

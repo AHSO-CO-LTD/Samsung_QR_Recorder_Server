@@ -24,7 +24,7 @@ export class AuditService {
     return {
       success: true,
       code: "AUDIT_LOGS_LISTED",
-      message: "Audit logs loaded.",
+      message: "Đã tải nhật ký kiểm tra.",
       data: logs
     };
   }

@@ -6,6 +6,7 @@ import type { ScanReportQueryDto } from "./dto/scan-report-query.dto";
 import { DEFAULT_REPORT_COLUMNS, MAX_EXPORT_ROWS, REPORT_COLUMN_KEYS, REPORT_FINAL_STATUSES, type ScanReportColumnKey, type ScanReportLocale } from "./report-definition";
 
 type Locale = ScanReportLocale;
+const VIETNAM_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
 type ReportFilters = {
   machineCodes: string[];
   profileIds: number[];
@@ -40,48 +41,48 @@ type ReportColumn = {
 
 const columnLabels: Record<Locale, Record<ScanReportColumnKey, string>> = {
   vi: {
-    scan_record_id: "ID record",
-    scan_at: "Thời gian scan",
+    scan_record_id: "ID bản ghi",
+    scan_at: "Thời gian quét (GMT+7)",
     machine_code: "Mã máy",
     machine_name: "Tên máy",
-    line_name: "Line",
+    line_name: "Dây chuyền",
     station_name: "Trạm",
-    profile: "Profile",
-    profile_version: "Version profile",
-    local_scan_id: "Local scan ID",
-    local_status: "Local",
-    server_status: "Server",
-    final_status: "Final",
-    ng_stage: "NG stage",
+    profile: "Hồ sơ",
+    profile_version: "Phiên bản hồ sơ",
+    local_scan_id: "ID quét cục bộ",
+    local_status: "Cục bộ",
+    server_status: "Máy chủ",
+    final_status: "Cuối cùng",
+    ng_stage: "Bước NG",
     ng_reason: "Lý do NG",
-    full_code_raw: "Full code",
-    chassis_scan_raw: "Chassis raw",
-    full_chassis_code: "Chassis",
-    full_before_vendor: "Before vendor",
-    full_vendor_char: "Vendor char",
-    full_led_code: "LED trong full code",
-    full_factory_code: "Factory",
-    full_after_factory: "After factory",
-    duplicate_key: "Duplicate key",
-    led_slot_1_code: "LED slot 1 code",
-    led_slot_1_raw: "LED slot 1 raw",
-    led_slot_1_lot_no: "LED slot 1 lot",
-    led_slot_1_status: "LED slot 1 local",
-    led_slot_1_ng_reason: "LED slot 1 NG",
-    led_slot_2_code: "LED slot 2 code",
-    led_slot_2_raw: "LED slot 2 raw",
-    led_slot_2_lot_no: "LED slot 2 lot",
-    led_slot_2_status: "LED slot 2 local",
-    led_slot_2_ng_reason: "LED slot 2 NG",
-    led_all_raw: "Tất cả LED raw",
-    runtime_session_code: "Runtime session",
+    full_code_raw: "Mã đầy đủ",
+    chassis_scan_raw: "Dữ liệu khung thô",
+    full_chassis_code: "Mã khung",
+    full_before_vendor: "Trước nhà cung cấp",
+    full_vendor_char: "Ký tự nhà cung cấp",
+    full_led_code: "LED trong mã đầy đủ",
+    full_factory_code: "Nhà máy",
+    full_after_factory: "Sau nhà máy",
+    duplicate_key: "Khóa trùng lặp",
+    led_slot_1_code: "Mã LED 1",
+    led_slot_1_raw: "Dữ liệu thô LED 1",
+    led_slot_1_lot_no: "Lô LED 1",
+    led_slot_1_status: "Cục bộ LED 1",
+    led_slot_1_ng_reason: "NG LED 1",
+    led_slot_2_code: "Mã LED 2",
+    led_slot_2_raw: "Dữ liệu thô LED 2",
+    led_slot_2_lot_no: "Lô LED 2",
+    led_slot_2_status: "Cục bộ LED 2",
+    led_slot_2_ng_reason: "NG LED 2",
+    led_all_raw: "Tất cả dữ liệu LED thô",
+    runtime_session_code: "Phiên chạy",
     runtime_product_code: "Mã đang chạy",
-    sync_batch_id: "Sync batch ID",
-    created_at: "Server ghi lúc"
+    sync_batch_id: "ID đợt đồng bộ",
+    created_at: "Máy chủ ghi lúc (GMT+7)"
   },
   en: {
     scan_record_id: "Record ID",
-    scan_at: "Scan time",
+    scan_at: "Scan time (GMT+7)",
     machine_code: "Machine code",
     machine_name: "Machine name",
     line_name: "Line",
@@ -117,13 +118,13 @@ const columnLabels: Record<Locale, Record<ScanReportColumnKey, string>> = {
     runtime_session_code: "Runtime session",
     runtime_product_code: "Runtime product",
     sync_batch_id: "Sync batch ID",
-    created_at: "Server created at"
+    created_at: "Server created at (GMT+7)"
   }
 };
 
 const reportColumns: Record<ScanReportColumnKey, ReportColumn> = {
   scan_record_id: { key: "scan_record_id", width: 12, value: (record) => record.id },
-  scan_at: { key: "scan_at", width: 22, value: (record) => record.scan_at },
+  scan_at: { key: "scan_at", width: 22, value: (record) => toVietnamExcelDate(record.scan_at) },
   machine_code: { key: "machine_code", width: 16, value: (record) => record.machine.machine_code },
   machine_name: { key: "machine_name", width: 24, value: (record) => record.machine.machine_name },
   line_name: { key: "line_name", width: 16, value: (record) => record.machine.line_name },
@@ -163,7 +164,7 @@ const reportColumns: Record<ScanReportColumnKey, ReportColumn> = {
   runtime_session_code: { key: "runtime_session_code", width: 24, value: (record) => record.runtime_session?.session_code ?? null },
   runtime_product_code: { key: "runtime_product_code", width: 24, value: (record) => record.runtime_product?.product_code ?? null },
   sync_batch_id: { key: "sync_batch_id", width: 14, value: (record) => record.sync_batch_id },
-  created_at: { key: "created_at", width: 22, value: (record) => record.created_at }
+  created_at: { key: "created_at", width: 22, value: (record) => toVietnamExcelDate(record.created_at) }
 };
 
 @Injectable()
@@ -182,7 +183,7 @@ export class ReportsService {
       throw new BadRequestException({
         success: false,
         code: "REPORT_TOO_LARGE",
-        message: `Report has ${total} rows. Please narrow filters to ${MAX_EXPORT_ROWS} rows or fewer.`
+        message: `Báo cáo có ${total} dòng. Vui lòng thu hẹp bộ lọc còn tối đa ${MAX_EXPORT_ROWS} dòng.`
       });
     }
 
@@ -239,7 +240,7 @@ export class ReportsService {
       throw new BadRequestException({
         success: false,
         code: "REPORT_RANGE_INVALID",
-        message: "From date must be before to date."
+        message: "Ngày bắt đầu phải trước ngày kết thúc."
       });
     }
 
@@ -269,7 +270,7 @@ export class ReportsService {
       throw new BadRequestException({
         success: false,
         code: "REPORT_COLUMNS_INVALID",
-        message: `Invalid report columns: ${unknownKeys.join(", ")}.`
+        message: `Cột báo cáo không hợp lệ: ${unknownKeys.join(", ")}.`
       });
     }
 
@@ -313,7 +314,7 @@ export class ReportsService {
       throw new BadRequestException({
         success: false,
         code: "REPORT_MACHINE_NOT_FOUND",
-        message: `Unknown machine code(s): ${missingMachineCodes.join(", ")}.`
+        message: `Không tìm thấy mã máy: ${missingMachineCodes.join(", ")}.`
       });
     }
 
@@ -323,7 +324,7 @@ export class ReportsService {
       throw new BadRequestException({
         success: false,
         code: "REPORT_PROFILE_NOT_FOUND",
-        message: `Unknown profile id(s): ${missingProfileIds.join(", ")}.`
+        message: `Không tìm thấy ID hồ sơ: ${missingProfileIds.join(", ")}.`
       });
     }
   }
@@ -333,22 +334,22 @@ export class ReportsService {
       locale === "vi"
         ? {
             sheet: "Tổng quan",
-            generatedAt: "Xuất lúc",
-            from: "Từ ngày",
-            to: "Đến ngày",
+            generatedAt: "Xuất lúc (GMT+7)",
+            from: "Từ ngày (GMT+7)",
+            to: "Đến ngày (GMT+7)",
             machines: "Máy",
-            profiles: "Profile",
+            profiles: "Hồ sơ",
             statuses: "Trạng thái",
-            total: "Tổng record",
-            ok: "Final OK",
-            ng: "Final NG",
-            pending: "Final pending"
+            total: "Tổng bản ghi",
+            ok: "Cuối cùng OK",
+            ng: "Cuối cùng NG",
+            pending: "Cuối cùng đang chờ"
           }
         : {
             sheet: "Summary",
-            generatedAt: "Generated at",
-            from: "From",
-            to: "To",
+            generatedAt: "Generated at (GMT+7)",
+            from: "From (GMT+7)",
+            to: "To (GMT+7)",
             machines: "Machines",
             profiles: "Profiles",
             statuses: "Statuses",
@@ -358,6 +359,7 @@ export class ReportsService {
             pending: "Final pending"
           };
     const sheet = workbook.addWorksheet(labels.sheet);
+    const allValue = locale === "vi" ? "Tất cả" : "All";
     const counts = records.reduce(
       (current, record) => {
         current[record.final_status] += 1;
@@ -371,12 +373,12 @@ export class ReportsService {
       { key: "value", width: 60 }
     ];
     sheet.addRows([
-      { label: labels.generatedAt, value: new Date() },
-      { label: labels.from, value: filters.from ?? "All" },
-      { label: labels.to, value: filters.to ?? "All" },
-      { label: labels.machines, value: filters.machineCodes.join(", ") || "All" },
-      { label: labels.profiles, value: filters.profileIds.join(", ") || "All" },
-      { label: labels.statuses, value: filters.finalStatuses.join(", ") || "All" },
+      { label: labels.generatedAt, value: toVietnamExcelDate(new Date()) },
+      { label: labels.from, value: filters.from ? toVietnamExcelDate(filters.from) : allValue },
+      { label: labels.to, value: filters.to ? toVietnamExcelDate(filters.to) : allValue },
+      { label: labels.machines, value: filters.machineCodes.join(", ") || allValue },
+      { label: labels.profiles, value: filters.profileIds.join(", ") || allValue },
+      { label: labels.statuses, value: filters.finalStatuses.join(", ") || allValue },
       { label: labels.total, value: records.length },
       { label: labels.ok, value: counts.OK },
       { label: labels.ng, value: counts.NG },
@@ -387,7 +389,7 @@ export class ReportsService {
   }
 
   private addScansSheet(workbook: ExcelJS.Workbook, records: ScanReportRecord[], selectedColumns: ScanReportColumnKey[], locale: Locale) {
-    const sheet = workbook.addWorksheet(locale === "vi" ? "Scan records" : "Scan records");
+    const sheet = workbook.addWorksheet(locale === "vi" ? "Bản ghi quét" : "Scan records");
     sheet.views = [{ state: "frozen", ySplit: 1 }];
     sheet.columns = selectedColumns.map((key) => ({
       key,
@@ -454,7 +456,7 @@ function parseNumberCsv(value: string | undefined, fieldName: string) {
       throw new BadRequestException({
         success: false,
         code: "REPORT_NUMBER_LIST_INVALID",
-        message: `${fieldName} must contain positive integer ids only.`
+        message: `${fieldName} chỉ được chứa ID số nguyên dương.`
       });
     }
     return numberValue;
@@ -469,7 +471,7 @@ function parseFinalStatuses(value?: string): FinalScanStatus[] {
       throw new BadRequestException({
         success: false,
         code: "REPORT_STATUS_INVALID",
-        message: `Invalid final status: ${item}.`
+        message: `Trạng thái cuối không hợp lệ: ${item}.`
       });
     }
     return status as FinalScanStatus;
@@ -486,10 +488,14 @@ function parseDate(value: string | undefined, fieldName: string) {
     throw new BadRequestException({
       success: false,
       code: "REPORT_DATE_INVALID",
-      message: `Invalid ${fieldName} date.`
+      message: `Ngày ${fieldName} không hợp lệ.`
     });
   }
   return date;
+}
+
+function toVietnamExcelDate(date: Date) {
+  return new Date(date.getTime() + VIETNAM_UTC_OFFSET_MS);
 }
 
 function formatFileStamp(date: Date) {

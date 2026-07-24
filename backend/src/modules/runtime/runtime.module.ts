@@ -9,6 +9,6 @@ import { RuntimeService } from "./runtime.service";
   imports: [MachinesModule, NotificationsModule],
   controllers: [RuntimeController],
   providers: [RuntimeService, RuntimeGateway],
-  exports: [RuntimeService]
+  exports: [RuntimeService, RuntimeGateway]
 })
 export class RuntimeModule {}

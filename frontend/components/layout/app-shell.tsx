@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n-provider";
 import { usePermissions } from "@/lib/permissions";
 import { getScreenPermissionKeyForPath } from "@/lib/screen-permissions";
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
 
 type ConfirmAction = "logout" | "quit" | "restart";
 
@@ -28,6 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { locale, setLocale, t } = useI18n();
   const { theme, setTheme } = useTheme();
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [isRuntimeMonitorNavbarHidden, setIsRuntimeMonitorNavbarHidden] = useState(false);
   const visibleNavGroups = useMemo(() => filterNavGroups(canAccess), [canAccess]);
   const activeGroup = useMemo(() => getActiveNavGroup(pathname, visibleNavGroups), [pathname, visibleNavGroups]);
   const [openGroupId, setOpenGroupId] = useState<NavGroupId | null>(null);
@@ -36,12 +38,37 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const selectedGroupId = openGroupId ?? activeGroup.id;
   const selectedGroup = useMemo(() => (openGroupId ? (visibleNavGroups.find((group) => group.id === openGroupId) ?? null) : null), [openGroupId, visibleNavGroups]);
   const currentPermissionKey = useMemo(() => getScreenPermissionKeyForPath(pathname), [pathname]);
-  const canViewCurrentPath = !currentPermissionKey || canAccess(currentPermissionKey);
-  const shouldRedirectToAllowedPath = Boolean(user) && !isPermissionLoading && !canViewCurrentPath && firstAccessiblePath !== pathname;
+  const canViewCurrentPath =
+    pathname === "/machines" || pathname.startsWith("/machines/")
+      ? canAccess("machines") || canAccess("runtime")
+      : pathname === "/scans" || pathname.startsWith("/scans/")
+        ? canAccess("scans") || canAccess("duplicate-audit")
+      : !currentPermissionKey || canAccess(currentPermissionKey);
+  const shouldRedirectToAllowedPath = Boolean(user) && !isPermissionLoading && !permissionError && !canViewCurrentPath && firstAccessiblePath !== pathname;
+  const isRuntimeMonitorPath = pathname === "/runtime-monitor";
+  const isHeaderHidden = isRuntimeMonitorPath && isRuntimeMonitorNavbarHidden;
 
   useEffect(() => {
     setOpenGroupId(null);
+    setIsRuntimeMonitorNavbarHidden(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!isRuntimeMonitorPath) {
+      return;
+    }
+
+    const handleRuntimeMonitorNavbar = (event: Event) => {
+      const customEvent = event as CustomEvent<{ hidden?: boolean }>;
+      setIsRuntimeMonitorNavbarHidden(Boolean(customEvent.detail?.hidden));
+    };
+
+    window.addEventListener("runtime-monitor:navigation-visibility", handleRuntimeMonitorNavbar);
+
+    return () => {
+      window.removeEventListener("runtime-monitor:navigation-visibility", handleRuntimeMonitorNavbar);
+    };
+  }, [isRuntimeMonitorPath]);
 
   useEffect(() => {
     if (openGroupId && !visibleNavGroups.some((group) => group.id === openGroupId)) {
@@ -64,6 +91,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const syncHeaderHeight = () => {
+      if (isHeaderHidden) {
+        document.documentElement.style.setProperty("--app-header-height", "0px");
+        return;
+      }
+
       const header = headerRef.current;
       if (!header) {
         return;
@@ -86,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       observer.disconnect();
       window.removeEventListener("resize", syncHeaderHeight);
     };
-  }, [openGroupId, pathname]);
+  }, [isHeaderHidden, openGroupId, pathname]);
 
   useEffect(() => {
     if (!openGroupId) {
@@ -173,7 +205,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div className="min-h-[100dvh] min-w-0 bg-background text-foreground">
-        <header ref={headerRef} className="sticky top-0 z-40 border-b bg-card">
+        <header ref={headerRef} className={cn("sticky top-0 z-40 border-b bg-card", isHeaderHidden && "hidden")}>
           <AppHeader
             activeGroupId={activeGroup.id}
             selectedGroupId={selectedGroupId}
@@ -196,7 +228,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </header>
 
-        <main className="w-full min-w-0 p-3 sm:p-4 lg:p-5 2xl:p-6">
+        <main className={cn("w-full min-w-0 p-3 sm:p-4 lg:p-5 2xl:p-6", isRuntimeMonitorPath && "p-1 sm:p-1 lg:p-1 2xl:p-1")}>
           {isPermissionLoading && user ? (
             <AccessStatePanel title={t("rolePermissionLoading")} description={t("rolePermissionLoadingDesc")} />
           ) : canViewCurrentPath ? (

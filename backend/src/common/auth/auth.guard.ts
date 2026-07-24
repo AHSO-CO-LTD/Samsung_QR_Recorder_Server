@@ -24,7 +24,7 @@ export class ApiAuthGuard implements CanActivate {
       throw new UnauthorizedException({
         success: false,
         code: "AUTH_TOKEN_REQUIRED",
-        message: "Authorization bearer token is required."
+        message: "Cần bearer token xác thực."
       });
     }
 
@@ -36,7 +36,7 @@ export class ApiAuthGuard implements CanActivate {
       throw new ForbiddenException({
         success: false,
         code: "AUTH_ROLE_FORBIDDEN",
-        message: "Current user role is not allowed to perform this action."
+        message: "Vai trò hiện tại không được phép thực hiện thao tác này."
       });
     }
 

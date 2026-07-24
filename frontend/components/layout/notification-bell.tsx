@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiGet, apiPatch } from "@/lib/api";
+import { formatAppTime } from "@/lib/app-time";
 import { cn } from "@/lib/utils";
 import type { Locale, MessageKey } from "@/lib/i18n";
 import type { NotificationEvent } from "@/features/shared/types";
@@ -172,8 +173,5 @@ export function NotificationBell({ locale, t }: NotificationBellProps) {
 }
 
 function formatTime(value: string, locale: Locale) {
-  return new Date(value).toLocaleTimeString(locale === "vi" ? "vi-VN" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  return formatAppTime(value, locale);
 }

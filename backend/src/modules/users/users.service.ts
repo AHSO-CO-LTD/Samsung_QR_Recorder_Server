@@ -32,7 +32,7 @@ export class UsersService {
     return {
       success: true,
       code: "USERS_LISTED",
-      message: "Users loaded.",
+      message: "Đã tải danh sách người dùng.",
       data: users
     };
   }
@@ -60,7 +60,7 @@ export class UsersService {
     return {
       success: true,
       code: "USER_CREATED",
-      message: "User created.",
+      message: "Đã tạo người dùng.",
       data: user
     };
   }
@@ -93,7 +93,7 @@ export class UsersService {
     return {
       success: true,
       code: "USER_UPDATED",
-      message: "User updated.",
+      message: "Đã cập nhật người dùng.",
       data: user
     };
   }
@@ -118,7 +118,7 @@ export class UsersService {
     return {
       success: true,
       code: "USER_DEACTIVATED",
-      message: "User deactivated.",
+      message: "Đã vô hiệu hóa người dùng.",
       data: user
     };
   }
@@ -133,7 +133,7 @@ export class UsersService {
       throw new NotFoundException({
         success: false,
         code: "USER_NOT_FOUND",
-        message: "User was not found."
+        message: "Không tìm thấy người dùng."
       });
     }
 
@@ -152,7 +152,7 @@ export class UsersService {
       throw new ForbiddenException({
         success: false,
         code: "DEV_ROLE_HIDDEN",
-        message: "Role is not available."
+        message: "Vai trò không khả dụng."
       });
     }
   }
@@ -162,7 +162,7 @@ export class UsersService {
       throw new NotFoundException({
         success: false,
         code: "USER_NOT_FOUND",
-        message: "User was not found."
+        message: "Không tìm thấy người dùng."
       });
     }
   }

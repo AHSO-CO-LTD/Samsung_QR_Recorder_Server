@@ -18,7 +18,7 @@ export class SettingsService {
     return {
       success: true,
       code: "SERVER_SETTINGS_LOADED",
-      message: "Server settings loaded.",
+      message: "Đã tải cài đặt máy chủ.",
       data: settings
     };
   }
@@ -59,7 +59,7 @@ export class SettingsService {
     return {
       success: true,
       code: "SERVER_SETTINGS_SAVED",
-      message: "Server settings saved.",
+      message: "Đã lưu cài đặt máy chủ.",
       data: settings
     };
   }
