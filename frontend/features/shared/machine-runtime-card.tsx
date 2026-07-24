@@ -6,15 +6,16 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { API_BASE_URL } from "@/lib/api";
+import { formatAppTime } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 import { MonoText } from "@/features/shared/data-view";
+import { LatestScanStatusStrip } from "@/features/shared/latest-scan-status-strip";
 import type { Machine, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
-import type { Locale, MessageKey } from "@/lib/i18n";
+import type { Locale } from "@/lib/i18n";
 
 export const SERVER_TREND_HOURS = 12;
 export const SERVER_TREND_BUCKET_MINUTES = 30;
-const LIVE_SAMPLE_LIMIT = 60;
 
 const okNgChartConfig = {
   total: {
@@ -62,7 +63,6 @@ export type MachineRuntimeCardDisplayOptions = {
   currentProduct: boolean;
   duration: boolean;
   commonIssue: boolean;
-  localChart: boolean;
   serverChart: boolean;
 };
 
@@ -71,68 +71,48 @@ const defaultDisplayOptions: MachineRuntimeCardDisplayOptions = {
   currentProduct: true,
   duration: true,
   commonIssue: true,
-  localChart: true,
   serverChart: true
 };
 
 export type TrendByMachine = Record<string, ScanTrendPoint[]>;
-export type RuntimeSampleScope = "machine" | "session";
-
-export type RuntimeUpdatedPayload = {
-  event?: string;
-  machine_code?: string;
-  data?: {
-    id?: number | null;
-    ok_count?: number | null;
-    ng_count?: number | null;
-    total_count?: number | null;
-    last_seen_at?: string | null;
-    updated_at?: string | null;
-  } | null;
-};
 
 type MachineRuntimeCardProps = {
   row: MachineRuntimeRow;
-  liveData: ScanTrendPoint[];
-  localTrendData?: ScanTrendPoint[];
   trendData?: ScanTrendPoint[];
   timeAxis?: RuntimeChartTimeAxis;
   displayOptions?: Partial<MachineRuntimeCardDisplayOptions>;
   showCommonLocalNgReason?: boolean;
   showServerChart?: boolean;
-  localChartTitleKey?: MessageKey;
 };
 
 export function MachineRuntimeCard({
   row,
-  liveData,
-  localTrendData,
   trendData = emptyTrendData,
   timeAxis,
   displayOptions,
   showCommonLocalNgReason = false,
-  showServerChart = true,
-  localChartTitleKey = "liveOkNgGraph"
+  showServerChart = true
 }: MachineRuntimeCardProps) {
   const { t, locale } = useI18n();
   const { machine, session, isConnected, isRunning } = row;
   const currentProduct = resolveCurrentProductCode(session);
-  const runtimeCounts = resolveOkNgCounts(machine, session);
-  const localChartData = localTrendData
-    ? buildIncrementalCumulativeChartData(localTrendData, timeAxis)
-    : buildLocalCumulativeChartData(liveData, runtimeCounts.ok, runtimeCounts.ng, machine.sync_state?.last_seen_at ?? session?.last_seen_at);
-  const localCounts = localTrendData ? resolveOkNgCountsFromChart(localChartData, runtimeCounts) : runtimeCounts;
-  const { ok, ng } = localCounts;
   const serverChartData = showServerChart ? buildIncrementalCumulativeChartData(trendData, timeAxis) : [];
   const serverCounts = resolveOkNgCountsFromChart(serverChartData, { ok: 0, ng: 0, total: 0 });
-  const localTotal = resolveCumulativeTotal(localChartData, ok + ng);
   const serverTotal = showServerChart ? resolveCumulativeTotal(serverChartData, 0) : 0;
   const activeDisplayOptions = { ...defaultDisplayOptions, ...displayOptions };
   const shouldShowCommonIssue = showCommonLocalNgReason && activeDisplayOptions.commonIssue;
-  const shouldShowLocalChart = activeDisplayOptions.localChart;
   const shouldShowServerChart = showServerChart && activeDisplayOptions.serverChart;
-  const hasVisibleChartContent = (isConnected && shouldShowLocalChart) || shouldShowServerChart;
   const commonIssueReason = shouldShowCommonIssue ? resolveCommonLocalNgReason(session, locale) : null;
+  const latestScan = findLatestScanRecord([
+    ...(session?.scan_records ?? []),
+    ...(session?.latest_scan_record ? [session.latest_scan_record] : [])
+  ]);
+  const latestScanCode =
+    normalizeScanValue(latestScan?.full_code_raw) ??
+    normalizeScanValue(session?.last_code) ??
+    normalizeScanValue(latestScan?.local_scan_id) ??
+    normalizeScanValue(session?.last_local_scan_id);
+  const latestScanResult = normalizeScanValue(latestScan?.final_status) ?? normalizeScanValue(session?.last_result);
   const headerItems = [
     activeDisplayOptions.machineInfo ? <MachineIdentity key="machine" name={machine.machine_name || machine.machine_code} code={machine.machine_code} /> : null,
     activeDisplayOptions.currentProduct ? <HeaderMetric key="product" label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} /> : null,
@@ -176,30 +156,15 @@ export function MachineRuntimeCard({
         </CardHeader>
         ) : null}
 
-        {hasVisibleChartContent ? (
+        {shouldShowServerChart ? (
         <CardContent className="space-y-4">
-          <div className="space-y-3">
-            {isConnected && shouldShowLocalChart ? (
-              <div className="space-y-2">
-                <MetricTrendBlock
-                  title={t(localChartTitleKey)}
-                  total={localTotal}
-                  data={localChartData}
-                  emptyLabel={t("waitingLiveRuntime")}
-                  maxTicks={timeAxis?.maxTicks}
-                />
-                <OkNgSummary ok={ok} ng={ng} />
-              </div>
-            ) : null}
-            {shouldShowServerChart ? (
-              <div className="space-y-2">
-                <MetricTrendBlock title={t("serverFinalOkNgGraph")} total={serverTotal} data={serverChartData} maxTicks={timeAxis?.maxTicks} />
-                <OkNgSummary ok={serverCounts.ok} ng={serverCounts.ng} />
-              </div>
-            ) : null}
+          <div className="space-y-2">
+            <MetricTrendBlock title={t("serverFinalOkNgGraph")} total={serverTotal} data={serverChartData} maxTicks={timeAxis?.maxTicks} />
+            <OkNgSummary ok={serverCounts.ok} ng={serverCounts.ng} />
           </div>
         </CardContent>
         ) : null}
+        <LatestScanStatusStrip code={latestScanCode} result={latestScanResult} />
       </div>
     </Card>
   );
@@ -383,16 +348,6 @@ function indexSessionsByMachine(sessions: MachineRuntimeSession[]) {
   return sessionByMachine;
 }
 
-export function resolveOkNgCounts(machine: Machine, session?: MachineRuntimeSession) {
-  const ok = session?.ok_count ?? machine.sync_state?.local_ok_record ?? 0;
-  const ng = session?.ng_count ?? machine.sync_state?.local_ng_record ?? 0;
-  return {
-    ok,
-    ng,
-    total: session?.total_count ?? machine.sync_state?.local_total_record ?? ok + ng
-  };
-}
-
 export function resolveCurrentProductCode(session?: MachineRuntimeSession | null) {
   return (
     normalizeProductCode(session?.current_product?.product_code) ??
@@ -432,52 +387,52 @@ export function resolveCommonLocalNgReason(session?: MachineRuntimeSession | nul
     : null;
 }
 
-function formatIssueReason(reason: string, locale: Locale) {
+export function formatIssueReason(reason: string, locale: Locale) {
   const category = getIssueReasonCategory(reason);
   const labels: Record<IssueReasonCategory, Record<Locale, string>> = {
     duplicate: {
-      vi: "Trùng lặp",
-      en: "Duplicate"
+      vi: "Lỗi scan trùng lặp",
+      en: "Duplicate scan error"
     },
     led: {
-      vi: "Lỗi LED",
-      en: "LED error"
+      vi: "Lỗi scan LED",
+      en: "LED scan error"
     },
     qr: {
-      vi: "Lỗi QR",
-      en: "QR error"
+      vi: "Lỗi scan QR",
+      en: "QR scan error"
     },
     config: {
-      vi: "Lỗi cấu hình",
-      en: "Config error"
+      vi: "Lỗi scan cấu hình",
+      en: "Scan configuration error"
     },
     machine: {
-      vi: "Lỗi máy",
-      en: "Machine error"
+      vi: "Lỗi scan máy",
+      en: "Machine scan error"
     },
     connection: {
-      vi: "Mất kết nối",
-      en: "Connection error"
+      vi: "Lỗi scan kết nối",
+      en: "Scan connection error"
     },
     sync: {
-      vi: "Lỗi đồng bộ",
-      en: "Sync error"
+      vi: "Lỗi scan đồng bộ",
+      en: "Scan sync error"
     },
     data: {
-      vi: "Lỗi dữ liệu",
-      en: "Data error"
+      vi: "Lỗi dữ liệu scan",
+      en: "Scan data error"
     },
     local: {
-      vi: "Lỗi local",
-      en: "Local error"
+      vi: "Lỗi scan local",
+      en: "Local scan error"
     },
     server: {
-      vi: "Lỗi server",
-      en: "Server error"
+      vi: "Lỗi scan server",
+      en: "Server scan error"
     },
     unknown: {
-      vi: "Lỗi khác",
-      en: "Other error"
+      vi: "Lỗi scan khác",
+      en: "Other scan error"
     }
   };
 
@@ -576,20 +531,17 @@ function normalizeProductCode(value?: string | number | null) {
   return text;
 }
 
+function normalizeScanValue(value?: string | number | null) {
+  const text = value === null || value === undefined ? "" : String(value).trim();
+  return text || null;
+}
+
 function normalizeNgReason(value?: string | null) {
   const text = value?.trim();
   return text || null;
 }
 
 export function buildSessionServerTrendData(session?: MachineRuntimeSession): ScanTrendPoint[] {
-  return buildSessionScanTrendData(session, "final_status");
-}
-
-export function buildSessionLocalTrendData(session?: MachineRuntimeSession): ScanTrendPoint[] {
-  return buildSessionScanTrendData(session, "local_status");
-}
-
-function buildSessionScanTrendData(session: MachineRuntimeSession | undefined, statusKey: "local_status" | "final_status"): ScanTrendPoint[] {
   const records = [...(session?.scan_records ?? [])].sort((left, right) => new Date(left.scan_at).getTime() - new Date(right.scan_at).getTime());
 
   if (records.length === 0) {
@@ -605,11 +557,11 @@ function buildSessionScanTrendData(session: MachineRuntimeSession | undefined, s
     ];
   }
 
-  return records.map((record) => buildScanRecordPoint(record, statusKey));
+  return records.map(buildScanRecordPoint);
 }
 
-function buildScanRecordPoint(record: ScanRecord, statusKey: "local_status" | "final_status"): ScanTrendPoint {
-  const status = record[statusKey];
+function buildScanRecordPoint(record: ScanRecord): ScanTrendPoint {
+  const status = record.final_status;
   const ok = status === "OK" ? 1 : 0;
   const ng = status === "NG" ? 1 : 0;
   return {
@@ -622,7 +574,7 @@ function buildScanRecordPoint(record: ScanRecord, statusKey: "local_status" | "f
   };
 }
 
-function resolveOkNgCountsFromChart(data: ScanTrendPoint[], fallback: ReturnType<typeof resolveOkNgCounts>) {
+function resolveOkNgCountsFromChart(data: ScanTrendPoint[], fallback: { ok: number; ng: number; total: number }) {
   const latest = data.at(-1);
   if (!latest) {
     return fallback;
@@ -637,39 +589,6 @@ function resolveOkNgCountsFromChart(data: ScanTrendPoint[], fallback: ReturnType
 
 function resolveCumulativeTotal(data: ScanTrendPoint[], fallback = 0) {
   return data.at(-1)?.total ?? fallback;
-}
-
-function buildLocalCumulativeChartData(data: ScanTrendPoint[], ok: number, ng: number, lastSeenAt?: string | null) {
-  if (data.length > 0) {
-    return [buildOriginPoint(), ...data.map(normalizeCumulativePoint)];
-  }
-
-  const total = ok + ng;
-  if (total === 0) {
-    return [
-      buildOriginPoint(),
-      {
-        date: formatLiveSampleTime(lastSeenAt),
-        ok: 0,
-        ng: 0,
-        pending: 0,
-        total: 0,
-        timestamp: toTimestamp(lastSeenAt)
-      }
-    ];
-  }
-
-  return [
-    buildOriginPoint(),
-    {
-      date: formatLiveSampleTime(lastSeenAt),
-    ok,
-    ng,
-    pending: 0,
-    total,
-    timestamp: toTimestamp(lastSeenAt)
-  }
-];
 }
 
 function buildIncrementalCumulativeChartData(data: ScanTrendPoint[], timeAxis?: RuntimeChartTimeAxis) {
@@ -760,19 +679,6 @@ function ceilToBucket(valueMs: number, bucketMs: number) {
   return Math.ceil(valueMs / bucketMs) * bucketMs;
 }
 
-function normalizeCumulativePoint(point: ScanTrendPoint) {
-  const ok = toSafeCount(point.ok);
-  const ng = toSafeCount(point.ng);
-  const total = Math.max(toSafeCount(point.total), ok + ng);
-
-  return {
-    ...point,
-    ok,
-    ng,
-    total
-  };
-}
-
 function buildOriginPoint(): ScanTrendPoint {
   return {
     date: "0",
@@ -781,98 +687,6 @@ function buildOriginPoint(): ScanTrendPoint {
     pending: 0,
     total: 0
   };
-}
-
-export function buildLiveSample(payload: RuntimeUpdatedPayload) {
-  if (!payload.machine_code || !payload.data) {
-    return null;
-  }
-
-  const ok = toCount(payload.data.ok_count);
-  const ng = toCount(payload.data.ng_count);
-  if (ok === null && ng === null) {
-    return null;
-  }
-
-  const safeOk = ok ?? 0;
-  const safeNg = ng ?? 0;
-  const total = toCount(payload.data.total_count) ?? safeOk + safeNg;
-
-  return {
-    machineCode: payload.machine_code,
-    sessionId: toCount(payload.data.id),
-    point: {
-      date: formatLiveSampleTime(payload.data.last_seen_at ?? payload.data.updated_at),
-      ok: safeOk,
-      ng: safeNg,
-      pending: 0,
-      total,
-      timestamp: toTimestamp(payload.data.last_seen_at ?? payload.data.updated_at)
-    }
-  };
-}
-
-export function appendLiveSample(current: TrendByMachine, key: string, point: ScanTrendPoint) {
-  const samples = current[key] ?? [];
-  return {
-    ...current,
-    [key]: [...samples, point].slice(-LIVE_SAMPLE_LIMIT)
-  };
-}
-
-export function appendRuntimeSnapshotSamples(current: TrendByMachine, machines: Machine[], sessions: MachineRuntimeSession[], scope: RuntimeSampleScope = "machine") {
-  const rows = buildMachineRows(machines, sessions);
-  let next = current;
-
-  for (const row of rows) {
-    if (!row.isConnected) {
-      continue;
-    }
-
-    const { ok, ng } = resolveOkNgCounts(row.machine, row.session);
-    const total = ok + ng;
-    if (total === 0) {
-      continue;
-    }
-
-    next = appendLiveSample(next, getRuntimeSampleKey(row, scope), {
-      date: formatLiveSampleTime(),
-      ok,
-      ng,
-      pending: 0,
-      total,
-      timestamp: Date.now()
-    });
-  }
-
-  return pruneRuntimeSamples(next, rows.map((row) => getRuntimeSampleKey(row, scope)));
-}
-
-export function getRuntimeSampleKey(row: MachineRuntimeRow, scope: RuntimeSampleScope = "machine") {
-  if (scope === "session" && row.session) {
-    return buildSessionSampleKey(row.session.id);
-  }
-  return row.machine.machine_code;
-}
-
-export function getLiveSampleKey(liveSample: NonNullable<ReturnType<typeof buildLiveSample>>, scope: RuntimeSampleScope = "machine") {
-  if (scope === "session" && liveSample.sessionId) {
-    return buildSessionSampleKey(liveSample.sessionId);
-  }
-  return liveSample.machineCode;
-}
-
-function buildSessionSampleKey(sessionId: number) {
-  return `session:${sessionId}`;
-}
-
-function pruneRuntimeSamples(current: TrendByMachine, activeKeys: string[]) {
-  const activeKeySet = new Set(activeKeys);
-  return Object.fromEntries(Object.entries(current).filter(([key]) => activeKeySet.has(key)));
-}
-
-function toCount(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function toSafeCount(value: unknown) {
@@ -894,12 +708,7 @@ function toTimestamp(value?: string | number | null) {
 function formatLiveSampleTime(value?: string | null) {
   const date = value ? new Date(value) : new Date();
   const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
-  return safeDate.toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
+  return formatAppTime(safeDate, "en", true);
 }
 
 export function buildRuntimeSocketUrl() {
@@ -924,9 +733,7 @@ function buildEmptyTrendData() {
 }
 
 function formatBucketTime(date: Date) {
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${hour}:${minute}`;
+  return formatAppTime(date, "en");
 }
 
 function getDurationEnd(session: MachineRuntimeSession, nowMs: number) {

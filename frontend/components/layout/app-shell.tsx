@@ -38,7 +38,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const selectedGroupId = openGroupId ?? activeGroup.id;
   const selectedGroup = useMemo(() => (openGroupId ? (visibleNavGroups.find((group) => group.id === openGroupId) ?? null) : null), [openGroupId, visibleNavGroups]);
   const currentPermissionKey = useMemo(() => getScreenPermissionKeyForPath(pathname), [pathname]);
-  const canViewCurrentPath = !currentPermissionKey || canAccess(currentPermissionKey);
+  const canViewCurrentPath =
+    pathname === "/machines" || pathname.startsWith("/machines/")
+      ? canAccess("machines") || canAccess("runtime")
+      : pathname === "/scans" || pathname.startsWith("/scans/")
+        ? canAccess("scans") || canAccess("duplicate-audit")
+      : !currentPermissionKey || canAccess(currentPermissionKey);
   const shouldRedirectToAllowedPath = Boolean(user) && !isPermissionLoading && !permissionError && !canViewCurrentPath && firstAccessiblePath !== pathname;
   const isRuntimeMonitorPath = pathname === "/runtime-monitor";
   const isHeaderHidden = isRuntimeMonitorPath && isRuntimeMonitorNavbarHidden;

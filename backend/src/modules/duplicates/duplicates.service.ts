@@ -6,6 +6,7 @@ import { RunHistoricalDuplicateJobDto, UpsertHistoricalDuplicateScheduleDto } fr
 
 const FULL_HISTORY_FROM_DATE = new Date(0);
 const SCHEDULE_CHECK_INTERVAL_MS = 60_000;
+const AUDIT_JOB_TRIGGERS: HistoricalDuplicateJobTrigger[] = ["MANUAL_RANGE", "MANUAL_FULL", "SCHEDULED_FULL"];
 
 type RunJobInput = {
   profileId?: number;
@@ -114,7 +115,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
 
     const where = {
       trigger_type: {
-        in: ["MANUAL_FULL", "SCHEDULED_FULL"] as HistoricalDuplicateJobTrigger[]
+        in: AUDIT_JOB_TRIGGERS
       }
     };
     const [total, jobs] = await Promise.all([
@@ -156,7 +157,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
       where: {
         id: jobId,
         trigger_type: {
-          in: ["MANUAL_FULL", "SCHEDULED_FULL"]
+          in: AUDIT_JOB_TRIGGERS
         }
       }
     });
@@ -283,7 +284,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
       where: {
         id: jobId,
         trigger_type: {
-          in: ["MANUAL_FULL", "SCHEDULED_FULL"]
+          in: AUDIT_JOB_TRIGGERS
         }
       },
       orderBy: { created_at: "desc" }
@@ -382,6 +383,10 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runHistoricalJobInternal(input: RunJobInput) {
+    if (Number.isNaN(input.fromDate.getTime()) || Number.isNaN(input.toDate.getTime()) || input.fromDate > input.toDate) {
+      throw new BadRequestException("Khoảng thời gian kiểm tra không hợp lệ.");
+    }
+
     const job = await this.prisma.historicalDuplicateJob.create({
       data: {
         profile_id: input.profileId ?? null,
@@ -504,7 +509,7 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.historicalDuplicateJob.findFirst({
       where: {
         trigger_type: {
-          in: ["MANUAL_FULL", "SCHEDULED_FULL"]
+          in: AUDIT_JOB_TRIGGERS
         }
       },
       orderBy: { created_at: "desc" }

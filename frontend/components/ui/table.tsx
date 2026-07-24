@@ -1,11 +1,82 @@
+"use client";
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export function Table({ className, ...props }: React.HTMLAttributes<HTMLTableElement>) {
+type TableProps = React.HTMLAttributes<HTMLTableElement> & {
+  showTopScrollbar?: boolean;
+  topScrollbarLabel?: string;
+};
+
+export function Table({ className, showTopScrollbar = false, topScrollbarLabel, ...props }: TableProps) {
+  const tableRef = React.useRef<HTMLTableElement>(null);
+  const topScrollbarRef = React.useRef<HTMLDivElement>(null);
+  const bottomScrollbarRef = React.useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = React.useState(0);
+  const [hasHorizontalOverflow, setHasHorizontalOverflow] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!showTopScrollbar) {
+      return;
+    }
+
+    const table = tableRef.current;
+    const bottomScrollbar = bottomScrollbarRef.current;
+    if (!table || !bottomScrollbar) {
+      return;
+    }
+
+    const updateScrollMetrics = () => {
+      const nextScrollWidth = table.scrollWidth;
+      const nextHasOverflow = nextScrollWidth > bottomScrollbar.clientWidth + 1;
+
+      setScrollWidth((current) => (current === nextScrollWidth ? current : nextScrollWidth));
+      setHasHorizontalOverflow((current) => (current === nextHasOverflow ? current : nextHasOverflow));
+    };
+
+    updateScrollMetrics();
+
+    const resizeObserver = new ResizeObserver(updateScrollMetrics);
+    resizeObserver.observe(table);
+    resizeObserver.observe(bottomScrollbar);
+
+    return () => resizeObserver.disconnect();
+  }, [showTopScrollbar]);
+
+  React.useEffect(() => {
+    if (hasHorizontalOverflow && topScrollbarRef.current && bottomScrollbarRef.current) {
+      topScrollbarRef.current.scrollLeft = bottomScrollbarRef.current.scrollLeft;
+    }
+  }, [hasHorizontalOverflow, scrollWidth]);
+
+  const syncScrollPosition = (source: HTMLDivElement, target: HTMLDivElement | null) => {
+    if (target && target.scrollLeft !== source.scrollLeft) {
+      target.scrollLeft = source.scrollLeft;
+    }
+  };
+
   return (
-    <div className="w-full min-w-0 overflow-x-auto">
-      <table className={cn("w-full min-w-[720px] caption-bottom text-sm", className)} {...props} />
-    </div>
+    <>
+      {showTopScrollbar && hasHorizontalOverflow ? (
+        <div
+          ref={topScrollbarRef}
+          className="mb-2 w-full min-w-0 overflow-x-auto overflow-y-hidden"
+          role="region"
+          aria-label={topScrollbarLabel}
+          tabIndex={0}
+          onScroll={(event) => syncScrollPosition(event.currentTarget, bottomScrollbarRef.current)}
+        >
+          <div className="h-px" style={{ width: scrollWidth }} aria-hidden="true" />
+        </div>
+      ) : null}
+      <div
+        ref={bottomScrollbarRef}
+        className="w-full min-w-0 overflow-x-auto"
+        onScroll={(event) => syncScrollPosition(event.currentTarget, topScrollbarRef.current)}
+      >
+        <table ref={tableRef} className={cn("w-full min-w-[720px] caption-bottom text-sm", className)} {...props} />
+      </div>
+    </>
   );
 }
 

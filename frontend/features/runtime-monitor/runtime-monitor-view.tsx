@@ -22,7 +22,6 @@ import {
   MachineRuntimeCard,
   buildMachineRows,
   buildRuntimeSocketUrl,
-  buildSessionLocalTrendData,
   buildSessionServerTrendData,
   type MachineRuntimeCardDisplayOptions,
   type RuntimeChartTimeAxis
@@ -40,7 +39,6 @@ const defaultDisplayOptions: MachineRuntimeCardDisplayOptions = {
   currentProduct: true,
   duration: true,
   commonIssue: true,
-  localChart: true,
   serverChart: true
 };
 
@@ -50,7 +48,6 @@ const displayOptionLabelKeys: Record<keyof MachineRuntimeCardDisplayOptions, Mes
   currentProduct: "showCurrentProduct",
   duration: "showRuntimeDuration",
   commonIssue: "showCommonIssue",
-  localChart: "showLocalChart",
   serverChart: "showServerChart"
 };
 
@@ -151,12 +148,27 @@ export function RuntimeMonitorView() {
     const socket = io(buildRuntimeSocketUrl(), {
       transports: ["websocket", "polling"]
     });
+    let scanRefreshTimer: number | null = null;
 
-    socket.on("server:runtime-updated", () => {
+    const refreshRuntime = () => {
       void load(false, true);
-    });
+    };
+    const refreshLatestScan = () => {
+      if (scanRefreshTimer) {
+        window.clearTimeout(scanRefreshTimer);
+      }
+      scanRefreshTimer = window.setTimeout(refreshRuntime, 150);
+    };
+
+    socket.on("server:runtime-updated", refreshRuntime);
+    socket.on("server:scan-updated", refreshLatestScan);
 
     return () => {
+      socket.off("server:runtime-updated", refreshRuntime);
+      socket.off("server:scan-updated", refreshLatestScan);
+      if (scanRefreshTimer) {
+        window.clearTimeout(scanRefreshTimer);
+      }
       socket.disconnect();
     };
   }, [load]);
@@ -211,13 +223,10 @@ export function RuntimeMonitorView() {
             <MachineRuntimeCard
               key={row.machine.id}
               row={row}
-              liveData={[]}
-              localTrendData={buildSessionLocalTrendData(row.session)}
               trendData={buildSessionServerTrendData(row.session)}
               timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
               displayOptions={displayOptions}
               showCommonLocalNgReason
-              localChartTitleKey="currentSessionOkNgGraph"
             />
           ))}
         </div>

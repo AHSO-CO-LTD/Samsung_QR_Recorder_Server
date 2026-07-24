@@ -47,13 +47,13 @@ export class DuplicatesController {
   @Get("full-audit/jobs")
   @ApiQuery({ name: "take", required: false, example: 100 })
   @ApiQuery({ name: "skip", required: false, example: 0 })
-  @ApiOkResponse({ description: "List full database duplicate audit runs." })
+  @ApiOkResponse({ description: "List scheduled, full database, and date-range duplicate audit runs." })
   listFullAuditJobs(@Query("take") take?: string, @Query("skip") skip?: string) {
     return this.duplicatesService.listFullAuditJobs(Number(take || 100), Number(skip || 0));
   }
 
   @Get("full-audit/jobs/:id/detail")
-  @ApiOkResponse({ description: "Get full database duplicate audit run summary and duplicate detail." })
+  @ApiOkResponse({ description: "Get one duplicate audit run summary and duplicate detail." })
   getFullAuditJobDetail(@Param("id") id: string) {
     return this.duplicatesService.getFullAuditJobDetail(Number(id));
   }
@@ -62,7 +62,7 @@ export class DuplicatesController {
   @ApiQuery({ name: "take", required: false, example: 100 })
   @ApiQuery({ name: "skip", required: false, example: 0 })
   @ApiQuery({ name: "job_id", required: false, example: 1 })
-  @ApiOkResponse({ description: "List latest full database duplicate audit report results." })
+  @ApiOkResponse({ description: "List results for a selected duplicate audit run." })
   listFullAuditResults(@Query("take") take?: string, @Query("skip") skip?: string, @Query("job_id") jobId?: string) {
     return this.duplicatesService.listFullAuditResults(Number(take || 100), Number(skip || 0), jobId ? Number(jobId) : undefined);
   }

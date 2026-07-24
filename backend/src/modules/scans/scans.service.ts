@@ -1,8 +1,10 @@
 import { BadRequestException, HttpException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { getVietnamDayRange } from "../../common/time/vietnam-time";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MachinesService } from "../machines/machines.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { RuntimeGateway } from "../runtime/runtime.gateway";
 import { RuntimeService } from "../runtime/runtime.service";
 import { FullCodePayloadDto, LedScanPayloadDto, SubmitScanDto } from "./dto/submit-scan.dto";
 
@@ -40,6 +42,7 @@ export class ScansService {
     private readonly prisma: PrismaService,
     private readonly machinesService: MachinesService,
     private readonly runtimeService: RuntimeService,
+    private readonly runtimeGateway: RuntimeGateway,
     private readonly notifications: NotificationsService
   ) {}
 
@@ -143,19 +146,29 @@ export class ScansService {
   }
 
   async getScanSummary(query: { from?: string; to?: string }) {
-    const where = {
-      scan_at:
-        query.from || query.to
-          ? {
+    const todayRange = getVietnamDayRange();
+    const rangeWhere: Prisma.ScanRecordWhereInput =
+      query.from || query.to
+        ? {
+            scan_at: {
               gte: query.from ? new Date(query.from) : undefined,
               lte: query.to ? new Date(query.to) : undefined
             }
-          : undefined
-    };
-    const [okCount, ngCount, pendingCount, pendingSyncMachines, settings] = await Promise.all([
-      this.prisma.scanRecord.count({ where: { ...where, final_status: "OK" } }),
-      this.prisma.scanRecord.count({ where: { ...where, final_status: "NG" } }),
-      this.prisma.scanRecord.count({ where: { ...where, final_status: "PENDING" } }),
+          }
+        : {
+            scan_at: {
+              gte: todayRange.start,
+              lt: todayRange.end
+            }
+          };
+    const [okCount, ngCount, pendingCount, todayDuplicateCount, totalOkCount, totalNgCount, totalDuplicateCount, pendingSyncMachines, settings] = await Promise.all([
+      this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "OK" } }),
+      this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "NG" } }),
+      this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "PENDING" } }),
+      this.prisma.scanRecord.count({ where: { ...rangeWhere, ng_reason: "SERVER_DUPLICATE" } }),
+      this.prisma.scanRecord.count({ where: { final_status: "OK" } }),
+      this.prisma.scanRecord.count({ where: { final_status: "NG" } }),
+      this.prisma.scanRecord.count({ where: { ng_reason: "SERVER_DUPLICATE" } }),
       this.prisma.machineSyncState.aggregate({
         _sum: {
           local_pending_sync: true
@@ -175,6 +188,10 @@ export class ScansService {
         ng: ngCount,
         pending: pendingCount,
         total: okCount + ngCount + pendingCount,
+        today_duplicates: todayDuplicateCount,
+        total_ok: totalOkCount,
+        total_ng: totalNgCount,
+        total_duplicates: totalDuplicateCount,
         pending_sync: pendingSyncMachines._sum.local_pending_sync ?? 0,
         duplicate_days: settings?.duplicate_days ?? 31
       }
@@ -355,6 +372,11 @@ export class ScansService {
       if (!options.skipRequestLog && machineForLog) {
         await this.logSyncRequest(machineForLog.id, dto, result, options.requestType ?? "SUBMIT_SCAN", "OK", options.batchCode);
       }
+      this.runtimeGateway.publishScanUpdated({
+        machine_code: dto.machine_code,
+        local_scan_id: dto.local_scan_id,
+        result_code: result.code
+      });
       return result;
     } catch (error) {
       if (!options.skipRequestLog && machineForLog) {

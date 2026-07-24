@@ -44,6 +44,10 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   constructor(private readonly runtimeService: RuntimeService) {}
 
+  publishScanUpdated(payload: { machine_code: string; local_scan_id: string; result_code: string }) {
+    this.server?.emit("server:scan-updated", payload);
+  }
+
   handleConnection(client: Socket) {
     this.logger.log(`Runtime socket connected: ${client.id}`);
     client.emit("server:hello-required", {

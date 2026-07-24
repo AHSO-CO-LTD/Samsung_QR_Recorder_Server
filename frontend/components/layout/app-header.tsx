@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppClock } from "@/components/layout/app-clock";
 import { AppLogo } from "@/components/layout/app-logo";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { PrimaryNavbar } from "@/components/layout/primary-navbar";
@@ -71,6 +72,7 @@ export function AppHeader({
           />
 
           <div className="flex shrink-0 justify-end gap-1">
+            <AppClock locale={locale} />
             {canAccessNotifications ? <NotificationBell locale={locale} t={t} /> : null}
             <UserMenu
               user={user}

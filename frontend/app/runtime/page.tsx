@@ -1,5 +1,5 @@
-import { RuntimeView } from "@/features/runtime/runtime-view";
+import { redirect } from "next/navigation";
 
 export default function RuntimePage() {
-  return <RuntimeView />;
+  redirect("/machines?tab=runtime");
 }

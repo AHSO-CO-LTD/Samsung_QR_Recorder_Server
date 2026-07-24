@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDesktopApp, type DesktopUpdateRelease, type DesktopUpdateState } from "@/lib/desktop-app";
+import { formatAppDateTime } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 
@@ -165,6 +166,7 @@ export function UpdatePanel({ mode = "settings", autoCheck = mode === "settings"
               <UpdateReleaseRow
                 key={release.tagName}
                 release={release}
+                locale={locale}
                 canInstall={Boolean(state?.packaged)}
                 installingTag={installingTag}
                 text={text}
@@ -217,6 +219,7 @@ function StatusCell({ label, value }: { label: string; value: string }) {
 
 function UpdateReleaseRow({
   release,
+  locale,
   canInstall,
   installingTag,
   text,
@@ -224,6 +227,7 @@ function UpdateReleaseRow({
   onInstall
 }: {
   release: DesktopUpdateRelease;
+  locale: "vi" | "en";
   canInstall: boolean;
   installingTag: string | null;
   text: UpdateCopy;
@@ -240,7 +244,7 @@ function UpdateReleaseRow({
         </div>
         <p className="text-xs text-muted-foreground">
           {release.assetName} | {formatFileSize(release.assetSize)}
-          {release.publishedAt ? ` | ${new Date(release.publishedAt).toLocaleString()}` : ""}
+          {release.publishedAt ? ` | ${formatAppDateTime(release.publishedAt, locale)}` : ""}
         </p>
       </div>
       <div className="flex min-w-0 gap-2 sm:justify-end">

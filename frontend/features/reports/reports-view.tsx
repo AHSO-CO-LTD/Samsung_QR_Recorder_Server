@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiDownloadBlob, apiGet } from "@/lib/api";
+import { appDatetimeLocalToIso, toAppDatetimeLocal } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
@@ -266,8 +267,8 @@ export function ReportsView() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [machineCode, setMachineCode] = useState("");
   const [profileId, setProfileId] = useState("");
-  const [fromDate, setFromDate] = useState(toDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
-  const [toDate, setToDate] = useState(toDatetimeLocal(new Date()));
+  const [fromDate, setFromDate] = useState(toAppDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+  const [toDate, setToDate] = useState(toAppDatetimeLocal(new Date()));
   const [selectedStatuses, setSelectedStatuses] = useState<Set<ReportStatus>>(new Set(["OK", "NG"]));
   const [selectedColumns, setSelectedColumns] = useState<Set<ReportColumnKey>>(new Set(defaultSelectedColumns));
   const [includeSummary, setIncludeSummary] = useState(true);
@@ -344,7 +345,7 @@ export function ReportsView() {
       toast.warning(text.noStatus);
       return;
     }
-    if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+    if (fromDate && toDate && appDatetimeLocalToIso(fromDate) > appDatetimeLocalToIso(toDate)) {
       toast.warning(text.invalidRange);
       return;
     }
@@ -359,8 +360,8 @@ export function ReportsView() {
         locale
       });
 
-      if (fromDate) params.set("from", new Date(fromDate).toISOString());
-      if (toDate) params.set("to", new Date(toDate).toISOString());
+      if (fromDate) params.set("from", appDatetimeLocalToIso(fromDate));
+      if (toDate) params.set("to", appDatetimeLocalToIso(toDate));
       if (machineCode) params.set("machine_codes", machineCode);
       if (profileId) params.set("profile_ids", profileId);
 
@@ -421,8 +422,8 @@ export function ReportsView() {
                 onClick={() => {
                   setMachineCode("");
                   setProfileId("");
-                  setFromDate(toDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
-                  setToDate(toDatetimeLocal(new Date()));
+                  setFromDate(toAppDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+                  setToDate(toAppDatetimeLocal(new Date()));
                 }}
               >
                 <FilterX className="h-4 w-4" aria-hidden="true" />
@@ -536,9 +537,4 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 function formatCount(template: string, count: number) {
   return template.replace("{count}", String(count));
-}
-
-function toDatetimeLocal(date: Date) {
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }

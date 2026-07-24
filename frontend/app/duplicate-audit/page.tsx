@@ -1,5 +1,5 @@
-import { DuplicateAuditView } from "@/features/duplicates/duplicate-audit-view";
+import { redirect } from "next/navigation";
 
 export default function DuplicateAuditPage() {
-  return <DuplicateAuditView />;
+  redirect("/scans?tab=scheduled-duplicate-check");
 }

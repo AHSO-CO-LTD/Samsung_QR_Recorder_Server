@@ -1,17 +1,29 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { FilterX, Play } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FilterX } from "lucide-react";
+import { io } from "socket.io-client";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import { appDatetimeLocalToIso } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
-import type { DuplicateKey, HistoricalDuplicateResult, Machine, Profile, ScanRecord, Vendor } from "@/features/shared/types";
+import { DuplicateAuditView } from "@/features/duplicates/duplicate-audit-view";
+import {
+  ScanDisplaySettingsDialog,
+  defaultScanDisplaySettings,
+  readScanDisplaySettings,
+  type ScanColumnKey,
+  type ScanDisplaySettings
+} from "@/features/scans/scan-display-settings-dialog";
+import { buildRuntimeSocketUrl, formatIssueReason } from "@/features/shared/machine-runtime-card";
+import { usePermissions } from "@/lib/permissions";
+import type { DuplicateKey, Machine, Profile, ScanRecord, Vendor } from "@/features/shared/types";
 
 type ScanFilters = {
   machine_code: string;
@@ -20,12 +32,6 @@ type ScanFilters = {
   final_status: string;
   from: string;
   to: string;
-};
-
-type HistoricalJobDraft = {
-  profile_id: string;
-  from_date: string;
-  to_date: string;
 };
 
 const emptyFilters: ScanFilters = {
@@ -37,27 +43,30 @@ const emptyFilters: ScanFilters = {
   to: ""
 };
 
-const now = new Date();
-const defaultFromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+type ScansTab = "all-scans" | "duplicate-scans" | "active-duplicate-keys" | "scheduled-duplicate-check";
 
-const defaultDraft: HistoricalJobDraft = {
-  profile_id: "",
-  from_date: toDatetimeLocal(defaultFromDate),
-  to_date: toDatetimeLocal(now)
-};
-
-export function ScansView() {
+export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab }) {
   const { t } = useI18n();
+  const { canAccess, isLoading: isPermissionLoading } = usePermissions();
+  const canViewScans = canAccess("scans");
+  const canScheduleDuplicateCheck = canAccess("duplicate-audit");
   const [machines, setMachines] = useState<Machine[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [filters, setFilters] = useState<ScanFilters>(emptyFilters);
-  const [activeTab, setActiveTab] = useState("all-scans");
-  const [duplicateRefreshId, setDuplicateRefreshId] = useState(0);
-  const [isHistoricalJobSaving, setIsHistoricalJobSaving] = useState(false);
-  const [historicalDraft, setHistoricalDraft] = useState(defaultDraft);
+  const [activeTab, setActiveTab] = useState<ScansTab>(defaultTab);
+  const [scanDisplaySettings, setScanDisplaySettings] = useState<ScanDisplaySettings>(defaultScanDisplaySettings);
+  const [realtimeRefreshSignal, setRealtimeRefreshSignal] = useState(0);
 
   useEffect(() => {
+    setScanDisplaySettings(readScanDisplaySettings());
+  }, []);
+
+  useEffect(() => {
+    if (!canViewScans) {
+      return;
+    }
+
     let isMounted = true;
     void Promise.all([apiGet<Machine[]>("/machines"), apiGet<Profile[]>("/profiles"), apiGet<Vendor[]>("/master-data/vendors")])
       .then(([machineResult, profileResult, vendorResult]) => {
@@ -74,7 +83,52 @@ export function ScansView() {
     return () => {
       isMounted = false;
     };
-  }, [t]);
+  }, [canViewScans, t]);
+
+  const visibleTab: ScansTab =
+    activeTab === "scheduled-duplicate-check"
+      ? canScheduleDuplicateCheck
+        ? "scheduled-duplicate-check"
+        : "all-scans"
+      : canViewScans
+        ? activeTab
+        : "scheduled-duplicate-check";
+
+  useEffect(() => {
+    if (visibleTab !== "all-scans" || scanDisplaySettings.refreshMode !== "realtime") {
+      return;
+    }
+
+    let refreshTimer: number | undefined;
+    let hasReportedConnectionError = false;
+    const socket = io(buildRuntimeSocketUrl(), {
+      transports: ["websocket", "polling"]
+    });
+
+    socket.on("server:scan-updated", () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        setRealtimeRefreshSignal((value) => value + 1);
+      }, 250);
+    });
+    socket.on("connect_error", () => {
+      if (!hasReportedConnectionError) {
+        toast.error(t("scanRealtimeConnectionFailed"));
+        hasReportedConnectionError = true;
+      }
+    });
+    socket.on("connect", () => {
+      if (hasReportedConnectionError) {
+        toast.success(t("scanRealtimeReconnected"));
+        hasReportedConnectionError = false;
+      }
+    });
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+      socket.disconnect();
+    };
+  }, [scanDisplaySettings.refreshMode, t, visibleTab]);
 
   const vendorByChar = useMemo(() => new Map(vendors.map((vendor) => [vendor.vendor_char, vendor])), [vendors]);
   const getVendorLabel = (vendorChar?: string | null) => {
@@ -92,8 +146,8 @@ export function ScansView() {
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
     if (filters.final_status) params.set("final_status", filters.final_status);
-    if (filters.from) params.set("from", new Date(filters.from).toISOString());
-    if (filters.to) params.set("to", new Date(filters.to).toISOString());
+    if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
+    if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
     return `/scans?${params.toString()}`;
   }, [filters]);
 
@@ -102,8 +156,8 @@ export function ScansView() {
     if (filters.machine_code) params.set("machine_code", filters.machine_code);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
-    if (filters.from) params.set("from", new Date(filters.from).toISOString());
-    if (filters.to) params.set("to", new Date(filters.to).toISOString());
+    if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
+    if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
     return `/scans?${params.toString()}`;
   }, [filters]);
 
@@ -118,8 +172,9 @@ export function ScansView() {
     { key: "local", header: t("colLocal"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.local_status} /> },
     { key: "server", header: t("colServer"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.server_status} /> },
     { key: "final", header: t("colFinal"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.final_status} /> },
-    { key: "reason", header: t("colNgReason"), className: "min-w-[10rem]", render: (item) => item.ng_reason || "-" }
+    { key: "reason", header: t("colNgReason"), className: "min-w-[10rem]", render: (item) => <NgReasonText value={item.ng_reason} /> }
   ];
+  const visibleAllScanColumns = columns.filter((column) => scanDisplaySettings.visibleColumns.includes(column.key as ScanColumnKey));
 
   const recentColumns: Column<DuplicateKey>[] = [
     { key: "key", header: t("colDuplicateKey"), render: (item) => <MonoText value={item.duplicate_key} /> },
@@ -130,45 +185,21 @@ export function ScansView() {
     { key: "scan", header: t("colScanId"), render: (item) => <MonoText value={item.first_scan_record_id} /> }
   ];
 
-  const historicalColumns: Column<HistoricalDuplicateResult>[] = [
-    { key: "key", header: t("colDuplicateKey"), render: (item) => <MonoText value={item.duplicate_key} /> },
-    { key: "profile", header: t("colProfile"), render: (item) => <MonoText value={item.profile?.chassis_code?.code_full} /> },
-    { key: "count", header: t("colCount"), render: (item) => item.total_count },
-    { key: "first", header: t("colFirst"), render: (item) => <DateText value={item.first_scan_at} /> },
-    { key: "latest", header: t("colLatest"), render: (item) => <DateText value={item.latest_scan_at} /> },
-    { key: "job", header: t("colJob"), render: (item) => <StatusBadge value={item.job?.status || "-"} /> }
-  ];
-
-  const runHistoricalJob = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsHistoricalJobSaving(true);
-    try {
-      await apiPost("/duplicates/historical-jobs/run", {
-        profile_id: historicalDraft.profile_id ? Number(historicalDraft.profile_id) : undefined,
-        from_date: new Date(historicalDraft.from_date).toISOString(),
-        to_date: new Date(historicalDraft.to_date).toISOString()
-      });
-      toast.success(t("historicalJobDone"));
-      setDuplicateRefreshId((value) => value + 1);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("historicalJobFailed"));
-    } finally {
-      setIsHistoricalJobSaving(false);
-    }
-  };
-
   return (
     <div className="min-w-0 space-y-4">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {isPermissionLoading ? (
+        <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div>
+      ) : (
+      <Tabs value={visibleTab} onValueChange={(value) => setActiveTab(value as ScansTab)}>
         <div className="sticky top-[var(--app-header-height,4rem)] z-30 rounded-md border bg-background p-3 shadow-sm">
           <TabsList className="w-full justify-start overflow-x-auto bg-muted [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
-            <TabsTrigger value="all-scans">{t("scanTabAll")}</TabsTrigger>
-            <TabsTrigger value="duplicate-scans">{t("scanTabDuplicates")}</TabsTrigger>
-            <TabsTrigger value="active-duplicate-keys">{t("scanTabActiveDuplicateKeys")}</TabsTrigger>
-            <TabsTrigger value="historical-duplicate-check">{t("scanTabHistoricalDuplicateCheck")}</TabsTrigger>
+            {canViewScans ? <TabsTrigger value="all-scans">{t("scanTabAll")}</TabsTrigger> : null}
+            {canViewScans ? <TabsTrigger value="duplicate-scans">{t("scanTabDuplicates")}</TabsTrigger> : null}
+            {canViewScans ? <TabsTrigger value="active-duplicate-keys">{t("scanTabActiveDuplicateKeys")}</TabsTrigger> : null}
+            {canScheduleDuplicateCheck ? <TabsTrigger value="scheduled-duplicate-check">{t("duplicateScheduleTab")}</TabsTrigger> : null}
           </TabsList>
 
-          {activeTab === "all-scans" || activeTab === "duplicate-scans" ? (
+          {canViewScans && (visibleTab === "all-scans" || visibleTab === "duplicate-scans") ? (
             <div className="mt-3">
               <ScanFiltersCard filters={filters} machines={machines} profiles={profiles} vendors={vendors} onFiltersChange={setFilters} hideFinalStatus={activeTab === "duplicate-scans"} />
             </div>
@@ -180,8 +211,17 @@ export function ScansView() {
             <DataTablePanel
               title={t("scanLatest")}
               endpoint={allScansEndpoint}
-              columns={columns}
+              columns={visibleAllScanColumns}
               getRowKey={(item) => item.id}
+              actions={
+                <>
+                  <Badge variant="outline">{getRefreshModeLabel(scanDisplaySettings, t)}</Badge>
+                  <ScanDisplaySettingsDialog settings={scanDisplaySettings} onSave={setScanDisplaySettings} />
+                </>
+              }
+              autoRefreshMs={scanDisplaySettings.refreshMode === "automatic" ? scanDisplaySettings.autoRefreshSeconds * 1000 : undefined}
+              refreshSignal={realtimeRefreshSignal}
+              showTopHorizontalScrollbar
               singleExpandedRow
               pagination={{ pageSize: 100, mode: "server" }}
               renderExpandedRow={(item) => <ScanLedDetails scan={item} vendorLabel={getVendorLabel(item.full_vendor_char)} />}
@@ -208,50 +248,20 @@ export function ScansView() {
         <TabsContent value="active-duplicate-keys">
           <DataTablePanel
             title={t("recentDuplicateKeys")}
-            endpoint={`/duplicates/recent-keys?take=100&refresh=${duplicateRefreshId}`}
+            endpoint="/duplicates/recent-keys?take=100"
             columns={recentColumns}
             getRowKey={(item) => item.id}
             searchableText={(item) => `${item.duplicate_key} ${item.profile?.chassis_code?.code_full ?? ""} ${item.first_machine?.machine_code ?? ""}`}
           />
         </TabsContent>
 
-        <TabsContent value="historical-duplicate-check">
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("historicalDuplicateJobTitle")}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={runHistoricalJob}>
-                  <SelectField label={t("colProfile")} value={historicalDraft.profile_id} onChange={(event) => setHistoricalDraft({ ...historicalDraft, profile_id: event.target.value })}>
-                    <option value="">{t("allProfiles")}</option>
-                    {profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.chassis_code?.code_full ?? t("profileFallbackName", { id: profile.id })}
-                      </option>
-                    ))}
-                  </SelectField>
-                  <TextInputField required type="datetime-local" label={t("fieldFromDate")} value={historicalDraft.from_date} onChange={(event) => setHistoricalDraft({ ...historicalDraft, from_date: event.target.value })} />
-                  <TextInputField required type="datetime-local" label={t("fieldToDate")} value={historicalDraft.to_date} onChange={(event) => setHistoricalDraft({ ...historicalDraft, to_date: event.target.value })} />
-                  <div className="flex items-end">
-                    <Button type="submit" disabled={isHistoricalJobSaving}>
-                      <Play className="h-4 w-4" aria-hidden="true" />
-                      {t("run")}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-            <DataTablePanel
-              title={t("historicalDuplicateResults")}
-              endpoint={`/duplicates/historical-results?take=100&refresh=${duplicateRefreshId}`}
-              columns={historicalColumns}
-              getRowKey={(item) => item.id}
-              searchableText={(item) => `${item.duplicate_key} ${item.profile?.chassis_code?.code_full ?? ""} ${item.total_count} ${item.job?.status ?? ""}`}
-            />
-          </div>
-        </TabsContent>
+        {canScheduleDuplicateCheck ? (
+          <TabsContent value="scheduled-duplicate-check">
+            <DuplicateAuditView />
+          </TabsContent>
+        ) : null}
       </Tabs>
+      )}
     </div>
   );
 }
@@ -391,7 +401,9 @@ function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: 
                   <TableCell>
                     <StatusBadge value={ledItem.local_status} />
                   </TableCell>
-                  <TableCell>{ledItem.ng_reason || "-"}</TableCell>
+                  <TableCell>
+                    <NgReasonText value={ledItem.ng_reason} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -410,6 +422,24 @@ function getLedCodeForSlot(scan: ScanRecord, slot: number) {
   return scan.profile?.profile_led_codes?.find((item) => item.led_slot === slot)?.led_code?.code_full ?? "-";
 }
 
+function NgReasonText({ value }: { value?: string | null }) {
+  const { locale } = useI18n();
+
+  if (!value) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+
+  return <span title={value}>{formatIssueReason(value, locale)}</span>;
+}
+
+function getRefreshModeLabel(settings: ScanDisplaySettings, t: ReturnType<typeof useI18n>["t"]) {
+  if (settings.refreshMode === "automatic") {
+    return t("scanRefreshAutomaticValue", { seconds: settings.autoRefreshSeconds });
+  }
+
+  return settings.refreshMode === "realtime" ? t("scanRefreshRealtime") : t("scanRefreshManual");
+}
+
 function DetailValue({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="rounded-md border bg-background px-3 py-2">
@@ -417,9 +447,4 @@ function DetailValue({ label, value, mono }: { label: string; value: string; mon
       <div className={mono ? "mt-1 font-mono text-xs" : "mt-1 text-sm font-medium"}>{value}</div>
     </div>
   );
-}
-
-function toDatetimeLocal(date: Date) {
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }

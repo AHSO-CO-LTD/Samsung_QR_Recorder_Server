@@ -6,6 +6,7 @@ import type { ScanReportQueryDto } from "./dto/scan-report-query.dto";
 import { DEFAULT_REPORT_COLUMNS, MAX_EXPORT_ROWS, REPORT_COLUMN_KEYS, REPORT_FINAL_STATUSES, type ScanReportColumnKey, type ScanReportLocale } from "./report-definition";
 
 type Locale = ScanReportLocale;
+const VIETNAM_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
 type ReportFilters = {
   machineCodes: string[];
   profileIds: number[];
@@ -41,7 +42,7 @@ type ReportColumn = {
 const columnLabels: Record<Locale, Record<ScanReportColumnKey, string>> = {
   vi: {
     scan_record_id: "ID bản ghi",
-    scan_at: "Thời gian quét",
+    scan_at: "Thời gian quét (GMT+7)",
     machine_code: "Mã máy",
     machine_name: "Tên máy",
     line_name: "Dây chuyền",
@@ -77,11 +78,11 @@ const columnLabels: Record<Locale, Record<ScanReportColumnKey, string>> = {
     runtime_session_code: "Phiên chạy",
     runtime_product_code: "Mã đang chạy",
     sync_batch_id: "ID đợt đồng bộ",
-    created_at: "Máy chủ ghi lúc"
+    created_at: "Máy chủ ghi lúc (GMT+7)"
   },
   en: {
     scan_record_id: "Record ID",
-    scan_at: "Scan time",
+    scan_at: "Scan time (GMT+7)",
     machine_code: "Machine code",
     machine_name: "Machine name",
     line_name: "Line",
@@ -117,13 +118,13 @@ const columnLabels: Record<Locale, Record<ScanReportColumnKey, string>> = {
     runtime_session_code: "Runtime session",
     runtime_product_code: "Runtime product",
     sync_batch_id: "Sync batch ID",
-    created_at: "Server created at"
+    created_at: "Server created at (GMT+7)"
   }
 };
 
 const reportColumns: Record<ScanReportColumnKey, ReportColumn> = {
   scan_record_id: { key: "scan_record_id", width: 12, value: (record) => record.id },
-  scan_at: { key: "scan_at", width: 22, value: (record) => record.scan_at },
+  scan_at: { key: "scan_at", width: 22, value: (record) => toVietnamExcelDate(record.scan_at) },
   machine_code: { key: "machine_code", width: 16, value: (record) => record.machine.machine_code },
   machine_name: { key: "machine_name", width: 24, value: (record) => record.machine.machine_name },
   line_name: { key: "line_name", width: 16, value: (record) => record.machine.line_name },
@@ -163,7 +164,7 @@ const reportColumns: Record<ScanReportColumnKey, ReportColumn> = {
   runtime_session_code: { key: "runtime_session_code", width: 24, value: (record) => record.runtime_session?.session_code ?? null },
   runtime_product_code: { key: "runtime_product_code", width: 24, value: (record) => record.runtime_product?.product_code ?? null },
   sync_batch_id: { key: "sync_batch_id", width: 14, value: (record) => record.sync_batch_id },
-  created_at: { key: "created_at", width: 22, value: (record) => record.created_at }
+  created_at: { key: "created_at", width: 22, value: (record) => toVietnamExcelDate(record.created_at) }
 };
 
 @Injectable()
@@ -333,9 +334,9 @@ export class ReportsService {
       locale === "vi"
         ? {
             sheet: "Tổng quan",
-            generatedAt: "Xuất lúc",
-            from: "Từ ngày",
-            to: "Đến ngày",
+            generatedAt: "Xuất lúc (GMT+7)",
+            from: "Từ ngày (GMT+7)",
+            to: "Đến ngày (GMT+7)",
             machines: "Máy",
             profiles: "Hồ sơ",
             statuses: "Trạng thái",
@@ -346,9 +347,9 @@ export class ReportsService {
           }
         : {
             sheet: "Summary",
-            generatedAt: "Generated at",
-            from: "From",
-            to: "To",
+            generatedAt: "Generated at (GMT+7)",
+            from: "From (GMT+7)",
+            to: "To (GMT+7)",
             machines: "Machines",
             profiles: "Profiles",
             statuses: "Statuses",
@@ -372,9 +373,9 @@ export class ReportsService {
       { key: "value", width: 60 }
     ];
     sheet.addRows([
-      { label: labels.generatedAt, value: new Date() },
-      { label: labels.from, value: filters.from ?? allValue },
-      { label: labels.to, value: filters.to ?? allValue },
+      { label: labels.generatedAt, value: toVietnamExcelDate(new Date()) },
+      { label: labels.from, value: filters.from ? toVietnamExcelDate(filters.from) : allValue },
+      { label: labels.to, value: filters.to ? toVietnamExcelDate(filters.to) : allValue },
       { label: labels.machines, value: filters.machineCodes.join(", ") || allValue },
       { label: labels.profiles, value: filters.profileIds.join(", ") || allValue },
       { label: labels.statuses, value: filters.finalStatuses.join(", ") || allValue },
@@ -491,6 +492,10 @@ function parseDate(value: string | undefined, fieldName: string) {
     });
   }
   return date;
+}
+
+function toVietnamExcelDate(date: Date) {
+  return new Date(date.getTime() + VIETNAM_UTC_OFFSET_MS);
 }
 
 function formatFileStamp(date: Date) {

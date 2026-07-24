@@ -6,9 +6,7 @@ import {
   Activity,
   MonitorCog,
   ScanLine,
-  SearchCheck,
   Settings,
-  Unplug,
   UsersRound,
   Workflow,
   type LucideIcon
@@ -24,6 +22,7 @@ export type NavItem = {
   descriptionKey: MessageKey;
   icon: LucideIcon;
   permissionKey: ScreenPermissionKey;
+  alternativePermissionKeys?: readonly ScreenPermissionKey[];
   external?: boolean;
 };
 
@@ -52,9 +51,23 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navOperationDesc",
     icon: ScanLine,
     items: [
-      { href: "/machines", key: "machines", descriptionKey: "machineDesc", icon: MonitorCog, permissionKey: "machines" },
-      { href: "/runtime", key: "runtimeSessions", descriptionKey: "runtimeDesc", icon: Activity, permissionKey: "runtime" },
-      { href: "/scans", key: "scans", descriptionKey: "scanDesc", icon: ScanLine, permissionKey: "scans" },
+      {
+        href: "/machines",
+        key: "machines",
+        descriptionKey: "machineDesc",
+        icon: MonitorCog,
+        permissionKey: "machines",
+        alternativePermissionKeys: ["runtime"]
+      },
+      { href: "/master-data", key: "masterData", descriptionKey: "masterDataDesc", icon: Database, permissionKey: "master-data" },
+      {
+        href: "/scans",
+        key: "scans",
+        descriptionKey: "scanDesc",
+        icon: ScanLine,
+        permissionKey: "scans",
+        alternativePermissionKeys: ["duplicate-audit"]
+      },
       { href: "/reports", key: "reports", descriptionKey: "reportDesc", icon: FileSpreadsheet, permissionKey: "reports" }
     ]
   },
@@ -64,12 +77,9 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navSystemDesc",
     icon: Settings,
     items: [
-      { href: "/master-data", key: "masterData", descriptionKey: "masterDataDesc", icon: Database, permissionKey: "master-data" },
       { href: "/sync", key: "sync", descriptionKey: "syncDesc", icon: Workflow, permissionKey: "sync" },
-      { href: "/duplicate-audit", key: "duplicateAudit", descriptionKey: "duplicateAuditDesc", icon: SearchCheck, permissionKey: "duplicate-audit" },
       { href: "/users", key: "users", descriptionKey: "usersDesc", icon: UsersRound, permissionKey: "users" },
-      { href: "/audit-logs", key: "auditLogs", descriptionKey: "auditLogsDesc", icon: History, permissionKey: "audit-logs" },
-      { href: "http://127.0.0.1:3979/api/docs", key: "apiDocs", descriptionKey: "apiDocsDesc", icon: Unplug, permissionKey: "api-docs", external: true }
+      { href: "/audit-logs", key: "auditLogs", descriptionKey: "auditLogsDesc", icon: History, permissionKey: "audit-logs" }
     ]
   }
 ] as const;
@@ -78,7 +88,9 @@ export function filterNavGroups(canAccess: (permissionKey: ScreenPermissionKey) 
   return navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccess(item.permissionKey))
+      items: group.items.filter(
+        (item) => canAccess(item.permissionKey) || item.alternativePermissionKeys?.some((permissionKey) => canAccess(permissionKey))
+      )
     }))
     .filter((group) => group.items.length > 0);
 }

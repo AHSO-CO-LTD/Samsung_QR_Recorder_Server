@@ -14,14 +14,9 @@ import {
   MachineRuntimeCard,
   SERVER_TREND_BUCKET_MINUTES,
   SERVER_TREND_HOURS,
-  appendLiveSample,
-  appendRuntimeSnapshotSamples,
-  buildLiveSample,
   buildMachineRows,
   buildRuntimeSocketUrl,
   emptyTrendData,
-  getLiveSampleKey,
-  type RuntimeUpdatedPayload,
   type ScanTrendPoint,
   type TrendByMachine
 } from "@/features/shared/machine-runtime-card";
@@ -35,7 +30,6 @@ export function LocalMachinesOverview() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [sessions, setSessions] = useState<MachineRuntimeSession[]>([]);
   const [trendByMachine, setTrendByMachine] = useState<TrendByMachine>({});
-  const [liveByMachine, setLiveByMachine] = useState<TrendByMachine>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +53,6 @@ export function LocalMachinesOverview() {
         const nextSessions = sessionResult.status === "fulfilled" ? sessionResult.value.data ?? [] : [];
         setMachines(nextMachines);
         setSessions(nextSessions);
-        setLiveByMachine((current) => appendRuntimeSnapshotSamples(current, nextMachines, nextSessions));
         setError(null);
 
         if (sessionResult.status === "rejected" && showToast) {
@@ -126,17 +119,31 @@ export function LocalMachinesOverview() {
     const socket = io(buildRuntimeSocketUrl(), {
       transports: ["websocket", "polling"]
     });
+    let scanRefreshTimer: number | null = null;
 
-    socket.on("server:runtime-updated", (payload: RuntimeUpdatedPayload) => {
+    const refreshFromRuntime = () => {
       void load(false, true);
       void loadTrendData();
-      const liveSample = buildLiveSample(payload);
-      if (liveSample) {
-        setLiveByMachine((current) => appendLiveSample(current, getLiveSampleKey(liveSample), liveSample.point));
+    };
+    const refreshFromScan = () => {
+      if (scanRefreshTimer) {
+        window.clearTimeout(scanRefreshTimer);
       }
-    });
+      scanRefreshTimer = window.setTimeout(() => {
+        void load(false, true);
+        void loadTrendData();
+      }, 150);
+    };
+
+    socket.on("server:runtime-updated", refreshFromRuntime);
+    socket.on("server:scan-updated", refreshFromScan);
 
     return () => {
+      socket.off("server:runtime-updated", refreshFromRuntime);
+      socket.off("server:scan-updated", refreshFromScan);
+      if (scanRefreshTimer) {
+        window.clearTimeout(scanRefreshTimer);
+      }
       socket.disconnect();
     };
   }, [load, loadTrendData]);
@@ -185,7 +192,6 @@ export function LocalMachinesOverview() {
               key={row.machine.id}
               row={row}
               trendData={trendByMachine[row.machine.machine_code] ?? emptyTrendData}
-              liveData={liveByMachine[row.machine.machine_code] ?? []}
             />
           ))}
         </div>

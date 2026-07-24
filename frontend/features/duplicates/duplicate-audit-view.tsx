@@ -2,15 +2,17 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { Play, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { apiGet, apiPut } from "@/lib/api";
+import { formatAppDateTime } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { CheckboxField, NumberInputField, SelectField, TextInputField } from "@/features/shared/form-fields";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
+import { DuplicateCheckRunDialog } from "@/features/duplicates/duplicate-check-run-dialog";
 import type { FullAuditJobDetail, HistoricalDuplicateJob, HistoricalDuplicateResult, HistoricalDuplicateSchedule, HistoricalDuplicateScheduleOverview } from "@/features/shared/types";
 
 const defaultSchedule: HistoricalDuplicateSchedule = {
@@ -32,7 +34,6 @@ export function DuplicateAuditView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isJobDetailLoading, setIsJobDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jobDetailError, setJobDetailError] = useState<string | null>(null);
   const [refreshId, setRefreshId] = useState(0);
@@ -140,122 +141,104 @@ export function DuplicateAuditView() {
     }
   };
 
-  const runFullAudit = async () => {
-    setIsRunning(true);
-    const toastId = toast.loading(t("fullAuditRunning"));
-    try {
-      const result = await apiPost<{ job?: HistoricalDuplicateJob; results?: HistoricalDuplicateResult[] }, Record<string, never>>("/duplicates/full-audit/run", {});
-      setLatestJob(result.data?.job ?? null);
-      setRefreshId((value) => value + 1);
-      await loadOverview();
-      toast.success(t("fullAuditRunDone"), { id: toastId });
-      if (result.data?.job) {
-        setSelectedJob(result.data.job);
-      }
-    } catch (currentError) {
-      toast.error(currentError instanceof Error ? currentError.message : t("fullAuditRunFailed"), { id: toastId });
-    } finally {
-      setIsRunning(false);
-    }
+  const handleCheckCompleted = (job: HistoricalDuplicateJob) => {
+    setLatestJob(job);
+    setSelectedJob(job);
+    setRefreshId((value) => value + 1);
+    void loadOverview();
   };
 
   return (
     <div className="min-w-0 space-y-4">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("fullAuditScheduleTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
-            {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
-            {!isLoading ? (
-              <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_1fr_auto]" onSubmit={saveSchedule}>
-                <CheckboxField
-                  label={t("fullAuditScheduleEnabled")}
-                  hint={t("fullAuditScheduleEnabledHint")}
-                  checked={schedule.enabled}
-                  onCheckedChange={(checked) => setSchedule({ ...schedule, enabled: checked })}
-                />
-                <SelectField label={t("fullAuditFrequency")} value={schedule.frequency} onChange={(event) => setSchedule({ ...schedule, frequency: event.target.value as HistoricalDuplicateSchedule["frequency"] })}>
-                  <option value="DAILY">{t("frequencyDaily")}</option>
-                  <option value="WEEKLY">{t("frequencyWeekly")}</option>
-                  <option value="MONTHLY">{t("frequencyMonthly")}</option>
-                </SelectField>
-                <TextInputField type="time" label={t("fullAuditRunTime")} value={schedule.run_time} onChange={(event) => setSchedule({ ...schedule, run_time: event.target.value })} />
-                {schedule.frequency === "WEEKLY" ? (
-                  <SelectField label={t("fullAuditWeekday")} value={schedule.day_of_week} onChange={(event) => setSchedule({ ...schedule, day_of_week: Number(event.target.value) })}>
-                    {getWeekdayOptions(t).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </SelectField>
-                ) : (
-                  <NumberInputField
-                    label={t("fullAuditMonthDay")}
-                    min={1}
-                    max={31}
-                    value={schedule.day_of_month}
-                    disabled={schedule.frequency !== "MONTHLY"}
-                    onChange={(event) => setSchedule({ ...schedule, day_of_month: Number(event.target.value) })}
-                  />
-                )}
-                <div className="flex items-end">
-                  <Button type="submit" disabled={isSaving} className="w-full whitespace-nowrap md:w-auto">
-                    <Save className="h-4 w-4" aria-hidden="true" />
-                    {isSaving ? t("saving") : t("saveSettings")}
-                  </Button>
-                </div>
-              </form>
-            ) : null}
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("fullAuditScheduleTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
+                {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
+                {!isLoading ? (
+                  <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_1fr_auto]" onSubmit={saveSchedule}>
+                    <CheckboxField
+                      label={t("fullAuditScheduleEnabled")}
+                      checked={schedule.enabled}
+                      onCheckedChange={(checked) => setSchedule({ ...schedule, enabled: checked })}
+                    />
+                    <SelectField label={t("fullAuditFrequency")} value={schedule.frequency} onChange={(event) => setSchedule({ ...schedule, frequency: event.target.value as HistoricalDuplicateSchedule["frequency"] })}>
+                      <option value="DAILY">{t("frequencyDaily")}</option>
+                      <option value="WEEKLY">{t("frequencyWeekly")}</option>
+                      <option value="MONTHLY">{t("frequencyMonthly")}</option>
+                    </SelectField>
+                    <TextInputField type="time" label={t("fullAuditRunTime")} value={schedule.run_time} onChange={(event) => setSchedule({ ...schedule, run_time: event.target.value })} />
+                    {schedule.frequency === "WEEKLY" ? (
+                      <SelectField label={t("fullAuditWeekday")} value={schedule.day_of_week} onChange={(event) => setSchedule({ ...schedule, day_of_week: Number(event.target.value) })}>
+                        {getWeekdayOptions(t).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </SelectField>
+                    ) : (
+                      <NumberInputField
+                        label={t("fullAuditMonthDay")}
+                        min={1}
+                        max={31}
+                        value={schedule.day_of_month}
+                        disabled={schedule.frequency !== "MONTHLY"}
+                        onChange={(event) => setSchedule({ ...schedule, day_of_month: Number(event.target.value) })}
+                      />
+                    )}
+                    <div className="flex items-end">
+                      <Button type="submit" disabled={isSaving} className="w-full whitespace-nowrap md:w-auto">
+                        <Save className="h-4 w-4" aria-hidden="true" />
+                        {isSaving ? t("saving") : t("saveSettings")}
+                      </Button>
+                    </div>
+                  </form>
+                ) : null}
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("fullAuditStatusTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            <SummaryValue label={t("fullAuditScheduleStatus")} value={schedule.enabled ? t("active") : t("inactive")} />
-            <SummaryValue label={t("fullAuditNextRun")} value={<DateText value={schedule.next_run_at} />} />
-            <SummaryValue label={t("fullAuditLastRun")} value={<DateText value={schedule.last_run_at} />} />
-            <SummaryValue label={t("fullAuditLatestJob")} value={latestJob ? <StatusBadge value={latestJob.status} /> : "-"} />
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("fullAuditStatusTitle")}</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-sm">
+                <SummaryValue label={t("fullAuditScheduleStatus")} value={schedule.enabled ? t("active") : t("inactive")} />
+                <SummaryValue label={t("fullAuditNextRun")} value={<DateText value={schedule.next_run_at} />} />
+                <SummaryValue label={t("fullAuditLastRun")} value={<DateText value={schedule.last_run_at} />} />
+                <SummaryValue label={t("fullAuditLatestJob")} value={latestJob ? <StatusBadge value={latestJob.status} /> : "-"} />
+              </CardContent>
+            </Card>
       </div>
 
       <DataTablePanel
-        title={t("fullAuditRunsTitle")}
-        endpoint={`/duplicates/full-audit/jobs?refresh=${refreshId}`}
-        columns={jobColumns}
-        getRowKey={(item) => item.id}
-        actions={
-          <Button type="button" size="sm" onClick={() => void runFullAudit()} disabled={isRunning}>
-            <Play className="h-4 w-4" aria-hidden="true" />
-            {isRunning ? t("statusRunning") : t("fullAuditRunNow")}
-          </Button>
-        }
-        emptyText={t("fullAuditNoRuns")}
-        pagination={{ pageSize: 10, mode: "server" }}
-        onData={(jobs) => {
-          setSelectedJob((current) => current ?? jobs[0] ?? null);
-        }}
-        onRowClick={setSelectedJob}
-        rowClassName={(item) => (item.id === selectedJob?.id ? "bg-muted/50" : "")}
+            title={t("fullAuditRunsTitle")}
+            endpoint={`/duplicates/full-audit/jobs?refresh=${refreshId}`}
+            columns={jobColumns}
+            getRowKey={(item) => item.id}
+            actions={<DuplicateCheckRunDialog onCompleted={handleCheckCompleted} />}
+            emptyText={t("fullAuditNoRuns")}
+            pagination={{ pageSize: 10, mode: "server" }}
+            onData={(jobs) => {
+              setSelectedJob((current) => current ?? jobs[0] ?? null);
+            }}
+            onRowClick={setSelectedJob}
+            rowClassName={(item) => (item.id === selectedJob?.id ? "bg-muted/50" : "")}
       />
 
       <FullAuditJobDetailPanel job={selectedJob} detail={selectedJobDetail} isLoading={isJobDetailLoading} error={jobDetailError} />
 
       <DataTablePanel
-        title={selectedJob ? t("fullAuditResultForSelectedRun", { id: selectedJob.id }) : t("fullAuditReportTitle")}
-        endpoint={selectedJob ? `/duplicates/full-audit/results?job_id=${selectedJob.id}&refresh=${refreshId}` : `/duplicates/full-audit/results?refresh=${refreshId}`}
-        columns={resultColumns}
-        getRowKey={(item) => item.id}
-        emptyText={selectedJob ? t("fullAuditNoResultsForRun") : t("fullAuditSelectRun")}
-        pagination={{ pageSize: 10, mode: "server" }}
-        singleExpandedRow
-        renderExpandedRow={(item) => <FullAuditResultDetails result={item} />}
+            title={selectedJob ? t("fullAuditResultForSelectedRun", { id: selectedJob.id }) : t("fullAuditReportTitle")}
+            endpoint={selectedJob ? `/duplicates/full-audit/results?job_id=${selectedJob.id}&refresh=${refreshId}` : `/duplicates/full-audit/results?refresh=${refreshId}`}
+            columns={resultColumns}
+            getRowKey={(item) => item.id}
+            emptyText={selectedJob ? t("fullAuditNoResultsForRun") : t("fullAuditSelectRun")}
+            pagination={{ pageSize: 10, mode: "server" }}
+            singleExpandedRow
+            renderExpandedRow={(item) => <FullAuditResultDetails result={item} />}
       />
     </div>
   );
@@ -408,7 +391,7 @@ function FullAuditJobDetailPanel({
 }
 
 function FullAuditResultDetails({ result }: { result: HistoricalDuplicateResult }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const scanIds = getScanRecordIds(result);
 
   return (
@@ -416,7 +399,10 @@ function FullAuditResultDetails({ result }: { result: HistoricalDuplicateResult 
       <DetailValue label={t("colDuplicateKey")} value={result.duplicate_key} mono />
       <DetailValue label={t("colProfile")} value={result.profile?.chassis_code?.code_full ?? "-"} mono />
       <DetailValue label={t("colScanIds")} value={scanIds.length > 0 ? scanIds.join(", ") : "-"} mono />
-      <DetailValue label={t("fullAuditJobWindow")} value={`${new Date(result.job?.from_date ?? result.first_scan_at).toLocaleString()} - ${new Date(result.job?.to_date ?? result.latest_scan_at).toLocaleString()}`} />
+      <DetailValue
+        label={t("fullAuditJobWindow")}
+        value={`${formatAppDateTime(result.job?.from_date ?? result.first_scan_at, locale)} - ${formatAppDateTime(result.job?.to_date ?? result.latest_scan_at, locale)}`}
+      />
     </div>
   );
 }
@@ -459,6 +445,10 @@ function getJobTriggerLabel(triggerType: HistoricalDuplicateJob["trigger_type"],
 
   if (triggerType === "MANUAL_FULL") {
     return t("fullAuditTriggerManual");
+  }
+
+  if (triggerType === "MANUAL_RANGE") {
+    return t("fullAuditTriggerManualRange");
   }
 
   return triggerType;
