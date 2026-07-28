@@ -133,6 +133,7 @@ export function MachineRuntimeCard({
   const latestScanResult = normalizeScanValue(latestScan?.final_status) ?? normalizeScanValue(session?.last_result);
   const latestScanAt = latestScan?.scan_at ?? session?.last_result_at ?? null;
   const runtimeStatus = resolveMachineRuntimeDisplayStatus(session, isConnected);
+  const shouldShowDisconnectedState = !isConnected && runtimeStatus !== "STOPPED";
   const headerItems = [
     activeDisplayOptions.machineInfo ? <MachineIdentity key="machine" name={machine.machine_name || machine.machine_code} line={machine.line_name || "-"} /> : null,
     activeDisplayOptions.currentProduct ? <HeaderMetric key="product" label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} /> : null,
@@ -162,17 +163,17 @@ export function MachineRuntimeCard({
         runtimeStatus === "RUNNING" && "border-emerald-500/70",
         runtimeStatus === "PAUSED" && "border-amber-500/70",
         runtimeStatus === "DISCONNECTED" && "border-destructive/60",
-        !isConnected && runtimeStatus !== "STOPPED" && "bg-muted/40 text-muted-foreground"
+        shouldShowDisconnectedState && "bg-muted/40 text-muted-foreground"
       )}
     >
-      {!isConnected ? (
+      {shouldShowDisconnectedState ? (
         <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
           <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
           {t("machineNotConnected")}
         </div>
       ) : null}
 
-      <div className={cn(!isConnected && "pt-6 grayscale")}>
+      <div className={cn(shouldShowDisconnectedState && "pt-6 grayscale")}>
         {headerItems.length > 0 ? (
         <CardHeader className="pb-2 sm:pb-2">
           <div

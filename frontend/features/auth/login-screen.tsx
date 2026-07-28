@@ -10,9 +10,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { GuideLauncher } from "@/features/guides/guide-launcher";
 import { UpdatePanel } from "@/features/updates/update-panel";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n-provider";
+
+const loginGuideIds = ["01-dang-nhap"] as const;
 
 export function LoginScreen() {
   const { login, isLoggingIn } = useAuth();
@@ -60,6 +63,7 @@ export function LoginScreen() {
             <CardTitle className="truncate text-center">{t("loginTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
+            <GuideLauncher guideIds={loginGuideIds} mode="login" className="mb-4" />
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-2">
                 <label className="text-sm font-medium" htmlFor="username">

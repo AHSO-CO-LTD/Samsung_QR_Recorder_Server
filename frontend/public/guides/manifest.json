@@ -1,0 +1,785 @@
+{
+  "version": 1,
+  "guides": [
+    {
+      "id": "02-dieu-huong",
+      "order": 2,
+      "title": "Điều hướng ứng dụng",
+      "description": "Sử dụng menu, thông báo, ngôn ngữ và giao diện.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/02-dieu-huong/01.png",
+          "title": "Chọn nhóm chức năng",
+          "content": "Dùng thanh menu trên cùng để chọn nhóm Giám sát, Vận hành hoặc Hệ thống. Chỉ các nhóm được cấp quyền mới hiển thị."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/02-dieu-huong/02.png",
+          "title": "Mở màn hình cần sử dụng",
+          "content": "Sau khi chọn nhóm, chọn màn hình trên thanh menu phụ để chuyển tới chức năng tương ứng."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/02-dieu-huong/03.png",
+          "title": "Theo dõi thời gian và thông báo",
+          "content": "Khu vực bên phải header hiển thị giờ của ứng dụng và chuông thông báo. Nhấn chuông để xem nhanh các sự kiện mới."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/02-dieu-huong/04.png",
+          "title": "Mở menu người dùng",
+          "content": "Nhấn tên người dùng để mở Cài đặt, đổi tiếng Việt hoặc tiếng Anh và chuyển giao diện sáng hoặc tối."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/02-dieu-huong/05.png",
+          "title": "Điều khiển ứng dụng desktop",
+          "content": "Trong menu người dùng, chọn Khởi động lại, Thoát ứng dụng hoặc Đăng xuất. Kiểm tra nội dung hộp xác nhận trước khi tiếp tục."
+        }
+      ]
+    },
+    {
+      "id": "03-tong-quan",
+      "order": 3,
+      "title": "Xem trang Tổng quan",
+      "description": "Đọc các chỉ số, biểu đồ và trạng thái máy trên trang Tổng quan.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/03-tong-quan/01.png",
+          "title": "Đọc các chỉ số tổng hợp",
+          "content": "Các thẻ phía trên hiển thị OK, NG, mã trùng của hôm nay và toàn bộ lịch sử, cùng cửa sổ kiểm tra trùng hiện tại."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/03-tong-quan/02.png",
+          "title": "Kiểm tra số máy đang kết nối",
+          "content": "Tại mục Máy cục bộ, đối chiếu số máy kết nối với tổng số máy đang hoạt động để phát hiện máy mất kết nối."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/03-tong-quan/03.png",
+          "title": "Đọc thông tin máy đang chạy",
+          "content": "Phần đầu mỗi thẻ máy hiển thị tên máy, Line, mã đang chạy, thời gian chạy và lỗi phổ biến nếu có."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/03-tong-quan/04.png",
+          "title": "Đọc kết quả và trạng thái máy",
+          "content": "Biểu đồ donut và bảng bên phải cho biết OK, NG, Tổng và trạng thái hiện tại. Dòng dưới cùng hiển thị mã quét cuối, kết quả và thời gian quét."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/03-tong-quan/05.png",
+          "title": "Theo dõi xu hướng quét",
+          "content": "Biểu đồ Xu hướng quét cuối trang thể hiện số lượng OK và NG theo thời gian trong phạm vi đã chọn."
+        }
+      ]
+    },
+    {
+      "id": "04-bo-loc-thoi-gian",
+      "order": 4,
+      "title": "Chọn phạm vi thời gian",
+      "description": "Thay đổi phạm vi dữ liệu cho biểu đồ và card máy.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/04-bo-loc-thoi-gian/01.png",
+          "title": "Chọn phạm vi cho thẻ máy",
+          "content": "Tại mục Phạm vi kết quả, chọn Theo phiên, Hôm nay, 12 giờ gần nhất, Toàn bộ hoặc Từ ngày để cập nhật OK, NG và Tổng của từng máy."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/04-bo-loc-thoi-gian/02.png",
+          "title": "Chọn dữ liệu từ một ngày",
+          "content": "Khi chọn Từ ngày, nhập ngày bắt đầu. Ứng dụng tính dữ liệu từ 00:00 của ngày đó đến thời điểm hiện tại."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/04-bo-loc-thoi-gian/03.png",
+          "title": "Chọn phạm vi cho biểu đồ",
+          "content": "Tại biểu đồ Xu hướng quét, chọn Hôm nay, 12 giờ, 7 ngày, 30 ngày, Toàn bộ hoặc Từ ngày theo nhu cầu theo dõi."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/04-bo-loc-thoi-gian/04.png",
+          "title": "Đối chiếu múi giờ ứng dụng",
+          "content": "Các mốc Hôm nay, Từ ngày và thời gian trên biểu đồ đều dùng giờ ứng dụng GMT+7, không phụ thuộc múi giờ trình duyệt."
+        }
+      ]
+    },
+    {
+      "id": "05-giam-sat-phien-chay",
+      "order": 5,
+      "title": "Giám sát phiên chạy",
+      "description": "Theo dõi trạng thái, thời gian chạy và kết quả của từng máy.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/05-giam-sat-phien-chay/01.png",
+          "title": "Mở màn hình giám sát vận hành",
+          "content": "Chọn nhóm Giám sát rồi mở Giám sát vận hành để theo dõi các máy đang hoạt động theo thời gian thực."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/05-giam-sat-phien-chay/02.png",
+          "title": "Chọn phạm vi kết quả",
+          "content": "Chọn phạm vi Theo phiên, Hôm nay, 12 giờ gần nhất, Toàn bộ hoặc Từ ngày để đổi số liệu trên tất cả thẻ máy."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/05-giam-sat-phien-chay/03.png",
+          "title": "Theo dõi từng máy",
+          "content": "Đọc Line, mã đang chạy, thời gian chạy, OK, NG, Tổng, trạng thái, lỗi phổ biến và lượt quét cuối trên mỗi thẻ."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/05-giam-sat-phien-chay/04.png",
+          "title": "Tùy chỉnh bố cục giám sát",
+          "content": "Nhấn nút logo nổi ở góc phải để chọn 1, 2 hoặc 3 máy trên một hàng và ẩn hoặc hiện từng nhóm thông tin."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/05-giam-sat-phien-chay/05.png",
+          "title": "Tối ưu màn hình theo dõi",
+          "content": "Trong menu hiển thị, có thể ẩn thanh điều hướng, tải lại dữ liệu hoặc chọn Hiện toàn bộ thông tin để khôi phục bố cục mặc định."
+        }
+      ]
+    },
+    {
+      "id": "06-quan-ly-may",
+      "order": 6,
+      "title": "Quản lý máy",
+      "description": "Tạo, chỉnh sửa và gửi lệnh điều khiển đến máy.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/06-quan-ly-may/01.png",
+          "title": "Mở danh sách máy",
+          "content": "Chọn nhóm Vận hành, mở Máy và chọn tab Danh sách máy để xem mã máy, tên máy, Line, trạng thái kết nối và heartbeat."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/06-quan-ly-may/02.png",
+          "title": "Lọc và tìm máy",
+          "content": "Dùng bộ lọc Tất cả, Hoạt động, Online, Offline hoặc Đã tắt. Có thể nhập mã máy, tên máy, Line, trạm hoặc IP vào ô tìm kiếm nhanh."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/06-quan-ly-may/03.png",
+          "title": "Thêm máy mới",
+          "content": "Nhấn Thêm máy, nhập Mã máy và Tên máy. Mở Cài đặt nâng cao khi cần khai báo Line, trạm, IP và trạng thái hoạt động."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/06-quan-ly-may/04.png",
+          "title": "Chỉnh sửa thông tin máy",
+          "content": "Nhấn vào một hàng trong bảng để mở máy, cập nhật tên, Line, trạm, IP hoặc trạng thái rồi nhấn Lưu."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/06-quan-ly-may/05.png",
+          "title": "Thay đổi trạng thái hoặc xóa máy",
+          "content": "Dùng Tắt hoặc Kích hoạt lại và xác nhận thao tác. Chỉ máy chưa có bản ghi quét mới hiển thị nút Xóa hoàn toàn."
+        }
+      ]
+    },
+    {
+      "id": "08-lich-su-van-hanh",
+      "order": 8,
+      "title": "Xem lịch sử vận hành",
+      "description": "Tìm kiếm và mở chi tiết các phiên chạy của máy.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Mở lịch sử vận hành",
+          "content": "Chọn nhóm Vận hành, mở Máy rồi chuyển sang tab Lịch sử vận hành để xem các phiên chạy đã được ghi nhận."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Tìm phiên cần kiểm tra",
+          "content": "Nhập mã phiên, mã máy, tên máy, Line, trạng thái, mã sản phẩm hoặc mã quét vào ô tìm kiếm nhanh."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Đọc thông tin phiên",
+          "content": "Đối chiếu máy, Line, trạng thái, mã đang chạy, thời lượng, Tổng, OK, NG, số lần kết nối lại và heartbeat cuối."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Mở chi tiết phiên",
+          "content": "Nhấn Xem chi tiết ở phiên cần kiểm tra để mở toàn bộ dữ liệu vận hành của phiên đó."
+        },
+        {
+          "order": 5,
+          "image": null,
+          "src": null,
+          "title": "Kiểm tra dấu vết trong phiên",
+          "content": "Trong chi tiết phiên, lần lượt kiểm tra Sản phẩm, Sự kiện, Lượt quét và Điều chỉnh. Dùng thanh kéo ngang phía trên khi bảng có nhiều cột."
+        }
+      ]
+    },
+    {
+      "id": "09-quan-ly-profile",
+      "order": 9,
+      "title": "Quản lý Profile",
+      "description": "Tạo và cấu hình Profile sản phẩm.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/09-quan-ly-profile/01.png",
+          "title": "Mở danh sách Profile",
+          "content": "Chọn nhóm Vận hành, mở Quản lý mã và chọn tab Hồ sơ để xem cấu hình đang hoạt động."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/09-quan-ly-profile/02.png",
+          "title": "Thiết lập giá trị mặc định",
+          "content": "Kiểm tra mã nhà máy, độ dài mã và vị trí ký tự nhà cung cấp phía trên bảng. Chỉ thay đổi rồi lưu khi quy tắc chung đã được xác nhận."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/09-quan-ly-profile/03.png",
+          "title": "Tạo Profile mới",
+          "content": "Nhấn Thêm Profile, chọn mã Chassis chưa được dùng và chọn ít nhất một mã LED cho Slot 1 hoặc Slot 2."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/09-quan-ly-profile/04.png",
+          "title": "Kiểm tra quy tắc nâng cao",
+          "content": "Mở Cài đặt nâng cao để kiểm tra mã nhà máy, độ dài mã đầy đủ, vị trí vendor, độ dài mã LED và vị trí vendor LED."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/09-quan-ly-profile/05.png",
+          "title": "Lưu và kiểm tra Profile",
+          "content": "Nhấn Lưu, sau đó đối chiếu Chassis, hai LED Slot, phiên bản và trạng thái vừa hiển thị trong bảng."
+        },
+        {
+          "order": 6,
+          "image": "06.png",
+          "src": "/guides/09-quan-ly-profile/06.png",
+          "title": "Chỉnh sửa hoặc đổi trạng thái",
+          "content": "Nhấn vào hàng Profile để chỉnh sửa. Dùng cột Trạng thái để tắt hoặc kích hoạt lại và xác nhận trước khi áp dụng."
+        }
+      ]
+    },
+    {
+      "id": "10-quan-ly-ma",
+      "order": 10,
+      "title": "Quản lý mã",
+      "description": "Quản lý Vendor, mã Chassis và mã LED.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/10-quan-ly-ma/01.png",
+          "title": "Chọn loại dữ liệu gốc",
+          "content": "Trong Dữ liệu gốc, chọn tab Vendor, Mã Chassis hoặc Mã LED tùy loại dữ liệu cần quản lý."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/10-quan-ly-ma/02.png",
+          "title": "Thêm Vendor",
+          "content": "Tại tab Vendor, nhấn Thêm, nhập tên nhà cung cấp, ký tự nhận diện và trạng thái rồi nhấn Lưu."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/10-quan-ly-ma/03.png",
+          "title": "Thêm mã Chassis",
+          "content": "Tại tab Mã Chassis, nhập đúng 6 ký tự. Ứng dụng tự tạo mã đầy đủ dạng BN96-xxxxxx để kiểm tra trước khi lưu."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/10-quan-ly-ma/04.png",
+          "title": "Thêm mã LED",
+          "content": "Tại tab Mã LED, nhập đúng 6 ký tự và kiểm tra mã đầy đủ cùng phần hậu tố được tạo tự động trước khi lưu."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/10-quan-ly-ma/05.png",
+          "title": "Chỉnh sửa dữ liệu đã có",
+          "content": "Nhấn vào một hàng Vendor, Chassis hoặc LED để mở biểu mẫu chỉnh sửa rồi lưu nội dung mới."
+        },
+        {
+          "order": 6,
+          "image": "06.png",
+          "src": "/guides/10-quan-ly-ma/06.png",
+          "title": "Thay đổi trạng thái sử dụng",
+          "content": "Mở trạng thái trên hàng dữ liệu, chọn trạng thái mới và xác nhận. Dữ liệu ngừng hoạt động sẽ không được dùng cho cấu hình mới."
+        }
+      ]
+    },
+    {
+      "id": "11-lich-su-quet",
+      "order": 11,
+      "title": "Xem lịch sử quét",
+      "description": "Lọc, tìm kiếm và xem chi tiết kết quả quét.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/11-lich-su-quet/01.png",
+          "title": "Mở toàn bộ lượt quét",
+          "content": "Chọn nhóm Vận hành, mở Lịch sử quét và chọn tab Tất cả lượt quét."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/11-lich-su-quet/02.png",
+          "title": "Lọc dữ liệu quét",
+          "content": "Chọn máy, Profile, Vendor, kết quả cuối và khoảng thời gian Từ ngày đến Đến ngày. Nhấn Xóa lọc để quay về toàn bộ dữ liệu."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/11-lich-su-quet/03.png",
+          "title": "Tìm và chuyển trang",
+          "content": "Nhập mã, máy, tên máy, Line hoặc lý do NG vào ô tìm kiếm nhanh. Dùng nút Trang trước và Trang sau ở đầu hoặc cuối bảng."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/11-lich-su-quet/04.png",
+          "title": "Tùy chỉnh bảng quét",
+          "content": "Nhấn nút logo cạnh chế độ làm mới để chọn cập nhật realtime, tự động hoặc thủ công và chọn các cột cần hiển thị."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/11-lich-su-quet/05.png",
+          "title": "Đọc kết quả một lượt quét",
+          "content": "Đối chiếu thời gian, máy, tên máy, Line, Chassis, Vendor, mã đầy đủ, trạng thái cục bộ, máy chủ, kết quả cuối và lý do NG."
+        },
+        {
+          "order": 6,
+          "image": "06.png",
+          "src": "/guides/11-lich-su-quet/06.png",
+          "title": "Mở chi tiết LED",
+          "content": "Nhấn nút mở rộng ở đầu hàng để xem mã LED theo Slot, dữ liệu quét thô, Lot, Vendor, hậu tố, kết quả cục bộ và lý do NG."
+        }
+      ]
+    },
+    {
+      "id": "12-kiem-tra-ma-trung",
+      "order": 12,
+      "title": "Kiểm tra mã trùng",
+      "description": "Xem lượt quét trùng và các duplicate key đang hoạt động.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Mở danh sách lượt quét trùng",
+          "content": "Trong Lịch sử quét, chọn tab Lượt quét trùng để chỉ xem các bản ghi có lý do SERVER_DUPLICATE."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Thu hẹp phạm vi kiểm tra",
+          "content": "Lọc theo máy, Profile, Vendor và khoảng thời gian để tìm đúng nhóm mã trùng cần điều tra."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Đối chiếu bản ghi bị trùng",
+          "content": "Kiểm tra khóa trùng, mã đầy đủ, máy, Line, thời gian và mở rộng hàng để xem chi tiết LED của lượt quét bị từ chối."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Mở khóa trùng đang hoạt động",
+          "content": "Chuyển sang tab Khóa trùng đang hoạt động để xem các khóa hiện vẫn nằm trong cửa sổ kiểm tra trùng."
+        },
+        {
+          "order": 5,
+          "image": null,
+          "src": null,
+          "title": "Xác định nguồn của khóa trùng",
+          "content": "Đối chiếu Profile, máy quét đầu tiên, thời gian quét đầu, thời gian hết hạn và ID bản ghi gốc để truy vết."
+        }
+      ]
+    },
+    {
+      "id": "13-kiem-tra-trung-dinh-ky",
+      "order": 13,
+      "title": "Kiểm tra trùng định kỳ",
+      "description": "Chạy và đặt lịch kiểm tra trùng trên toàn bộ dữ liệu.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/13-kiem-tra-trung-dinh-ky/01.png",
+          "title": "Mở kiểm tra trùng định kỳ",
+          "content": "Trong Lịch sử quét, chọn tab Kiểm tra trùng định kỳ để xem lịch chạy và các lần kiểm tra toàn bộ dữ liệu."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/13-kiem-tra-trung-dinh-ky/02.png",
+          "title": "Cấu hình lịch kiểm tra",
+          "content": "Bật lịch, chọn Hàng ngày, Hàng tuần hoặc Hàng tháng, sau đó chọn giờ chạy và ngày tương ứng."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/13-kiem-tra-trung-dinh-ky/03.png",
+          "title": "Lưu và kiểm tra lịch",
+          "content": "Nhấn Lưu cài đặt rồi đối chiếu trạng thái lịch, lần chạy tiếp theo, lần chạy gần nhất và job mới nhất."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/13-kiem-tra-trung-dinh-ky/04.png",
+          "title": "Chạy kiểm tra thủ công",
+          "content": "Nhấn Chạy kiểm tra trùng, chọn toàn bộ database hoặc một khoảng thời gian rồi xác nhận chạy."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/13-kiem-tra-trung-dinh-ky/05.png",
+          "title": "Xem kết quả một lần chạy",
+          "content": "Chọn một job trong danh sách để xem tổng mã đã quét, số Profile, nhóm trùng, số lượt quét trùng và thống kê theo Profile."
+        },
+        {
+          "order": 6,
+          "image": "06.png",
+          "src": "/guides/13-kiem-tra-trung-dinh-ky/06.png",
+          "title": "Mở chi tiết nhóm trùng",
+          "content": "Trong bảng kết quả của job đã chọn, mở rộng một hàng để xem khóa trùng, Profile, các ID scan và khoảng thời gian kiểm tra."
+        }
+      ]
+    },
+    {
+      "id": "14-bao-cao",
+      "order": 14,
+      "title": "Lọc và xuất báo cáo",
+      "description": "Chọn điều kiện và xuất dữ liệu báo cáo.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/14-bao-cao/01.png",
+          "title": "Mở màn hình báo cáo",
+          "content": "Chọn nhóm Vận hành rồi mở Báo cáo để tạo tệp Excel từ dữ liệu quét."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/14-bao-cao/02.png",
+          "title": "Chọn phạm vi dữ liệu",
+          "content": "Chọn Từ ngày, Đến ngày, máy và Profile cần xuất. Có thể để Tất cả máy hoặc Tất cả Profile khi không cần giới hạn."
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/14-bao-cao/03.png",
+          "title": "Chọn trạng thái cần xuất",
+          "content": "Bật các trạng thái OK, NG hoặc PENDING cần có trong tệp. Chọn Thêm trang tổng quan nếu cần kèm bộ lọc và số liệu tổng hợp."
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/14-bao-cao/04.png",
+          "title": "Chọn các cột báo cáo",
+          "content": "Chọn từng cột hoặc chọn theo nhóm Thông tin chung, Kết quả, Toàn bộ mã, Chi tiết LED và Dấu vết phiên."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/14-bao-cao/05.png",
+          "title": "Kiểm tra lựa chọn trước khi xuất",
+          "content": "Đối chiếu số cột và số trạng thái đang chọn ở đầu trang. Báo cáo cần ít nhất một cột và một trạng thái."
+        },
+        {
+          "order": 6,
+          "image": "06.png",
+          "src": "/guides/14-bao-cao/06.png",
+          "title": "Xuất tệp Excel",
+          "content": "Nhấn Xuất Excel, chờ thông báo hoàn tất rồi mở tệp đã tải để kiểm tra dữ liệu và trang tổng quan nếu đã chọn."
+        }
+      ]
+    },
+    {
+      "id": "15-dong-bo",
+      "order": 15,
+      "title": "Theo dõi đồng bộ",
+      "description": "Kiểm tra batch đồng bộ, request log và sai lệch dữ liệu.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Mở màn hình đồng bộ",
+          "content": "Chọn nhóm Hệ thống rồi mở Đồng bộ để kiểm tra dữ liệu được gửi từ các máy cục bộ."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Kiểm tra các đợt đồng bộ",
+          "content": "Trong bảng Đợt đồng bộ, đối chiếu mã batch, máy, nguyên nhân chạy, tổng nhận, OK, NG, trạng thái và thời gian hoàn tất."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Kiểm tra nhật ký request",
+          "content": "Trong bảng Request log, xem thời gian, máy, loại request, ID scan cục bộ, batch, trạng thái và thông báo lỗi."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Tìm dấu vết lỗi đồng bộ",
+          "content": "Nhập mã batch, mã máy, ID scan, loại request hoặc nội dung lỗi vào ô tìm kiếm nhanh để đối chiếu hai bảng."
+        }
+      ]
+    },
+    {
+      "id": "16-nguoi-dung-phan-quyen",
+      "order": 16,
+      "title": "Quản lý người dùng và phân quyền",
+      "description": "Tạo tài khoản và cấu hình quyền truy cập.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Mở quản lý người dùng",
+          "content": "Chọn nhóm Hệ thống rồi mở Người dùng để xem tài khoản, họ tên, vai trò và trạng thái."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Tạo tài khoản mới",
+          "content": "Nhấn Thêm người dùng, nhập tên đăng nhập, họ tên, mật khẩu tối thiểu 8 ký tự, vai trò và trạng thái rồi nhấn Lưu."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Chỉnh sửa tài khoản",
+          "content": "Nhấn Sửa để cập nhật họ tên, vai trò, trạng thái hoặc đặt mật khẩu mới. Để trống ô mật khẩu nếu không muốn thay đổi."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Ngừng hoạt động tài khoản",
+          "content": "Nhấn Tắt và xác nhận để vô hiệu hóa tài khoản. Không thể tự tắt tài khoản đang đăng nhập."
+        },
+        {
+          "order": 5,
+          "image": null,
+          "src": null,
+          "title": "Chọn quyền theo vai trò",
+          "content": "Tại Phân quyền vai trò, chọn các màn hình được phép truy cập cho từng vai trò Operator, Engineer hoặc Admin."
+        },
+        {
+          "order": 6,
+          "image": null,
+          "src": null,
+          "title": "Lưu quyền truy cập",
+          "content": "Kiểm tra mỗi vai trò còn ít nhất một quyền rồi nhấn Lưu. Vai trò DEV có toàn quyền và không thể chỉnh sửa trong bảng này."
+        }
+      ]
+    },
+    {
+      "id": "17-thong-bao",
+      "order": 17,
+      "title": "Quản lý thông báo",
+      "description": "Theo dõi sự kiện và cấu hình mẫu thông báo.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Xem nhanh thông báo mới",
+          "content": "Nhấn biểu tượng chuông trên header để xem các sự kiện mới và đánh dấu đã đọc ngay trong danh sách nhanh."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Mở toàn bộ thông báo",
+          "content": "Mở chuông thông báo rồi chọn xem toàn bộ để vào trang Thông báo và kiểm tra thời gian, mã, tiêu đề, máy, mức độ cùng trạng thái."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Cập nhật trạng thái thông báo",
+          "content": "Nhấn Đã đọc để xác nhận đã xử lý hoặc Bỏ qua để ẩn sự kiện không cần theo dõi tiếp."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Mở danh sách mẫu thông báo",
+          "content": "Tại bảng Mẫu thông báo, kiểm tra mã mẫu, tiêu đề, đối tượng nhận, mức độ và trạng thái hoạt động."
+        },
+        {
+          "order": 5,
+          "image": null,
+          "src": null,
+          "title": "Tạo hoặc chỉnh sửa mẫu",
+          "content": "Nhấn Thêm mẫu hoặc Sửa, nhập tiêu đề và nội dung mặc định, sau đó bổ sung bản tiếng Việt và tiếng Anh khi cần."
+        },
+        {
+          "order": 6,
+          "image": null,
+          "src": null,
+          "title": "Chọn mức độ và nơi nhận",
+          "content": "Chọn INFO, WARNING, ERROR hoặc CRITICAL và SERVER_UI, LOCAL_UI hoặc BOTH. Lưu thay đổi hoặc tắt mẫu không còn sử dụng."
+        }
+      ]
+    },
+    {
+      "id": "18-nhat-ky-he-thong",
+      "order": 18,
+      "title": "Xem nhật ký hệ thống",
+      "description": "Tìm kiếm và kiểm tra các thao tác đã được ghi nhận.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Mở nhật ký hệ thống",
+          "content": "Chọn nhóm Hệ thống rồi mở Nhật ký để xem các thao tác đã được server ghi nhận."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Tìm thao tác cần kiểm tra",
+          "content": "Nhập hành động, tên bảng, ID bản ghi, tài khoản, họ tên hoặc vai trò vào ô tìm kiếm nhanh."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Đọc dấu vết thay đổi",
+          "content": "Đối chiếu thời gian, hành động, bảng dữ liệu, ID bản ghi, người thực hiện và vai trò để xác định nguồn thay đổi."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Làm mới và xem đủ cột",
+          "content": "Nhấn Tải lại để lấy dữ liệu mới nhất và dùng thanh kéo ngang phía trên bảng khi màn hình không hiển thị đủ cột."
+        }
+      ]
+    },
+    {
+      "id": "19-cai-dat-cap-nhat",
+      "order": 19,
+      "title": "Cài đặt và cập nhật ứng dụng",
+      "description": "Thay đổi tùy chọn sử dụng và cập nhật ứng dụng lên phiên bản mới.",
+      "slides": [
+        {
+          "order": 1,
+          "image": null,
+          "src": null,
+          "title": "Mở Cài đặt",
+          "content": "Mở menu người dùng ở góc trên bên phải và chọn Cài đặt. Các tab chỉ sử dụng được khi tài khoản có quyền phù hợp."
+        },
+        {
+          "order": 2,
+          "image": null,
+          "src": null,
+          "title": "Điều chỉnh cửa sổ ứng dụng",
+          "content": "Trong tab Giao diện, chọn chế độ cửa sổ, độ phân giải và tùy chọn luôn ở trên cùng. Xác nhận giữ thay đổi trước khi hết thời gian xem thử."
+        },
+        {
+          "order": 3,
+          "image": null,
+          "src": null,
+          "title": "Đổi giao diện và ngôn ngữ",
+          "content": "Chọn giao diện Sáng hoặc Tối và ngôn ngữ Tiếng Việt hoặc English. Lựa chọn được lưu cho lần mở ứng dụng sau."
+        },
+        {
+          "order": 4,
+          "image": null,
+          "src": null,
+          "title": "Điều chỉnh quy tắc vận hành",
+          "content": "Trong tab Server, chỉ người được phân quyền mới thay đổi mã nhà máy, cửa sổ trùng, độ dài mã, vị trí vendor và thời gian heartbeat rồi nhấn Lưu."
+        },
+        {
+          "order": 5,
+          "image": null,
+          "src": null,
+          "title": "Kiểm tra và kích hoạt license",
+          "content": "Trong tab License, kiểm tra trạng thái và Machine ID. Khi cần kích hoạt, xuất thông tin yêu cầu, nhận tệp license rồi nhập và nhấn Kích hoạt."
+        },
+        {
+          "order": 6,
+          "image": null,
+          "src": null,
+          "title": "Kiểm tra phiên bản mới",
+          "content": "Mở tab Cập nhật và nhấn Kiểm tra để đối chiếu phiên bản hiện tại với các bản phát hành mới trên nguồn cập nhật."
+        },
+        {
+          "order": 7,
+          "image": null,
+          "src": null,
+          "title": "Cài đặt bản cập nhật",
+          "content": "Chọn bản phát hành mới hơn và nhấn Cập nhật. Chờ tải xong; ứng dụng sẽ đóng để trình cài đặt tiếp tục."
+        },
+        {
+          "order": 8,
+          "image": null,
+          "src": null,
+          "title": "Xác nhận cập nhật hoàn tất",
+          "content": "Mở lại ứng dụng sau khi cài đặt. Kiểm tra thông báo Windows cập nhật thành công và đối chiếu phiên bản hiện tại trong tab Cập nhật."
+        }
+      ]
+    }
+  ]
+}

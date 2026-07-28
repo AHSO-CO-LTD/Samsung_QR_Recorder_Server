@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type NavGroup, type NavGroupId } from "@/components/layout/navigation-config";
 import { useI18n } from "@/lib/i18n-provider";
@@ -23,24 +24,41 @@ export function PrimaryNavbar({ selectedGroupId, activeGroupId, groups, onSelect
           const Icon = group.icon;
           const isSelected = selectedGroupId === group.id;
           const isActive = activeGroupId === group.id;
+          const className = cn(
+            "inline-flex h-9 min-w-24 shrink-0 items-center justify-center gap-2 rounded-sm px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-sky-50 hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-w-28 sm:px-3 sm:text-sm dark:hover:bg-sky-950/40 dark:hover:text-sky-300",
+            isSelected && "bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-200",
+            isActive && !isSelected && "text-sky-700 dark:text-sky-300"
+          );
+          const content = (
+            <>
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              <span>{t(group.key)}</span>
+            </>
+          );
 
           return (
             <Tooltip key={group.id}>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  data-nav-group={group.id}
-                  aria-pressed={isSelected}
-                  onClick={() => onSelectGroup(group.id)}
-                  className={cn(
-                    "inline-flex h-9 min-w-24 shrink-0 items-center justify-center gap-2 rounded-sm px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-sky-50 hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-w-28 sm:px-3 sm:text-sm dark:hover:bg-sky-950/40 dark:hover:text-sky-300",
-                    isSelected && "bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-200",
-                    isActive && !isSelected && "text-sky-700 dark:text-sky-300"
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  <span>{t(group.key)}</span>
-                </button>
+                {group.href ? (
+                  <Link
+                    href={group.href}
+                    data-nav-group={group.id}
+                    aria-current={isActive ? "page" : undefined}
+                    className={className}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    data-nav-group={group.id}
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectGroup(group.id)}
+                    className={className}
+                  >
+                    {content}
+                  </button>
+                )}
               </TooltipTrigger>
               <TooltipContent>{t(group.descriptionKey)}</TooltipContent>
             </Tooltip>

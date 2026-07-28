@@ -22,6 +22,7 @@ type RuntimeSocketData = {
     serial?: string | null;
     uid?: string | null;
   };
+  gracefulStop?: boolean;
 };
 
 @WebSocketGateway({
@@ -61,7 +62,8 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   async handleDisconnect(client: Socket) {
-    const machine = this.getSocketData(client).machine;
+    const socketData = this.getSocketData(client);
+    const machine = socketData.machine;
     this.logger.log(`Runtime socket disconnected: ${client.id}`);
     if (!machine) {
       return;
@@ -72,9 +74,11 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return;
     }
 
-    const session = await this.runtimeService.markDisconnected(machine, "Socket đã ngắt kết nối.", this.getClientIp(client));
+    const session = await this.runtimeService.markDisconnected(machine, "Socket đã ngắt kết nối.", this.getClientIp(client), {
+      graceful: socketData.gracefulStop === true
+    });
     this.server.emit("server:runtime-updated", {
-      event: "SOCKET_DISCONNECTED",
+      event: socketData.gracefulStop ? "STOPPED" : "SOCKET_DISCONNECTED",
       machine_code: machine.machine_code,
       data: session
     });
@@ -83,7 +87,9 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   @SubscribeMessage("machine:hello")
   async handleHello(@MessageBody() dto: RuntimeHelloDto, @ConnectedSocket() client: Socket) {
     const response = await this.runtimeService.acceptHello(dto, this.getClientIp(client));
-    this.getSocketData(client).machine = response.data.machine;
+    const socketData = this.getSocketData(client);
+    socketData.machine = response.data.machine;
+    socketData.gracefulStop = false;
     this.runtimeConnections.connect(response.data.machine.id, client.id);
     client.emit("machine:accepted", response);
     this.server.emit("server:runtime-updated", {
@@ -98,6 +104,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleStart(@MessageBody() dto: RuntimeStartDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.start(machine, dto, this.getClientIp(client));
+    this.getSocketData(client).gracefulStop = false;
     const response = this.ok("RUNTIME_SESSION_STARTED", "Đã bắt đầu phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "STARTED",
@@ -111,6 +118,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleUpdate(@MessageBody() dto: RuntimeUpdateDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.update(machine, dto, this.getClientIp(client), "UPDATED");
+    this.getSocketData(client).gracefulStop = false;
     const response = this.ok("RUNTIME_SESSION_UPDATED", "Đã cập nhật phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "UPDATED",
@@ -124,6 +132,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleSnapshot(@MessageBody() dto: RuntimeUpdateDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.update(machine, dto, this.getClientIp(client), "SNAPSHOT");
+    this.getSocketData(client).gracefulStop = false;
     const response = this.ok("RUNTIME_SESSION_SNAPSHOT_SAVED", "Đã lưu ảnh chụp phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "SNAPSHOT",
@@ -137,6 +146,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleStop(@MessageBody() dto: RuntimeStopDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.stop(machine, dto, this.getClientIp(client));
+    this.getSocketData(client).gracefulStop = true;
     const response = this.ok("RUNTIME_SESSION_STOPPED", "Đã dừng phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "STOPPED",
@@ -150,6 +160,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleError(@MessageBody() dto: RuntimeErrorDto, @ConnectedSocket() client: Socket) {
     const machine = this.requireMachine(client);
     const session = await this.runtimeService.recordError(machine, dto, this.getClientIp(client));
+    this.getSocketData(client).gracefulStop = false;
     const response = this.ok("RUNTIME_SESSION_ERROR_RECORDED", "Đã ghi nhận lỗi phiên chạy.", session);
     this.server.emit("server:runtime-updated", {
       event: "ERROR",

@@ -1,4 +1,5 @@
 import {
+  BookOpenCheck,
   Database,
   FileSpreadsheet,
   Gauge,
@@ -14,14 +15,14 @@ import {
 import type { MessageKey } from "@/lib/i18n";
 import type { ScreenPermissionKey } from "@/lib/screen-permissions";
 
-export type NavGroupId = "monitoring" | "operation" | "system";
+export type NavGroupId = "monitoring" | "operation" | "system" | "guides";
 
 export type NavItem = {
   href: string;
   key: MessageKey;
   descriptionKey: MessageKey;
   icon: LucideIcon;
-  permissionKey: ScreenPermissionKey;
+  permissionKey?: ScreenPermissionKey;
   alternativePermissionKeys?: readonly ScreenPermissionKey[];
   external?: boolean;
 };
@@ -31,6 +32,7 @@ export type NavGroup = {
   key: MessageKey;
   descriptionKey: MessageKey;
   icon: LucideIcon;
+  href?: string;
   items: readonly NavItem[];
 };
 
@@ -81,6 +83,14 @@ export const navGroups: readonly NavGroup[] = [
       { href: "/users", key: "users", descriptionKey: "usersDesc", icon: UsersRound, permissionKey: "users" },
       { href: "/audit-logs", key: "auditLogs", descriptionKey: "auditLogsDesc", icon: History, permissionKey: "audit-logs" }
     ]
+  },
+  {
+    id: "guides",
+    key: "navGuides",
+    descriptionKey: "navGuidesDesc",
+    icon: BookOpenCheck,
+    href: "/guides",
+    items: [{ href: "/guides", key: "guides", descriptionKey: "guidesDesc", icon: BookOpenCheck }]
   }
 ] as const;
 
@@ -89,7 +99,10 @@ export function filterNavGroups(canAccess: (permissionKey: ScreenPermissionKey) 
     .map((group) => ({
       ...group,
       items: group.items.filter(
-        (item) => canAccess(item.permissionKey) || item.alternativePermissionKeys?.some((permissionKey) => canAccess(permissionKey))
+        (item) =>
+          !item.permissionKey ||
+          canAccess(item.permissionKey) ||
+          item.alternativePermissionKeys?.some((permissionKey) => canAccess(permissionKey))
       )
     }))
     .filter((group) => group.items.length > 0);

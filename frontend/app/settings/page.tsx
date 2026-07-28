@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageGuideToolbar } from "@/features/guides/guide-launcher";
 import { AppearanceSettings } from "@/features/settings/appearance-settings";
 import { LicenseSettings } from "@/features/settings/license-settings";
 import { ServerSettingsForm } from "@/features/settings/server-settings-form";
@@ -14,13 +15,16 @@ export default function SettingsPage() {
 
   return (
     <Tabs defaultValue="appearance" className="min-w-0 space-y-4">
-      <TabsList className="w-full sm:w-auto">
-        <TabsTrigger value="appearance">{t("appearanceTab")}</TabsTrigger>
-        <TabsTrigger value="server">{t("serverTab")}</TabsTrigger>
-        <TabsTrigger value="license">License</TabsTrigger>
-        <TabsTrigger value="updates">Cập nhật</TabsTrigger>
-        <TabsTrigger value="api">{t("apiTab")}</TabsTrigger>
-      </TabsList>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="appearance">{t("appearanceTab")}</TabsTrigger>
+          <TabsTrigger value="server">{t("serverTab")}</TabsTrigger>
+          <TabsTrigger value="license">License</TabsTrigger>
+          <TabsTrigger value="updates">Cập nhật</TabsTrigger>
+          <TabsTrigger value="api">{t("apiTab")}</TabsTrigger>
+        </TabsList>
+        <PageGuideToolbar guideIds={["19-cai-dat-cap-nhat"]} />
+      </div>
 
       <TabsContent value="appearance">
         <AppearanceSettings />

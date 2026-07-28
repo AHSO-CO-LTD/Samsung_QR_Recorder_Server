@@ -75,9 +75,20 @@ export class RuntimeService {
     };
   }
 
-  async markDisconnected(machine: RuntimeMachine, reason?: string, socketIp?: string | null) {
+  async markDisconnected(
+    machine: RuntimeMachine,
+    reason?: string,
+    socketIp?: string | null,
+    options: {
+      graceful?: boolean;
+    } = {}
+  ) {
     const now = new Date();
     const session = await this.findOpenSession(machine.id);
+    const isGraceful = options.graceful === true;
+    const disconnectMessage = isGraceful
+      ? "Socket đã đóng sau khi phiên chạy dừng bình thường."
+      : reason || "Kết nối phiên chạy WebSocket đã ngắt.";
 
     await (this.prisma as any).machineSyncState.upsert({
       where: { machine_id: machine.id },
@@ -101,28 +112,33 @@ export class RuntimeService {
         machine_code: machine.machine_code,
         event_type: "DISCONNECTED",
         ip_address: socketIp ?? null,
-        message: reason || "Kết nối phiên chạy WebSocket đã ngắt.",
-        payload_json: this.toJson({ reason })
+        message: disconnectMessage,
+        payload_json: this.toJson({
+          reason,
+          graceful: isGraceful
+        })
       }
     });
 
-    await this.notifications.createEvent({
-      notiCode: "MACHINE_RUNTIME_DISCONNECTED",
-      machineId: machine.id,
-      title: "Máy cục bộ mất kết nối",
-      titleVi: "Máy cục bộ mất kết nối",
-      titleEn: "Local machine disconnected",
-      message: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối phiên chạy WebSocket đã ngắt."}`,
-      messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối phiên chạy WebSocket đã ngắt."}`,
-      messageEn: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
-      payload: {
-        machine_code: machine.machine_code,
-        socket_ip: socketIp ?? null,
-        reason: reason ?? null
-      },
-      severity: "WARNING",
-      errorCode: "MACHINE_RUNTIME_DISCONNECTED"
-    });
+    if (!isGraceful) {
+      await this.notifications.createEvent({
+        notiCode: "MACHINE_RUNTIME_DISCONNECTED",
+        machineId: machine.id,
+        title: "Máy cục bộ mất kết nối",
+        titleVi: "Máy cục bộ mất kết nối",
+        titleEn: "Local machine disconnected",
+        message: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${disconnectMessage}`,
+        messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${disconnectMessage}`,
+        messageEn: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
+        payload: {
+          machine_code: machine.machine_code,
+          socket_ip: socketIp ?? null,
+          reason: reason ?? null
+        },
+        severity: "WARNING",
+        errorCode: "MACHINE_RUNTIME_DISCONNECTED"
+      });
+    }
 
     if (session && ["RUNNING", "PAUSED"].includes(session.status)) {
       const updatedSession = await (this.prisma as any).machineRuntimeSession.update({
@@ -141,7 +157,10 @@ export class RuntimeService {
         productId: session.current_product_id,
         eventType: "SOCKET_DISCONNECTED",
         ipAddress: socketIp ?? null,
-        payload: { reason }
+        payload: {
+          reason,
+          graceful: isGraceful
+        }
       });
 
       return updatedSession;
@@ -153,7 +172,10 @@ export class RuntimeService {
       productId: session?.current_product_id,
       eventType: "SOCKET_DISCONNECTED",
       ipAddress: socketIp ?? null,
-      payload: { reason }
+      payload: {
+        reason,
+        graceful: isGraceful
+      }
     });
 
     return session;

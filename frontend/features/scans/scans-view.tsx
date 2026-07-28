@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiGet } from "@/lib/api";
 import { appDatetimeLocalToIso } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
+import { GuideLauncher } from "@/features/guides/guide-launcher";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
 import { DuplicateAuditView } from "@/features/duplicates/duplicate-audit-view";
@@ -192,15 +193,18 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     <div className="min-w-0 space-y-4">
       {isPermissionLoading ? (
         <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div>
-      ) : (
+        ) : (
       <Tabs value={visibleTab} onValueChange={(value) => setActiveTab(value as ScansTab)}>
         <div className="sticky top-[var(--app-header-height,4rem)] z-30 rounded-md border bg-background p-3 shadow-sm">
-          <TabsList className="w-full justify-start overflow-x-auto bg-muted [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
-            {canViewScans ? <TabsTrigger value="all-scans">{t("scanTabAll")}</TabsTrigger> : null}
-            {canViewScans ? <TabsTrigger value="duplicate-scans">{t("scanTabDuplicates")}</TabsTrigger> : null}
-            {canViewScans ? <TabsTrigger value="active-duplicate-keys">{t("scanTabActiveDuplicateKeys")}</TabsTrigger> : null}
-            {canScheduleDuplicateCheck ? <TabsTrigger value="scheduled-duplicate-check">{t("duplicateScheduleTab")}</TabsTrigger> : null}
-          </TabsList>
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList className="w-full justify-start overflow-x-auto bg-muted [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
+              {canViewScans ? <TabsTrigger value="all-scans">{t("scanTabAll")}</TabsTrigger> : null}
+              {canViewScans ? <TabsTrigger value="duplicate-scans">{t("scanTabDuplicates")}</TabsTrigger> : null}
+              {canViewScans ? <TabsTrigger value="active-duplicate-keys">{t("scanTabActiveDuplicateKeys")}</TabsTrigger> : null}
+              {canScheduleDuplicateCheck ? <TabsTrigger value="scheduled-duplicate-check">{t("duplicateScheduleTab")}</TabsTrigger> : null}
+            </TabsList>
+            <GuideLauncher guideIds={getScanGuideIds(visibleTab)} />
+          </div>
 
           {canViewScans && (visibleTab === "all-scans" || visibleTab === "duplicate-scans") ? (
             <div className="mt-3">
@@ -267,6 +271,16 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
       )}
     </div>
   );
+}
+
+function getScanGuideIds(tab: ScansTab) {
+  if (tab === "all-scans") {
+    return ["11-lich-su-quet"] as const;
+  }
+  if (tab === "scheduled-duplicate-check") {
+    return ["13-kiem-tra-trung-dinh-ky"] as const;
+  }
+  return ["12-kiem-tra-ma-trung"] as const;
 }
 
 function ScanFiltersCard({
