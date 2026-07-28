@@ -2,6 +2,8 @@ import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { ApiOkResponse, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Public } from "../../common/auth/auth.decorators";
 import { SubmitScanDto } from "./dto/submit-scan.dto";
+import { RUNTIME_SUMMARY_SCOPES, type RuntimeSummaryScope } from "./runtime-summary-range";
+import { SCAN_TREND_SCOPES, type ScanTrendScope } from "./scan-trend-range";
 import { ScansService } from "./scans.service";
 
 @Controller("scans")
@@ -25,19 +27,39 @@ export class ScansController {
     return this.scansService.getScanSummary({ from, to });
   }
 
+  @Get("runtime-summary")
+  @ApiTags("scan-dashboard")
+  @ApiQuery({ name: "scope", required: true, enum: RUNTIME_SUMMARY_SCOPES })
+  @ApiQuery({ name: "from", required: false, example: "2026-07-01", description: "Required for scope=since. App date in GMT+7." })
+  @ApiOkResponse({ description: "Get per-machine OK/NG totals for the selected app-time range." })
+  getRuntimeSummary(@Query("scope") scope?: RuntimeSummaryScope, @Query("from") from?: string) {
+    return this.scansService.getRuntimeSummary({ scope, from });
+  }
+
   @Get("trend")
   @ApiTags("scan-dashboard")
   @ApiQuery({ name: "days", required: false, example: 7 })
   @ApiQuery({ name: "hours", required: false, example: 12 })
   @ApiQuery({ name: "bucket_minutes", required: false, example: 30 })
   @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
+  @ApiQuery({ name: "scope", required: false, enum: SCAN_TREND_SCOPES })
+  @ApiQuery({ name: "from", required: false, example: "2026-07-01", description: "Required for scope=since. App date in GMT+7." })
   @ApiOkResponse({ description: "Get daily or bucketed scan trend counters for dashboard chart." })
-  getScanTrend(@Query("days") days?: string, @Query("hours") hours?: string, @Query("bucket_minutes") bucketMinutes?: string, @Query("machine_code") machineCode?: string) {
+  getScanTrend(
+    @Query("days") days?: string,
+    @Query("hours") hours?: string,
+    @Query("bucket_minutes") bucketMinutes?: string,
+    @Query("machine_code") machineCode?: string,
+    @Query("scope") scope?: ScanTrendScope,
+    @Query("from") from?: string
+  ) {
     return this.scansService.getScanTrend({
       days: Number(days || 7),
       hours: hours ? Number(hours) : undefined,
       bucketMinutes: bucketMinutes ? Number(bucketMinutes) : undefined,
-      machineCode: machineCode?.trim() || undefined
+      machineCode: machineCode?.trim() || undefined,
+      scope,
+      from
     });
   }
 

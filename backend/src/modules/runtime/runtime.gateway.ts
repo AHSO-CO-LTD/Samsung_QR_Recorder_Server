@@ -11,6 +11,7 @@ import {
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import { getClientIp } from "../../common/http/client-ip";
+import { RuntimeConnectionRegistry } from "../../common/runtime/runtime-connection-registry.service";
 import { RuntimeErrorDto, RuntimeHelloDto, RuntimeStartDto, RuntimeStopDto, RuntimeUpdateDto } from "./dto/runtime-ws.dto";
 import { RuntimeService } from "./runtime.service";
 
@@ -42,7 +43,10 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   @WebSocketServer()
   private readonly server!: Server;
 
-  constructor(private readonly runtimeService: RuntimeService) {}
+  constructor(
+    private readonly runtimeService: RuntimeService,
+    private readonly runtimeConnections: RuntimeConnectionRegistry
+  ) {}
 
   publishScanUpdated(payload: { machine_code: string; local_scan_id: string; result_code: string }) {
     this.server?.emit("server:scan-updated", payload);
@@ -63,6 +67,11 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
       return;
     }
 
+    const isLastMachineSocket = this.runtimeConnections.disconnect(machine.id, client.id);
+    if (!isLastMachineSocket) {
+      return;
+    }
+
     const session = await this.runtimeService.markDisconnected(machine, "Socket đã ngắt kết nối.", this.getClientIp(client));
     this.server.emit("server:runtime-updated", {
       event: "SOCKET_DISCONNECTED",
@@ -75,6 +84,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleHello(@MessageBody() dto: RuntimeHelloDto, @ConnectedSocket() client: Socket) {
     const response = await this.runtimeService.acceptHello(dto, this.getClientIp(client));
     this.getSocketData(client).machine = response.data.machine;
+    this.runtimeConnections.connect(response.data.machine.id, client.id);
     client.emit("machine:accepted", response);
     this.server.emit("server:runtime-updated", {
       event: "SOCKET_CONNECTED",

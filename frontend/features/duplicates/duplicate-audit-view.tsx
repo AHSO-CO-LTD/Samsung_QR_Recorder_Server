@@ -281,7 +281,7 @@ function FullAuditJobDetailPanel({
                 {detail.profile_counts.length === 0 ? (
                   <div className="p-3 text-sm text-muted-foreground">{t("fullAuditNoProfileCounts")}</div>
                 ) : (
-                  <Table>
+                  <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t("colProfile")}</TableHead>
@@ -308,7 +308,7 @@ function FullAuditJobDetailPanel({
                 {detail.duplicate_profiles.length === 0 ? (
                   <div className="p-3 text-sm text-muted-foreground">{t("fullAuditNoDuplicateProfiles")}</div>
                 ) : (
-                  <Table>
+                  <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t("colProfile")}</TableHead>
@@ -344,7 +344,7 @@ function FullAuditJobDetailPanel({
                 <div className="p-3 text-sm text-muted-foreground">{t("fullAuditNoDuplicateKeys")}</div>
               ) : (
                 <div className="max-h-96 overflow-auto">
-                  <Table>
+                  <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="min-w-[9rem]">{t("colProfile")}</TableHead>

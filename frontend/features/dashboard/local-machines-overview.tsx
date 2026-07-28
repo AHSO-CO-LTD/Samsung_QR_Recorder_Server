@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { apiGet } from "@/lib/api";
+import { toAppDateInput } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 import {
@@ -17,9 +18,20 @@ import {
   buildMachineRows,
   buildRuntimeSocketUrl,
   emptyTrendData,
+  type RuntimeResultCounts,
   type ScanTrendPoint,
   type TrendByMachine
 } from "@/features/shared/machine-runtime-card";
+import {
+  RUNTIME_RESULT_SCOPE_STORAGE_KEY,
+  RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY,
+  RuntimeResultScopeControl,
+  indexRuntimeSummary,
+  isRuntimeResultScope,
+  resolveRuntimeResultCounts,
+  type RuntimeResultScope,
+  type RuntimeSummaryRow
+} from "@/features/shared/runtime-result-scope-control";
 import type { Machine, MachineRuntimeSession } from "@/features/shared/types";
 
 const RUNTIME_REFRESH_MS = 5000;
@@ -30,8 +42,24 @@ export function LocalMachinesOverview() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [sessions, setSessions] = useState<MachineRuntimeSession[]>([]);
   const [trendByMachine, setTrendByMachine] = useState<TrendByMachine>({});
+  const [resultScope, setResultScope] = useState<RuntimeResultScope>("session");
+  const [sinceDate, setSinceDate] = useState("");
+  const [resultCountsByMachine, setResultCountsByMachine] = useState<Record<number, RuntimeResultCounts>>({});
+  const [isScopeLoading, setIsScopeLoading] = useState(false);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const summaryLoadSequence = useRef(0);
+
+  useEffect(() => {
+    const savedScope = window.localStorage.getItem(RUNTIME_RESULT_SCOPE_STORAGE_KEY);
+    if (savedScope && isRuntimeResultScope(savedScope)) {
+      setResultScope(savedScope);
+    }
+    setSinceDate(window.localStorage.getItem(RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY) || toAppDateInput(Date.now()));
+    setPreferencesReady(true);
+  }, []);
 
   const load = useCallback(
     async (showToast = false, background = false) => {
@@ -76,6 +104,54 @@ export function LocalMachinesOverview() {
   );
 
   const machineCodesKey = useMemo(() => machines.map((machine) => machine.machine_code).sort().join("|"), [machines]);
+
+  const loadResultSummary = useCallback(
+    async (showToast = false, background = false) => {
+      if (!preferencesReady) {
+        return;
+      }
+
+      const requestId = ++summaryLoadSequence.current;
+      if (resultScope === "session") {
+        setResultCountsByMachine({});
+        setScopeError(null);
+        setIsScopeLoading(false);
+        return;
+      }
+
+      if (!background) {
+        setIsScopeLoading(true);
+        setResultCountsByMachine({});
+      }
+      setScopeError(null);
+
+      try {
+        const path = `/scans/runtime-summary?scope=${resultScope}${
+          resultScope === "since" ? `&from=${encodeURIComponent(sinceDate)}` : ""
+        }`;
+        const result = await apiGet<RuntimeSummaryRow[]>(path);
+        if (requestId !== summaryLoadSequence.current) {
+          return;
+        }
+        setResultCountsByMachine(indexRuntimeSummary(result.data ?? []));
+      } catch (currentError) {
+        if (requestId !== summaryLoadSequence.current) {
+          return;
+        }
+        const message = currentError instanceof Error ? currentError.message : t("runtimeSummaryLoadFailed");
+        setResultCountsByMachine({});
+        setScopeError(message);
+        if (showToast) {
+          toast.error(message);
+        }
+      } finally {
+        if (!background && requestId === summaryLoadSequence.current) {
+          setIsScopeLoading(false);
+        }
+      }
+    },
+    [preferencesReady, resultScope, sinceDate, t]
+  );
 
   const loadTrendData = useCallback(
     async (showToast = false) => {
@@ -124,6 +200,7 @@ export function LocalMachinesOverview() {
     const refreshFromRuntime = () => {
       void load(false, true);
       void loadTrendData();
+      void loadResultSummary(false, true);
     };
     const refreshFromScan = () => {
       if (scanRefreshTimer) {
@@ -132,6 +209,7 @@ export function LocalMachinesOverview() {
       scanRefreshTimer = window.setTimeout(() => {
         void load(false, true);
         void loadTrendData();
+        void loadResultSummary(false, true);
       }, 150);
     };
 
@@ -146,7 +224,7 @@ export function LocalMachinesOverview() {
       }
       socket.disconnect();
     };
-  }, [load, loadTrendData]);
+  }, [load, loadResultSummary, loadTrendData]);
 
   useEffect(() => {
     void loadTrendData();
@@ -159,11 +237,41 @@ export function LocalMachinesOverview() {
     };
   }, [loadTrendData]);
 
+  useEffect(() => {
+    if (!preferencesReady) {
+      return;
+    }
+
+    void loadResultSummary();
+    const interval = window.setInterval(() => {
+      void loadResultSummary(false, true);
+    }, RUNTIME_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [loadResultSummary, preferencesReady]);
+
   const rows = useMemo(() => {
     return buildMachineRows(machines, sessions);
   }, [machines, sessions]);
 
   const connectedCount = rows.filter((row) => row.isConnected).length;
+
+  const updateResultScope = (scope: RuntimeResultScope) => {
+    if (scope === "since" && !sinceDate) {
+      const appToday = toAppDateInput(Date.now());
+      setSinceDate(appToday);
+      window.localStorage.setItem(RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY, appToday);
+    }
+    setResultScope(scope);
+    window.localStorage.setItem(RUNTIME_RESULT_SCOPE_STORAGE_KEY, scope);
+  };
+
+  const updateSinceDate = (value: string) => {
+    setSinceDate(value);
+    window.localStorage.setItem(RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY, value);
+  };
 
   return (
     <section className="min-w-0 space-y-3" aria-label={t("dashboardLocalMachines")}>
@@ -175,11 +283,30 @@ export function LocalMachinesOverview() {
             <InfoTooltip content={t("dashboardLocalMachinesDesc")} />
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={isLoading} className="w-full sm:w-auto">
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} aria-hidden="true" />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void load(true);
+            void loadResultSummary(true);
+          }}
+          disabled={isLoading || isScopeLoading}
+          className="w-full sm:w-auto"
+        >
+          <RefreshCw className={cn("h-4 w-4", (isLoading || isScopeLoading) && "animate-spin")} aria-hidden="true" />
           {t("retry")}
         </Button>
       </div>
+
+      <RuntimeResultScopeControl
+        scope={resultScope}
+        sinceDate={sinceDate}
+        maxDate={toAppDateInput(Date.now())}
+        isLoading={isScopeLoading}
+        error={scopeError}
+        onScopeChange={updateResultScope}
+        onSinceDateChange={updateSinceDate}
+      />
 
       {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
       {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
@@ -192,6 +319,7 @@ export function LocalMachinesOverview() {
               key={row.machine.id}
               row={row}
               trendData={trendByMachine[row.machine.machine_code] ?? emptyTrendData}
+              resultCounts={resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)}
             />
           ))}
         </div>

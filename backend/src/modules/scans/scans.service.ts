@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, Injectable } from "@nestjs/common";
+import { BadRequestException, HttpException, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { getVietnamDayRange } from "../../common/time/vietnam-time";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -7,6 +7,9 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RuntimeGateway } from "../runtime/runtime.gateway";
 import { RuntimeService } from "../runtime/runtime.service";
 import { FullCodePayloadDto, LedScanPayloadDto, SubmitScanDto } from "./dto/submit-scan.dto";
+import { isRuntimeSummaryScope, resolveRuntimeSummaryRange, type RuntimeSummaryScope } from "./runtime-summary-range";
+import { isScanTrendScope, resolveScanTrendRange, type ScanTrendScope } from "./scan-trend-range";
+import { resolveLocalNgReason } from "./scan-failure-reason";
 
 type SubmitScanOptions = {
   syncBatchId?: number;
@@ -38,6 +41,8 @@ type CompleteSubmitScanDto = SubmitScanDto & {
 
 @Injectable()
 export class ScansService {
+  private readonly logger = new Logger(ScansService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly machinesService: MachinesService,
@@ -198,7 +203,89 @@ export class ScansService {
     };
   }
 
-  async getScanTrend(options: { days: number; hours?: number; bucketMinutes?: number; machineCode?: string }) {
+  async getRuntimeSummary(query: { scope?: RuntimeSummaryScope; from?: string }) {
+    if (!query.scope || !isRuntimeSummaryScope(query.scope)) {
+      throw new BadRequestException("Phạm vi kết quả không hợp lệ.");
+    }
+
+    let range: ReturnType<typeof resolveRuntimeSummaryRange>;
+    try {
+      range = resolveRuntimeSummaryRange(query.scope, query.from);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Khoảng thời gian không hợp lệ.");
+    }
+
+    const scanAt =
+      range.start || range.end
+        ? {
+            gte: range.start,
+            lte: range.end
+          }
+        : undefined;
+
+    const [machines, groupedCounts] = await Promise.all([
+      this.prisma.machine.findMany({
+        where: { is_active: true },
+        select: {
+          id: true,
+          machine_code: true
+        },
+        orderBy: [{ line_name: "asc" }, { machine_code: "asc" }]
+      }),
+      this.prisma.scanRecord.groupBy({
+        by: ["machine_id", "final_status"],
+        where: {
+          machine: { is_active: true },
+          final_status: { in: ["OK", "NG"] },
+          scan_at: scanAt
+        },
+        _count: { _all: true }
+      })
+    ]);
+
+    const countsByMachine = new Map<number, { ok: number; ng: number }>();
+    for (const item of groupedCounts) {
+      const counts = countsByMachine.get(item.machine_id) ?? { ok: 0, ng: 0 };
+      if (item.final_status === "OK") {
+        counts.ok = item._count._all;
+      } else if (item.final_status === "NG") {
+        counts.ng = item._count._all;
+      }
+      countsByMachine.set(item.machine_id, counts);
+    }
+
+    return {
+      success: true,
+      code: "RUNTIME_SCAN_SUMMARY_LOADED",
+      message: "Đã tải tổng kết quả theo phạm vi.",
+      data: machines.map((machine) => {
+        const counts = countsByMachine.get(machine.id) ?? { ok: 0, ng: 0 };
+        return {
+          machine_id: machine.id,
+          machine_code: machine.machine_code,
+          ok: counts.ok,
+          ng: counts.ng,
+          total: counts.ok + counts.ng
+        };
+      })
+    };
+  }
+
+  async getScanTrend(options: {
+    days: number;
+    hours?: number;
+    bucketMinutes?: number;
+    machineCode?: string;
+    scope?: ScanTrendScope;
+    from?: string;
+  }) {
+    if (options.scope) {
+      if (!isScanTrendScope(options.scope)) {
+        throw new BadRequestException("Phạm vi biểu đồ không hợp lệ.");
+      }
+      return this.getScopedScanTrend(options.scope, options.from);
+    }
+
     const safeDays = Math.min(Math.max(options.days || 7, 1), 31);
     const safeBucketMinutes = options.bucketMinutes ? Math.min(Math.max(options.bucketMinutes, 5), 240) : undefined;
     const safeHours = options.hours ? Math.min(Math.max(options.hours, 1), 72) : 12;
@@ -276,6 +363,102 @@ export class ScansService {
       message: "Đã tải xu hướng quét.",
       data
     };
+  }
+
+  private async getScopedScanTrend(scope: ScanTrendScope, from?: string) {
+    let range: ReturnType<typeof resolveScanTrendRange>;
+    try {
+      range = resolveScanTrendRange(scope, from);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Khoảng thời gian không hợp lệ.");
+    }
+
+    let start = range.start;
+    if (!start) {
+      const oldestScan = await this.prisma.scanRecord.aggregate({
+        _min: { scan_at: true }
+      });
+      start = oldestScan._min.scan_at ?? getVietnamDayRange(range.end).start;
+    }
+
+    const bucketExpression =
+      range.bucket === "30_minutes"
+        ? Prisma.sql`to_char(
+            date_trunc('hour', "scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') +
+            floor(extract(minute from "scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') / 30) * interval '30 minutes',
+            'YYYY-MM-DD HH24:MI'
+          )`
+        : Prisma.sql`to_char("scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')`;
+
+    const groupedRows = await this.prisma.$queryRaw<
+      Array<{ bucket: string; ok: bigint; ng: bigint; pending: bigint }>
+    >(Prisma.sql`
+      SELECT
+        ${bucketExpression} AS "bucket",
+        count(*) FILTER (WHERE "final_status" = 'OK') AS "ok",
+        count(*) FILTER (WHERE "final_status" = 'NG') AS "ng",
+        count(*) FILTER (WHERE "final_status" = 'PENDING') AS "pending"
+      FROM "scan_records"
+      WHERE "scan_at" >= ${start} AND "scan_at" <= ${range.end}
+      GROUP BY 1
+      ORDER BY 1
+    `);
+
+    const countsByBucket = new Map(
+      groupedRows.map((row) => [
+        row.bucket,
+        {
+          ok: Number(row.ok),
+          ng: Number(row.ng),
+          pending: Number(row.pending)
+        }
+      ])
+    );
+    const data = this.buildScopedTrendBuckets(start, range.end, range.bucket, countsByBucket);
+
+    return {
+      success: true,
+      code: "SCAN_TREND_LOADED",
+      message: "Đã tải xu hướng quét.",
+      data
+    };
+  }
+
+  private buildScopedTrendBuckets(
+    start: Date,
+    end: Date,
+    bucket: "30_minutes" | "day",
+    countsByBucket: Map<string, { ok: number; ng: number; pending: number }>
+  ) {
+    const bucketMs = bucket === "30_minutes" ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const firstBucket =
+      bucket === "30_minutes"
+        ? new Date(Math.floor(start.getTime() / bucketMs) * bucketMs)
+        : getVietnamDayRange(start).start;
+    const data = [];
+
+    for (let cursorMs = firstBucket.getTime(); cursorMs <= end.getTime(); cursorMs += bucketMs) {
+      const cursor = new Date(cursorMs);
+      const bucketKey = bucket === "30_minutes" ? this.formatVietnamTrendDateTime(cursor) : this.formatVietnamTrendDate(cursor);
+      const counts = countsByBucket.get(bucketKey) ?? { ok: 0, ng: 0, pending: 0 };
+      data.push({
+        date: bucket === "30_minutes" ? bucketKey.slice(11) : bucketKey,
+        ok: counts.ok,
+        ng: counts.ng,
+        pending: counts.pending,
+        total: counts.ok + counts.ng + counts.pending
+      });
+    }
+
+    return data;
+  }
+
+  private formatVietnamTrendDate(date: Date) {
+    return new Date(date.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
+  private formatVietnamTrendDateTime(date: Date) {
+    return new Date(date.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 16).replace("T", " ");
   }
 
   private async getBucketedScanTrend(machineFilter: Prisma.ScanRecordWhereInput, hours: number, bucketMinutes: number) {
@@ -363,12 +546,16 @@ export class ScansService {
   }
 
   async submitScan(dto: SubmitScanDto, options: SubmitScanOptions = {}) {
+    const receivedAt = new Date();
     const machineForLog = await this.prisma.machine.findUnique({
       where: { machine_code: dto.machine_code }
     });
 
     try {
       const result = await this.processSubmitScan(dto, options);
+      if (machineForLog) {
+        await this.recordRuntimeScanActivity(machineForLog.id, result, receivedAt);
+      }
       if (!options.skipRequestLog && machineForLog) {
         await this.logSyncRequest(machineForLog.id, dto, result, options.requestType ?? "SUBMIT_SCAN", "OK", options.batchCode);
       }
@@ -455,7 +642,7 @@ export class ScansService {
           server_status: "SKIPPED",
           final_status: "NG",
           ng_stage: "LOCAL",
-          ng_reason: dto.local_ng_reason || "LOCAL_NG",
+          ng_reason: resolveLocalNgReason(dto),
           sync_batch_id: options.syncBatchId ?? null,
           runtime_session_id: runtimeContext?.runtime_session_id ?? null,
           runtime_product_id: runtimeContext?.runtime_product_id ?? null,
@@ -941,6 +1128,39 @@ export class ScansService {
 
   private asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  }
+
+  private async recordRuntimeScanActivity(machineId: number, response: unknown, receivedAt: Date) {
+    try {
+      const responseData = this.asRecord(this.asRecord(response).data);
+      const scanId = typeof responseData.server_scan_id === "number" ? responseData.server_scan_id : Number(responseData.server_scan_id);
+      if (!Number.isInteger(scanId) || scanId <= 0) {
+        return;
+      }
+
+      const scan = await this.prisma.scanRecord.findUnique({
+        where: { id: scanId },
+        select: {
+          machine_id: true,
+          local_scan_id: true,
+          final_status: true,
+          created_at: true
+        }
+      });
+
+      if (!scan || scan.machine_id !== machineId || scan.created_at.getTime() < receivedAt.getTime()) {
+        return;
+      }
+
+      await this.runtimeService.recordScanActivity({
+        machineId,
+        localScanId: scan.local_scan_id,
+        finalStatus: scan.final_status,
+        receivedAt: scan.created_at
+      });
+    } catch (error) {
+      this.logger.warn(`Runtime scan activity update failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private extractErrorPayload(error: unknown) {

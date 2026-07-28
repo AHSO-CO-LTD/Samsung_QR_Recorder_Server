@@ -51,9 +51,15 @@ enum MachineConnectionEventType {
 
 enum MachineRuntimeStatus {
   RUNNING
+  PAUSED
   STOPPED
   DISCONNECTED
   ERROR
+}
+
+enum MachineRuntimeSource {
+  WEBSOCKET
+  HEARTBEAT
 }
 
 enum MachineRuntimeEventType {
@@ -63,6 +69,8 @@ enum MachineRuntimeEventType {
   PRODUCT_CHANGED
   UPDATED
   SNAPSHOT
+  PAUSED
+  RESUMED
   STOPPED
   ERROR
   SCAN_LINKED
@@ -378,7 +386,8 @@ model MachineConnectionLog {
 
 // =========================
 // 6.1. MACHINE RUNTIME SESSIONS
-// Server-owned production runtime sessions created from WebSocket events.
+// Server-owned production runtime sessions. WebSocket is preferred;
+// heartbeat is the compatibility fallback for local versions without WebSocket.
 // Local does not own/edit these sessions; manual adjustment, if ever exposed,
 // must be written to machine_runtime_adjustment_logs.
 // =========================
@@ -389,6 +398,7 @@ model MachineRuntimeSession {
   machine_id         Int
   machine_code       String
   status             MachineRuntimeStatus @default(RUNNING)
+  source             MachineRuntimeSource @default(WEBSOCKET)
   current_product_id Int?
   total_count        Int                  @default(0)
   ok_count           Int                  @default(0)
@@ -396,6 +406,7 @@ model MachineRuntimeSession {
   last_result        String?
   last_code          String?
   last_local_scan_id String?
+  last_result_at     DateTime?
   reconnect_count    Int                  @default(0)
   started_at         DateTime             @default(now())
   ended_at           DateTime?

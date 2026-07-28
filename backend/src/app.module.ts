@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { ApiAuthGuard } from "./common/auth/auth.guard";
+import { RuntimeConnectionModule } from "./common/runtime/runtime-connection.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DuplicatesModule } from "./modules/duplicates/duplicates.module";
@@ -27,6 +28,7 @@ import { PrismaModule } from "./prisma/prisma.module";
       envFilePath: ["../.env", ".env"]
     }),
     PrismaModule,
+    RuntimeConnectionModule,
     AuditModule,
     AuthModule,
     HealthModule,

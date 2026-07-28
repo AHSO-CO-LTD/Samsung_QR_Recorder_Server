@@ -325,7 +325,8 @@ export type MachineRuntimeSession = {
   session_code: string;
   machine_id: number;
   machine_code: string;
-  status: "RUNNING" | "STOPPED" | "DISCONNECTED" | "ERROR";
+  status: "RUNNING" | "PAUSED" | "STOPPED" | "DISCONNECTED" | "ERROR";
+  source?: "WEBSOCKET" | "HEARTBEAT";
   current_product_id?: number | null;
   total_count: number;
   ok_count: number;
@@ -333,6 +334,7 @@ export type MachineRuntimeSession = {
   last_result?: string | null;
   last_code?: string | null;
   last_local_scan_id?: string | null;
+  last_result_at?: string | null;
   reconnect_count: number;
   started_at: string;
   ended_at?: string | null;

@@ -21,7 +21,8 @@ import {
   type ScanColumnKey,
   type ScanDisplaySettings
 } from "@/features/scans/scan-display-settings-dialog";
-import { buildRuntimeSocketUrl, formatIssueReason } from "@/features/shared/machine-runtime-card";
+import { buildRuntimeSocketUrl } from "@/features/shared/machine-runtime-card";
+import { formatIssueReason, formatLedIssueReason } from "@/features/shared/scan-issue-reason";
 import { usePermissions } from "@/lib/permissions";
 import type { DuplicateKey, Machine, Profile, ScanRecord, Vendor } from "@/features/shared/types";
 
@@ -163,7 +164,9 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
 
   const columns: Column<ScanRecord>[] = [
     { key: "time", header: t("colScanTime"), className: "min-w-[10rem] whitespace-nowrap", render: (item) => <DateText value={item.scan_at} /> },
-    { key: "machine", header: t("colMachine"), className: "min-w-[7rem] whitespace-nowrap", render: (item) => <MonoText value={item.machine?.machine_code} /> },
+    { key: "machine", header: t("colMachineCode"), className: "min-w-[7rem] whitespace-nowrap", render: (item) => <MonoText value={item.machine?.machine_code} /> },
+    { key: "machine_name", header: t("colMachineName"), className: "min-w-[10rem]", render: (item) => item.machine?.machine_name ?? "-" },
+    { key: "line", header: t("colLine"), className: "min-w-[8rem]", render: (item) => item.machine?.line_name ?? "-" },
     { key: "chassis", header: t("colChassis"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <MonoText value={getChassisCode(item)} /> },
     { key: "vendor", header: t("colVendor"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <span className="text-sm">{getVendorLabel(item.full_vendor_char)}</span> },
     { key: "local_id", header: t("colLocalId"), className: "min-w-[9rem] whitespace-nowrap", render: (item) => <MonoText value={item.local_scan_id} /> },
@@ -172,7 +175,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     { key: "local", header: t("colLocal"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.local_status} /> },
     { key: "server", header: t("colServer"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.server_status} /> },
     { key: "final", header: t("colFinal"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.final_status} /> },
-    { key: "reason", header: t("colNgReason"), className: "min-w-[10rem]", render: (item) => <NgReasonText value={item.ng_reason} /> }
+    { key: "reason", header: t("colNgReason"), className: "min-w-[10rem]", render: (item) => <NgReasonText value={item.ng_reason} scan={item} /> }
   ];
   const visibleAllScanColumns = columns.filter((column) => scanDisplaySettings.visibleColumns.includes(column.key as ScanColumnKey));
 
@@ -333,7 +336,9 @@ function ScanFiltersCard({
 
 function getScanSearchableText(getVendorLabel: (vendorChar?: string | null) => string) {
   return (item: ScanRecord) =>
-    `${item.local_scan_id} ${item.full_code_raw} ${item.full_led_code ?? ""} ${item.full_vendor_char} ${getVendorLabel(item.full_vendor_char)} ${item.duplicate_key} ${item.machine?.machine_code ?? ""} ${item.profile?.chassis_code?.code_full ?? ""} ${item.ng_reason ?? ""} ${
+    `${item.local_scan_id} ${item.full_code_raw} ${item.full_led_code ?? ""} ${item.full_vendor_char} ${getVendorLabel(item.full_vendor_char)} ${item.duplicate_key} ${
+      item.machine?.machine_code ?? ""
+    } ${item.machine?.machine_name ?? ""} ${item.machine?.line_name ?? ""} ${item.profile?.chassis_code?.code_full ?? ""} ${item.ng_reason ?? ""} ${
       item.led_items
         ?.map((ledItem) => `${ledItem.led_slot} ${ledItem.led_index} ${getLedCodeForSlot(item, ledItem.led_slot)} ${ledItem.led_scan_raw} ${ledItem.led_lot_no ?? ""} ${ledItem.vendor_char} ${ledItem.led_suffix} ${ledItem.local_status} ${ledItem.ng_reason ?? ""}`)
         .join(" ") ?? ""
@@ -360,7 +365,7 @@ function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: 
         <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">{t("scanLedDetailsEmpty")}</div>
       ) : (
         <div className="overflow-x-auto rounded-md border bg-background">
-          <Table>
+          <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-20 whitespace-nowrap">{t("colLedSlot")}</TableHead>
@@ -402,7 +407,7 @@ function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: 
                     <StatusBadge value={ledItem.local_status} />
                   </TableCell>
                   <TableCell>
-                    <NgReasonText value={ledItem.ng_reason} />
+                    <NgReasonText value={ledItem.ng_reason} ledItem />
                   </TableCell>
                 </TableRow>
               ))}
@@ -422,14 +427,15 @@ function getLedCodeForSlot(scan: ScanRecord, slot: number) {
   return scan.profile?.profile_led_codes?.find((item) => item.led_slot === slot)?.led_code?.code_full ?? "-";
 }
 
-function NgReasonText({ value }: { value?: string | null }) {
+function NgReasonText({ value, scan, ledItem = false }: { value?: string | null; scan?: ScanRecord; ledItem?: boolean }) {
   const { locale } = useI18n();
 
   if (!value) {
     return <span className="text-muted-foreground">-</span>;
   }
 
-  return <span title={value}>{formatIssueReason(value, locale)}</span>;
+  const label = ledItem ? formatLedIssueReason(value, locale) : formatIssueReason(value, locale, scan);
+  return <span title={value}>{label}</span>;
 }
 
 function getRefreshModeLabel(settings: ScanDisplaySettings, t: ReturnType<typeof useI18n>["t"]) {

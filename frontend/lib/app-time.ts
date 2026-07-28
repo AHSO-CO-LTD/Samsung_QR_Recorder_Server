@@ -62,6 +62,10 @@ export function toAppDatetimeLocal(value: string | number | Date) {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
+export function toAppDateInput(value: string | number | Date) {
+  return toAppDatetimeLocal(value).slice(0, 10);
+}
+
 export function appDatetimeLocalToIso(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
   if (!match) {
