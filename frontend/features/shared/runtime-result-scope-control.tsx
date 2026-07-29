@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,8 @@ export function RuntimeResultScopeControl({
   isLoading,
   error,
   onScopeChange,
-  onSinceDateChange
+  onSinceDateChange,
+  trailingContent
 }: {
   scope: RuntimeResultScope;
   sinceDate: string;
@@ -45,6 +47,7 @@ export function RuntimeResultScopeControl({
   error: string | null;
   onScopeChange: (scope: RuntimeResultScope) => void;
   onSinceDateChange: (value: string) => void;
+  trailingContent?: React.ReactNode;
 }) {
   const { t } = useI18n();
 
@@ -83,6 +86,7 @@ export function RuntimeResultScopeControl({
           />
         ) : null}
         {isLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label={t("loading")} /> : null}
+        {trailingContent ? <div className="ml-auto">{trailingContent}</div> : null}
       </div>
       {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>

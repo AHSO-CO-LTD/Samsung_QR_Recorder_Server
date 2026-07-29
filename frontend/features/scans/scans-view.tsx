@@ -24,6 +24,8 @@ import {
 } from "@/features/scans/scan-display-settings-dialog";
 import { buildRuntimeSocketUrl } from "@/features/shared/machine-runtime-card";
 import { formatIssueReason, formatLedIssueReason } from "@/features/shared/scan-issue-reason";
+import { NgSoundControls } from "@/features/sound/ng-sound-controls";
+import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
 import { usePermissions } from "@/lib/permissions";
 import type { DuplicateKey, Machine, Profile, ScanRecord, Vendor } from "@/features/shared/types";
 
@@ -97,7 +99,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
         : "scheduled-duplicate-check";
 
   useEffect(() => {
-    if (visibleTab !== "all-scans" || scanDisplaySettings.refreshMode !== "realtime") {
+    if (visibleTab !== "all-scans") {
       return;
     }
 
@@ -107,7 +109,11 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
       transports: ["websocket", "polling"]
     });
 
-    socket.on("server:scan-updated", () => {
+    socket.on("server:scan-updated", (payload: unknown) => {
+      handleNgSoundScanEvent(payload, t("ngSoundPlaybackFailed"));
+      if (scanDisplaySettings.refreshMode !== "realtime") {
+        return;
+      }
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         setRealtimeRefreshSignal((value) => value + 1);
@@ -154,7 +160,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
   }, [filters]);
 
   const duplicateScansEndpoint = useMemo(() => {
-    const params = new URLSearchParams({ ng_reason: "SERVER_DUPLICATE" });
+    const params = new URLSearchParams({ duplicate_only: "true" });
     if (filters.machine_code) params.set("machine_code", filters.machine_code);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
@@ -222,6 +228,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
               getRowKey={(item) => item.id}
               actions={
                 <>
+                  <NgSoundControls />
                   <Badge variant="outline">{getRefreshModeLabel(scanDisplaySettings, t)}</Badge>
                   <ScanDisplaySettingsDialog settings={scanDisplaySettings} onSave={setScanDisplaySettings} />
                 </>

@@ -18,8 +18,16 @@
   --border: 214 16% 84%;
   --input: 214 16% 84%;
   --ring: 214 78% 42%;
-  --chart-ok: 160 58% 38%;
-  --chart-ng: 0 68% 52%;
+  --runtime-ok: #4ad45a;
+  --runtime-ng: #ff0000;
+  --runtime-warning: #ffff00;
+  --runtime-white: #ffffff;
+  --runtime-black: #000000;
+  --runtime-ok-channels: 74 212 90;
+  --runtime-ng-channels: 255 0 0;
+  --runtime-warning-channels: 255 255 0;
+  --chart-ok: var(--runtime-ok);
+  --chart-ng: var(--runtime-ng);
 }
 
 .dark {
@@ -38,8 +46,8 @@
   --border: 220 16% 26%;
   --input: 220 16% 26%;
   --ring: 209 78% 58%;
-  --chart-ok: 156 62% 52%;
-  --chart-ng: 0 72% 62%;
+  --chart-ok: var(--runtime-ok);
+  --chart-ng: var(--runtime-ng);
 }
 
 * {
@@ -100,6 +108,262 @@ textarea {
 .animate-bell-shake {
   animation: bell-shake 0.8s ease-in-out;
   transform-origin: 50% 0%;
+}
+
+.guide-manual-print {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    min-height: auto !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .guide-manual-print,
+  .guide-manual-print * {
+    visibility: visible !important;
+  }
+
+  .guide-manual-print {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    background: #ffffff;
+    color: #111827;
+    font-family: Arial, "Segoe UI", sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+
+  .guide-manual-cover {
+    min-height: 268mm;
+    break-after: page;
+  }
+
+  .guide-manual-cover-brand {
+    padding-top: 8mm;
+    color: #1a51db;
+    font-size: 10pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .guide-manual-cover > h1 {
+    margin: 12mm 0 3mm;
+    font-size: 28pt;
+    line-height: 1.15;
+  }
+
+  .guide-manual-cover > p {
+    max-width: 145mm;
+    margin: 0;
+    color: #4b5563;
+    font-size: 12pt;
+  }
+
+  .guide-manual-summary {
+    display: flex;
+    gap: 4mm;
+    margin-top: 8mm;
+  }
+
+  .guide-manual-summary span {
+    border: 0.3mm solid #d1d5db;
+    padding: 2mm 4mm;
+    font-weight: 600;
+  }
+
+  .guide-manual-toc {
+    margin-top: 12mm;
+    border-top: 0.4mm solid #1a51db;
+    padding-top: 5mm;
+  }
+
+  .guide-manual-toc h2 {
+    margin: 0 0 5mm;
+    font-size: 16pt;
+  }
+
+  .guide-manual-toc section {
+    break-inside: avoid;
+    margin-top: 4mm;
+  }
+
+  .guide-manual-toc h3 {
+    margin: 0 0 1.5mm;
+    color: #1a51db;
+    font-size: 10pt;
+  }
+
+  .guide-manual-toc ol {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1mm 8mm;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .guide-manual-toc li {
+    display: grid;
+    grid-template-columns: 10mm 1fr;
+    gap: 2mm;
+    border-bottom: 0.2mm solid #e5e7eb;
+    padding: 1.2mm 0;
+    font-size: 9pt;
+  }
+
+  .guide-manual-toc li span:first-child {
+    color: #1a51db;
+    font-weight: 700;
+  }
+
+  .guide-manual-group {
+    display: block;
+  }
+
+  .guide-manual-group-cover {
+    display: flex;
+    min-height: 268mm;
+    flex-direction: column;
+    justify-content: center;
+    break-before: page;
+    break-after: page;
+    border-top: 1.2mm solid #1a51db;
+  }
+
+  .guide-manual-group-cover > span {
+    color: #1a51db;
+    font-size: 13pt;
+    font-weight: 700;
+  }
+
+  .guide-manual-group-cover h2 {
+    max-width: 155mm;
+    margin: 5mm 0 3mm;
+    font-size: 26pt;
+    line-height: 1.15;
+  }
+
+  .guide-manual-group-cover p {
+    max-width: 140mm;
+    margin: 0;
+    color: #4b5563;
+    font-size: 12pt;
+  }
+
+  .guide-manual-group-cover strong {
+    margin-top: 8mm;
+    color: #1a51db;
+  }
+
+  .guide-manual-step-page {
+    display: flex;
+    min-height: 268mm;
+    flex-direction: column;
+    break-before: page;
+    break-after: page;
+  }
+
+  .guide-manual-step-page > header {
+    border-bottom: 0.3mm solid #d1d5db;
+    padding-bottom: 3mm;
+  }
+
+  .guide-manual-step-context {
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+    color: #4b5563;
+    font-size: 8.5pt;
+  }
+
+  .guide-manual-step-page header h2 {
+    margin: 3mm 0 0;
+    font-size: 16pt;
+    line-height: 1.2;
+  }
+
+  .guide-manual-step-page header p {
+    margin: 1.5mm 0 0;
+    color: #4b5563;
+    font-size: 9.5pt;
+  }
+
+  .guide-manual-step-list {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 4mm;
+    padding-top: 3mm;
+  }
+
+  .guide-manual-step-list.is-single {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .guide-manual-step {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    break-inside: avoid;
+  }
+
+  .guide-manual-step + .guide-manual-step {
+    border-top: 0.3mm solid #e5e7eb;
+    padding-top: 3mm;
+  }
+
+  .guide-manual-step-number {
+    width: fit-content;
+    background: #1a51db;
+    color: #ffffff;
+    padding: 1.3mm 3mm;
+    font-size: 8.5pt;
+    font-weight: 700;
+  }
+
+  .guide-manual-step > h3 {
+    margin: 2mm 0;
+    font-size: 11.5pt;
+    line-height: 1.25;
+  }
+
+  .guide-manual-step img {
+    display: block;
+    max-width: 100%;
+    max-height: 78mm;
+    margin: 0 auto;
+    border: 0.3mm solid #d1d5db;
+    object-fit: contain;
+  }
+
+  .guide-manual-step-list.is-single .guide-manual-step img {
+    max-height: 155mm;
+  }
+
+  .guide-manual-step-content {
+    margin: 2mm 0 0;
+    border-left: 1mm solid #1a51db;
+    padding: 2mm 0 2mm 3mm;
+    color: #374151;
+    font-size: 9pt;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

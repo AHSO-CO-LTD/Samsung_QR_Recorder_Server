@@ -49,7 +49,14 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
     private readonly runtimeConnections: RuntimeConnectionRegistry
   ) {}
 
-  publishScanUpdated(payload: { machine_code: string; local_scan_id: string; result_code: string }) {
+  publishScanUpdated(payload: {
+    machine_code: string;
+    local_scan_id: string;
+    result_code: string;
+    final_status: "OK" | "NG" | "PENDING" | null;
+    source: "LIVE" | "BATCH";
+    is_replay: boolean;
+  }) {
     this.server?.emit("server:scan-updated", payload);
   }
 

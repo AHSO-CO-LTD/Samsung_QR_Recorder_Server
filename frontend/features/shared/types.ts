@@ -4,6 +4,7 @@ export type Machine = {
   id: number;
   machine_code: string;
   machine_name: string;
+  is_virtual?: boolean;
   serial?: string | null;
   uid?: string | null;
   license_key_raw?: string | null;

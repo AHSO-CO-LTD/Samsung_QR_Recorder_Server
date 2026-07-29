@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GuideDialog } from "@/features/guides/guide-dialog";
 import { loadGuideCatalog, type InAppGuide } from "@/features/guides/guide-catalog";
+import { GuideManualPdfExport } from "@/features/guides/guide-manual-pdf-export";
 import { useI18n } from "@/lib/i18n-provider";
 
 const copy = {
@@ -24,6 +25,17 @@ const copy = {
     empty: "Chưa có nội dung hướng dẫn.",
     noResults: "Không tìm thấy hướng dẫn phù hợp.",
     openGuide: "Mở hướng dẫn {title}",
+    exportButton: "Xuất PDF",
+    exporting: "Đang tạo PDF...",
+    exportSuccess: "Đã xuất file hướng dẫn PDF.",
+    exportCancelled: "Đã hủy xuất PDF.",
+    exportFailed: "Không thể xuất file hướng dẫn PDF.",
+    exportImageLoadFailed: "Không tải được đầy đủ ảnh hướng dẫn để xuất PDF.",
+    browserDownloadFallback: "Trình duyệt không hỗ trợ chọn thư mục. File PDF đã được tải xuống thư mục mặc định.",
+    manualTitle: "Hướng dẫn sử dụng",
+    manualDescription: "Tài liệu thao tác tổng hợp cho ứng dụng QR Recorder Server.",
+    tableOfContents: "Mục lục",
+    stepLabel: "Bước {current}/{total}",
     groups: [
       { id: "getting-started", title: "Bắt đầu sử dụng", description: "Đăng nhập, điều hướng và đọc màn hình tổng quan.", from: 1, to: 4 },
       { id: "monitoring", title: "Giám sát vận hành", description: "Theo dõi phiên chạy, máy và lịch sử hoạt động.", from: 5, to: 8 },
@@ -44,6 +56,17 @@ const copy = {
     empty: "No guide content is available.",
     noResults: "No matching guide was found.",
     openGuide: "Open {title}",
+    exportButton: "Export PDF",
+    exporting: "Creating PDF...",
+    exportSuccess: "The PDF manual was exported.",
+    exportCancelled: "PDF export was cancelled.",
+    exportFailed: "Unable to export the PDF manual.",
+    exportImageLoadFailed: "Not all guide images could be loaded for PDF export.",
+    browserDownloadFallback: "This browser cannot choose a folder. The PDF was saved to the default download folder.",
+    manualTitle: "User manual",
+    manualDescription: "Combined operating instructions for QR Recorder Server.",
+    tableOfContents: "Table of contents",
+    stepLabel: "Step {current}/{total}",
     groups: [
       { id: "getting-started", title: "Getting started", description: "Sign in, navigate, and read the overview screen.", from: 1, to: 4 },
       { id: "monitoring", title: "Operation monitoring", description: "Monitor runtime sessions, machines, and activity history.", from: 5, to: 8 },
@@ -110,6 +133,22 @@ export function GuidesView() {
         .filter((group) => group.guides.length > 0),
     [filteredGuides, text.groups]
   );
+  const manualGroups = useMemo(
+    () => {
+      const numberedGuides = catalog.map((guide, index) => ({
+        ...guide,
+        manualOrder: index + 1
+      }));
+
+      return text.groups
+        .map((group) => ({
+          ...group,
+          guides: numberedGuides.filter((guide) => guide.order >= group.from && guide.order <= group.to)
+        }))
+        .filter((group) => group.guides.length > 0);
+    },
+    [catalog, text.groups]
+  );
 
   const totalSteps = catalog.reduce((total, guide) => total + guide.slides.length, 0);
 
@@ -123,7 +162,14 @@ export function GuidesView() {
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{text.description}</p>
         </div>
         {!isLoading && !error ? (
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <GuideManualPdfExport
+              groups={manualGroups}
+              guideCount={catalog.length}
+              stepCount={totalSteps}
+              locale={locale}
+              copy={text}
+            />
             <Badge variant="secondary">{text.guideCount.replace("{count}", String(catalog.length))}</Badge>
             <Badge variant="outline">{text.stepCount.replace("{count}", String(totalSteps))}</Badge>
           </div>

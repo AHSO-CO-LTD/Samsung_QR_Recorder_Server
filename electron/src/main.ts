@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, Notification, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
@@ -141,6 +141,16 @@ function formatUnknownError(error: unknown) {
   }
 
   return String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizePdfFileName(value: string) {
+  const sanitized = path.basename(value.trim()).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-");
+  const fileName = sanitized || "qr-recorder-user-manual.pdf";
+  return fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
 }
 
 function getProjectRoot() {
@@ -1504,6 +1514,41 @@ function registerAppIpc() {
   );
   ipcMain.handle("window:confirm-display-settings", () => confirmDesktopDisplaySettings());
   ipcMain.handle("window:rollback-display-settings", () => rollbackPendingDisplaySettings());
+  ipcMain.handle("guides:export-pdf", async (event, options: unknown) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const defaultFileName = normalizePdfFileName(
+      isRecord(options) && typeof options.defaultFileName === "string" ? options.defaultFileName : "qr-recorder-user-manual.pdf"
+    );
+    const saveResult = ownerWindow
+      ? await dialog.showSaveDialog(ownerWindow, {
+          title: "Xuất hướng dẫn sử dụng PDF",
+          defaultPath: path.join(app.getPath("documents"), defaultFileName),
+          filters: [{ name: "PDF", extensions: ["pdf"] }]
+        })
+      : await dialog.showSaveDialog({
+          title: "Xuất hướng dẫn sử dụng PDF",
+          defaultPath: path.join(app.getPath("documents"), defaultFileName),
+          filters: [{ name: "PDF", extensions: ["pdf"] }]
+        });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const pdf = await event.sender.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      pageSize: "A4"
+    });
+    await fs.promises.writeFile(saveResult.filePath, pdf);
+    appendServiceLog("SYSTEM", `Guide manual PDF exported: ${saveResult.filePath}`);
+
+    return {
+      success: true,
+      canceled: false,
+      filePath: saveResult.filePath
+    };
+  });
   ipcMain.handle("updates:check", () => checkForUpdates());
   ipcMain.handle("updates:install", (_event, tagName: unknown) => installUpdate(String(tagName ?? "")));
   ipcMain.handle("license:get-status", async () => {

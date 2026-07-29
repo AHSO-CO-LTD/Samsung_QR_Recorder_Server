@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { apiGet } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { toAppDateInput } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -33,12 +34,18 @@ import {
   type RuntimeSummaryRow
 } from "@/features/shared/runtime-result-scope-control";
 import type { Machine, MachineRuntimeSession } from "@/features/shared/types";
+import { DevVirtualMachineButton } from "@/features/shared/dev-virtual-machine-button";
+import { useVirtualMachineRuntimes } from "@/features/shared/use-virtual-machine-runtimes";
+import { getVirtualRuntimeCounts } from "@/features/shared/virtual-machine-runtime";
+import { NgSoundControls } from "@/features/sound/ng-sound-controls";
+import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
 
 const RUNTIME_REFRESH_MS = 5000;
 const TREND_REFRESH_MS = 30000;
 
 export function LocalMachinesOverview() {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [sessions, setSessions] = useState<MachineRuntimeSession[]>([]);
   const [trendByMachine, setTrendByMachine] = useState<TrendByMachine>({});
@@ -51,6 +58,7 @@ export function LocalMachinesOverview() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const summaryLoadSequence = useRef(0);
+  const { virtualMachines, createVirtualMachine } = useVirtualMachineRuntimes(user?.id);
 
   useEffect(() => {
     const savedScope = window.localStorage.getItem(RUNTIME_RESULT_SCOPE_STORAGE_KEY);
@@ -202,7 +210,8 @@ export function LocalMachinesOverview() {
       void loadTrendData();
       void loadResultSummary(false, true);
     };
-    const refreshFromScan = () => {
+    const refreshFromScan = (payload: unknown) => {
+      handleNgSoundScanEvent(payload, t("ngSoundPlaybackFailed"));
       if (scanRefreshTimer) {
         window.clearTimeout(scanRefreshTimer);
       }
@@ -253,8 +262,16 @@ export function LocalMachinesOverview() {
   }, [loadResultSummary, preferencesReady]);
 
   const rows = useMemo(() => {
-    return buildMachineRows(machines, sessions);
-  }, [machines, sessions]);
+    return buildMachineRows(
+      [...machines, ...virtualMachines.map((item) => item.machine)],
+      [...sessions, ...virtualMachines.map((item) => item.session)]
+    );
+  }, [machines, sessions, virtualMachines]);
+
+  const virtualRuntimeByMachineCode = useMemo(
+    () => new Map(virtualMachines.map((item) => [item.machine.machine_code, item] as const)),
+    [virtualMachines]
+  );
 
   const connectedCount = rows.filter((row) => row.isConnected).length;
 
@@ -283,19 +300,22 @@ export function LocalMachinesOverview() {
             <InfoTooltip content={t("dashboardLocalMachinesDesc")} />
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void load(true);
-            void loadResultSummary(true);
-          }}
-          disabled={isLoading || isScopeLoading}
-          className="w-full sm:w-auto"
-        >
-          <RefreshCw className={cn("h-4 w-4", (isLoading || isScopeLoading) && "animate-spin")} aria-hidden="true" />
-          {t("retry")}
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <DevVirtualMachineButton onCreate={createVirtualMachine} className="w-full sm:w-auto" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void load(true);
+              void loadResultSummary(true);
+            }}
+            disabled={isLoading || isScopeLoading}
+            className="w-full sm:w-auto"
+          >
+            <RefreshCw className={cn("h-4 w-4", (isLoading || isScopeLoading) && "animate-spin")} aria-hidden="true" />
+            {t("retry")}
+          </Button>
+        </div>
       </div>
 
       <RuntimeResultScopeControl
@@ -306,22 +326,30 @@ export function LocalMachinesOverview() {
         error={scopeError}
         onScopeChange={updateResultScope}
         onSinceDateChange={updateSinceDate}
+        trailingContent={<NgSoundControls />}
       />
 
       {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
       {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
       {!isLoading && !error && rows.length === 0 ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("empty")}</div> : null}
 
-      {!isLoading && !error && rows.length > 0 ? (
+      {rows.length > 0 ? (
         <div className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 34rem), 1fr))" }}>
-          {rows.map((row) => (
-            <MachineRuntimeCard
-              key={row.machine.id}
-              row={row}
-              trendData={trendByMachine[row.machine.machine_code] ?? emptyTrendData}
-              resultCounts={resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)}
-            />
-          ))}
+          {rows.map((row) => {
+            const virtualRuntime = virtualRuntimeByMachineCode.get(row.machine.machine_code);
+            return (
+              <MachineRuntimeCard
+                key={row.machine.id}
+                row={row}
+                trendData={virtualRuntime?.trendData ?? trendByMachine[row.machine.machine_code] ?? emptyTrendData}
+                resultCounts={
+                  virtualRuntime
+                    ? getVirtualRuntimeCounts(virtualRuntime.session)
+                    : resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)
+                }
+              />
+            );
+          })}
         </div>
       ) : null}
     </section>

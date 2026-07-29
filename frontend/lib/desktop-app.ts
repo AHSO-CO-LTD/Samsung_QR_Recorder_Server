@@ -86,6 +86,12 @@ export type DesktopLicenseRequestInfo = {
   generated_at: string;
 };
 
+export type DesktopPdfExportResult = {
+  success: boolean;
+  canceled: boolean;
+  filePath?: string;
+};
+
 export type DesktopAppBridge = {
   versions: {
     node: string;
@@ -102,6 +108,9 @@ export type DesktopAppBridge = {
   previewDisplaySettings: (settings: DesktopDisplaySettings) => Promise<DesktopDisplaySettingsState>;
   confirmDisplaySettings: () => Promise<DesktopDisplaySettingsState>;
   rollbackDisplaySettings: () => Promise<DesktopDisplaySettingsState>;
+  guides: {
+    exportPdf: (options: { defaultFileName: string }) => Promise<DesktopPdfExportResult>;
+  };
   updates: {
     check: () => Promise<DesktopUpdateState>;
     install: (tagName: string) => Promise<{ success: boolean; message: string }>;

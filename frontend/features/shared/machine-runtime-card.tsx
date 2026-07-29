@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { WifiOff } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { API_BASE_URL } from "@/lib/api";
@@ -23,11 +24,11 @@ export const SERVER_TREND_BUCKET_MINUTES = 30;
 const okNgChartConfig = {
   ok: {
     label: "OK",
-    color: "hsl(var(--chart-ok))"
+    color: "var(--chart-ok)"
   },
   ng: {
     label: "NG",
-    color: "hsl(var(--chart-ng))"
+    color: "var(--chart-ng)"
   }
 } satisfies ChartConfig;
 
@@ -135,7 +136,14 @@ export function MachineRuntimeCard({
   const runtimeStatus = resolveMachineRuntimeDisplayStatus(session, isConnected);
   const shouldShowDisconnectedState = !isConnected && runtimeStatus !== "STOPPED";
   const headerItems = [
-    activeDisplayOptions.machineInfo ? <MachineIdentity key="machine" name={machine.machine_name || machine.machine_code} line={machine.line_name || "-"} /> : null,
+    activeDisplayOptions.machineInfo ? (
+      <MachineIdentity
+        key="machine"
+        name={machine.machine_name || machine.machine_code}
+        line={machine.line_name || "-"}
+        isVirtual={Boolean(machine.is_virtual)}
+      />
+    ) : null,
     activeDisplayOptions.currentProduct ? <HeaderMetric key="product" label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} /> : null,
     activeDisplayOptions.duration ? <HeaderMetric key="duration" label={t("colDuration")} value={<RuntimeDuration session={session} />} /> : null,
     shouldShowCommonIssue ? (
@@ -160,9 +168,11 @@ export function MachineRuntimeCard({
     <Card
       className={cn(
         "relative overflow-hidden",
-        runtimeStatus === "RUNNING" && "border-emerald-500/70",
-        runtimeStatus === "PAUSED" && "border-amber-500/70",
-        runtimeStatus === "DISCONNECTED" && "border-destructive/60",
+        runtimeStatus === "RUNNING" && "border-runtime-ok",
+        runtimeStatus === "PAUSED" && "border-runtime-warning",
+        runtimeStatus === "STOPPED" && "border-muted-foreground/60",
+        runtimeStatus === "DISCONNECTED" && "border-runtime-ng",
+        runtimeStatus === "ERROR" && "border-runtime-ng",
         shouldShowDisconnectedState && "bg-muted/40 text-muted-foreground"
       )}
     >
@@ -173,7 +183,7 @@ export function MachineRuntimeCard({
         </div>
       ) : null}
 
-      <div className={cn(shouldShowDisconnectedState && "pt-6 grayscale")}>
+      <div className={cn(shouldShowDisconnectedState && "pt-6")}>
         {headerItems.length > 0 ? (
         <CardHeader className="pb-2 sm:pb-2">
           <div
@@ -216,12 +226,20 @@ function buildHeaderGridTemplate(itemCount: number) {
   return "minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.15fr)";
 }
 
-function MachineIdentity({ name, line }: { name: string; line: string }) {
+function MachineIdentity({ name, line, isVirtual }: { name: string; line: string; isVirtual: boolean }) {
+  const { t } = useI18n();
   const lineText = `Line: ${line}`;
 
   return (
     <div className="min-w-0">
-      <CardTitle className="truncate text-base">{name}</CardTitle>
+      <div className="flex min-w-0 items-center gap-2">
+        <CardTitle className="truncate text-base">{name}</CardTitle>
+        {isVirtual ? (
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {t("virtualMachine")}
+          </Badge>
+        ) : null}
+      </div>
       <div className="mt-1 truncate text-xs text-muted-foreground" title={lineText}>
         <span className="font-medium">Line:</span> {line}
       </div>
@@ -286,7 +304,7 @@ function MachineRuntimeOverview({
       <div className="grid min-h-52 grid-rows-4 gap-2">
         <RuntimeMetricRow label="OK" value={ok} tone="ok" />
         <RuntimeMetricRow label="NG" value={ng} tone="ng" />
-        <RuntimeMetricRow label={t("colTotal")} value={total} tone="neutral" />
+        <RuntimeMetricRow label={t("colTotal")} value={total} tone="total" />
         <RuntimeStatusRow status={status} />
       </div>
     </div>
@@ -335,21 +353,22 @@ function OkNgDonut({ ok, ng, total }: { ok: number; ng: number; total: number })
   );
 }
 
-function RuntimeMetricRow({ label, value, tone }: { label: string; value: number; tone: "ok" | "ng" | "neutral" }) {
+function RuntimeMetricRow({ label, value, tone }: { label: string; value: number; tone: "ok" | "ng" | "total" }) {
   return (
     <div
       className={cn(
         "grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm",
-        tone === "ok" && "border-emerald-500/35",
-        tone === "ng" && "border-destructive/35"
+        tone === "ok" && "border-runtime-ok bg-runtime-ok/10",
+        tone === "ng" && "border-runtime-ng bg-runtime-ng/10",
+        tone === "total" && "border-primary bg-primary/10"
       )}
     >
       <div
         className={cn(
           "px-3 py-2 font-semibold",
-          tone === "ok" && "bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
-          tone === "ng" && "bg-destructive/10 text-destructive",
-          tone === "neutral" && "bg-muted"
+          tone === "ok" && "bg-runtime-ok text-[var(--runtime-black)]",
+          tone === "ng" && "bg-runtime-ng text-[var(--runtime-white)]",
+          tone === "total" && "bg-primary text-primary-foreground"
         )}
       >
         {label}
@@ -372,16 +391,39 @@ function RuntimeStatusRow({ status }: { status: MachineRuntimeStatus }) {
             ? t("statusError")
             : t("statusDisconnected");
 
+  const isRunning = status === "RUNNING";
+  const isPaused = status === "PAUSED";
+  const isStopped = status === "STOPPED";
+  const isFault = status === "DISCONNECTED" || status === "ERROR";
+
   return (
-    <div className="grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm">
-      <div className="bg-muted px-3 py-2 font-medium">{t("machineRuntimeStatus")}</div>
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm",
+        isRunning && "border-runtime-ok",
+        isPaused && "border-runtime-warning",
+        isStopped && "border-muted-foreground/60",
+        isFault && "border-runtime-ng"
+      )}
+    >
+      <div
+        className={cn(
+          "px-3 py-2 font-medium",
+          isRunning && "bg-runtime-ok/15",
+          isPaused && "bg-runtime-warning/20",
+          isStopped && "bg-muted",
+          isFault && "bg-runtime-ng/15"
+        )}
+      >
+        {t("machineRuntimeStatus")}
+      </div>
       <div
         className={cn(
           "border-l px-3 py-2 text-right font-semibold",
-          status === "RUNNING" && "text-emerald-700 dark:text-emerald-300",
-          status === "PAUSED" && "text-amber-700 dark:text-amber-300",
-          status === "DISCONNECTED" && "text-destructive",
-          status === "ERROR" && "text-destructive"
+          isRunning && "border-black/15 bg-runtime-ok text-[var(--runtime-black)]",
+          isPaused && "border-black/15 bg-runtime-warning text-[var(--runtime-black)]",
+          isStopped && "border-border bg-muted-foreground text-background",
+          isFault && "border-black/15 bg-runtime-ng text-[var(--runtime-black)]"
         )}
       >
         {label}

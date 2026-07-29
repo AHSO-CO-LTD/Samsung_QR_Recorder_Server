@@ -28,6 +28,7 @@ type ListScansQuery = {
   vendor_char?: string;
   final_status?: "OK" | "NG" | "PENDING";
   ng_reason?: string;
+  duplicate_only?: boolean;
   from?: string;
   to?: string;
 };
@@ -59,7 +60,7 @@ export class ScansService {
       profile_id: query.profile_id,
       full_vendor_char: query.vendor_char,
       final_status: query.final_status,
-      ng_reason: query.ng_reason,
+      ng_reason: query.duplicate_only ? { in: ["LOCAL_DUPLICATE", "SERVER_DUPLICATE"] } : query.ng_reason,
       scan_at:
         query.from || query.to
           ? {
@@ -559,10 +560,17 @@ export class ScansService {
       if (!options.skipRequestLog && machineForLog) {
         await this.logSyncRequest(machineForLog.id, dto, result, options.requestType ?? "SUBMIT_SCAN", "OK", options.batchCode);
       }
+      const resultData = result.data as {
+        final_status?: "OK" | "NG" | "PENDING";
+        is_replay?: boolean;
+      } | undefined;
       this.runtimeGateway.publishScanUpdated({
         machine_code: dto.machine_code,
         local_scan_id: dto.local_scan_id,
-        result_code: result.code
+        result_code: result.code,
+        final_status: resultData?.final_status ?? null,
+        source: options.syncBatchId ? "BATCH" : "LIVE",
+        is_replay: resultData?.is_replay === true
       });
       return result;
     } catch (error) {
@@ -897,7 +905,8 @@ export class ScansService {
           decision: "LOCAL_NG_SAVED",
           server_scan_id: scan.id,
           final_status: scan.final_status,
-          ng_reason: scan.ng_reason
+          ng_reason: scan.ng_reason,
+          is_replay: true
         }
       };
     }
@@ -911,7 +920,8 @@ export class ScansService {
           decision: "SERVER_DUPLICATE",
           server_scan_id: scan.id,
           final_status: scan.final_status,
-          ng_reason: scan.ng_reason
+          ng_reason: scan.ng_reason,
+          is_replay: true
         }
       };
     }
@@ -924,7 +934,8 @@ export class ScansService {
         decision: scan.server_status === "OK" ? "SERVER_OK" : "SCAN_REPLAYED",
         server_scan_id: scan.id,
         final_status: scan.final_status,
-        ng_reason: scan.ng_reason
+        ng_reason: scan.ng_reason,
+        is_replay: true
       }
     };
   }

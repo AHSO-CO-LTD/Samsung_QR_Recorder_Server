@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { apiGet } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { toAppDateInput } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,11 @@ import {
   type RuntimeSummaryRow
 } from "@/features/shared/runtime-result-scope-control";
 import type { Machine, MachineRuntimeSession } from "@/features/shared/types";
+import { DevVirtualMachineButton } from "@/features/shared/dev-virtual-machine-button";
+import { useVirtualMachineRuntimes } from "@/features/shared/use-virtual-machine-runtimes";
+import { getVirtualRuntimeCounts } from "@/features/shared/virtual-machine-runtime";
+import { NgSoundControls } from "@/features/sound/ng-sound-controls";
+import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
 
 const RUNTIME_REFRESH_MS = 5000;
 const TIME_AXIS_REFRESH_MS = 30000;
@@ -65,6 +71,7 @@ const displayOptionLabelKeys: Record<keyof MachineRuntimeCardDisplayOptions, Mes
 
 export function RuntimeMonitorView() {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [sessions, setSessions] = useState<MachineRuntimeSession[]>([]);
   const [columnsPerRow, setColumnsPerRow] = useState(1);
@@ -79,6 +86,7 @@ export function RuntimeMonitorView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadSequence = useRef(0);
+  const { virtualMachines, createVirtualMachine } = useVirtualMachineRuntimes(user?.id);
 
   const load = useCallback(
     async (showToast = false, background = false) => {
@@ -210,7 +218,8 @@ export function RuntimeMonitorView() {
     const refreshRuntime = () => {
       void load(false, true);
     };
-    const refreshLatestScan = () => {
+    const refreshLatestScan = (payload: unknown) => {
+      handleNgSoundScanEvent(payload, t("ngSoundPlaybackFailed"));
       if (scanRefreshTimer) {
         window.clearTimeout(scanRefreshTimer);
       }
@@ -228,11 +237,19 @@ export function RuntimeMonitorView() {
       }
       socket.disconnect();
     };
-  }, [load]);
+  }, [load, t]);
 
   const rows = useMemo(() => {
-    return buildMachineRows(machines, sessions);
-  }, [machines, sessions]);
+    return buildMachineRows(
+      [...machines, ...virtualMachines.map((item) => item.machine)],
+      [...sessions, ...virtualMachines.map((item) => item.session)]
+    );
+  }, [machines, sessions, virtualMachines]);
+
+  const virtualRuntimeByMachineCode = useMemo(
+    () => new Map(virtualMachines.map((item) => [item.machine.machine_code, item] as const)),
+    [virtualMachines]
+  );
 
   const gridStyle = { "--machine-columns": columnsPerRow } as CSSProperties;
 
@@ -273,6 +290,12 @@ export function RuntimeMonitorView() {
 
   return (
     <section className="min-w-0 space-y-1" aria-label={t("runtimeMonitor")}>
+      <DevVirtualMachineButton
+        onCreate={createVirtualMachine}
+        className="fixed right-14 z-[70] min-h-10 shadow-md"
+        style={{ top: "calc(var(--app-header-height, 0px) + 0.5rem)" }}
+      />
+
       <RuntimeDisplaySettingsMenu
         columnsPerRow={columnsPerRow}
         isLoading={isLoading}
@@ -293,25 +316,33 @@ export function RuntimeMonitorView() {
         error={scopeError}
         onScopeChange={updateResultScope}
         onSinceDateChange={updateSinceDate}
+        trailingContent={<NgSoundControls />}
       />
 
       {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
       {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
       {!isLoading && !error && rows.length === 0 ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("empty")}</div> : null}
 
-      {!isLoading && !error && rows.length > 0 ? (
+      {rows.length > 0 ? (
         <div className="grid min-w-0 grid-cols-1 gap-3 lg:[grid-template-columns:repeat(var(--machine-columns),minmax(0,1fr))]" style={gridStyle}>
-          {rows.map((row) => (
-            <MachineRuntimeCard
-              key={row.machine.id}
-              row={row}
-              trendData={buildSessionServerTrendData(row.session)}
-              resultCounts={resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)}
-              timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
-              displayOptions={displayOptions}
-              showCommonLocalNgReason
-            />
-          ))}
+          {rows.map((row) => {
+            const virtualRuntime = virtualRuntimeByMachineCode.get(row.machine.machine_code);
+            return (
+              <MachineRuntimeCard
+                key={row.machine.id}
+                row={row}
+                trendData={virtualRuntime?.trendData ?? buildSessionServerTrendData(row.session)}
+                resultCounts={
+                  virtualRuntime
+                    ? getVirtualRuntimeCounts(virtualRuntime.session)
+                    : resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)
+                }
+                timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
+                displayOptions={displayOptions}
+                showCommonLocalNgReason
+              />
+            );
+          })}
         </div>
       ) : null}
     </section>

@@ -24,8 +24,8 @@ export function LatestScanStatusStrip({ code, result, scannedAt }: LatestScanSta
       aria-live="polite"
       className={cn(
         "flex min-w-0 items-center gap-2 border-t px-4 py-2 text-sm",
-        isOk && "border-emerald-500/40 bg-emerald-500/20 text-emerald-950 dark:text-emerald-100",
-        isNg && "border-destructive/40 bg-destructive/20 text-destructive",
+        isOk && "border-runtime-ok/60 bg-runtime-ok/15 text-[var(--runtime-black)] dark:text-[var(--runtime-white)]",
+        isNg && "border-runtime-ng/60 bg-runtime-ng/15 text-[var(--runtime-black)] dark:text-[var(--runtime-white)]",
         !isOk && !isNg && "bg-muted/35 text-muted-foreground"
       )}
     >

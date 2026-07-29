@@ -73,6 +73,7 @@ export class ScansController {
   @ApiQuery({ name: "vendor_char", required: false, example: "S" })
   @ApiQuery({ name: "final_status", required: false, enum: ["OK", "NG", "PENDING"] })
   @ApiQuery({ name: "ng_reason", required: false, example: "SERVER_DUPLICATE" })
+  @ApiQuery({ name: "duplicate_only", required: false, enum: ["true", "false"], description: "Include duplicate scans detected by either the local machine or server." })
   @ApiQuery({ name: "from", required: false, example: "2026-07-01T00:00:00+07:00" })
   @ApiQuery({ name: "to", required: false, example: "2026-07-10T23:59:59+07:00" })
   @ApiOkResponse({ description: "List latest scan records for the server UI." })
@@ -85,6 +86,7 @@ export class ScansController {
     @Query("vendor_char") vendorChar?: string,
     @Query("final_status") finalStatus?: "OK" | "NG" | "PENDING",
     @Query("ng_reason") ngReason?: string,
+    @Query("duplicate_only") duplicateOnly?: string,
     @Query("from") from?: string,
     @Query("to") to?: string
   ) {
@@ -97,6 +99,7 @@ export class ScansController {
       vendor_char: vendorChar?.trim() || undefined,
       final_status: finalStatus,
       ng_reason: ngReason?.trim() || undefined,
+      duplicate_only: duplicateOnly === "true",
       from,
       to
     });

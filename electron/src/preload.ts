@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("serverApp", {
   previewDisplaySettings: (settings: unknown) => ipcRenderer.invoke("window:preview-display-settings", settings),
   confirmDisplaySettings: () => ipcRenderer.invoke("window:confirm-display-settings"),
   rollbackDisplaySettings: () => ipcRenderer.invoke("window:rollback-display-settings"),
+  guides: {
+    exportPdf: (options: { defaultFileName: string }) => ipcRenderer.invoke("guides:export-pdf", options)
+  },
   updates: {
     check: () => ipcRenderer.invoke("updates:check"),
     install: (tagName: string) => ipcRenderer.invoke("updates:install", tagName)

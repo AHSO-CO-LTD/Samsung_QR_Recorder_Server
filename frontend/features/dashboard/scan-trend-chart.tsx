@@ -34,11 +34,11 @@ const emptyChartData: ScanTrendPoint[] = Array.from({ length: 7 }, (_, index) =>
 const chartConfig = {
   ok: {
     label: "OK",
-    color: "hsl(var(--chart-ok))"
+    color: "var(--chart-ok)"
   },
   ng: {
     label: "NG",
-    color: "hsl(var(--chart-ng))"
+    color: "var(--chart-ng)"
   }
 } satisfies ChartConfig;
 
