@@ -150,6 +150,29 @@ Mục đích:
 - Xem duplicate rule.
 - Sau này cấu hình duplicate days, heartbeat timeout, port, DB.
 
+### Hướng dẫn
+
+Route:
+
+```txt
+/guides
+```
+
+Mục đích:
+
+- Tra cứu toàn bộ hướng dẫn theo nhóm nghiệp vụ.
+- Tìm theo tên, mô tả, tiêu đề bước hoặc nội dung bước.
+- Mở hướng dẫn chi tiết theo từng bước.
+- Đọc nội dung thao tác trước, sau đó xem ảnh minh họa.
+- Xuất toàn bộ catalog hướng dẫn thành PDF.
+- Hiển thị đầy đủ loading, error, empty state và feedback bằng Sonner.
+
+Chi tiết kiến trúc và quy trình cập nhật nội dung nằm tại:
+
+```txt
+document/12-he-thong-huong-dan-va-xuat-pdf.md
+```
+
 ## 4. Song ngữ
 
 App hỗ trợ:

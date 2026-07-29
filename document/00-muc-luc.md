@@ -64,3 +64,10 @@ Dự án này là ứng dụng desktop server dùng để quản lý và kiểm 
    - Script SQL PostgreSQL để tạo toàn bộ database local cho app Python một lần.
    - Gồm bảng cấu hình, profile cache, scan local, LED item, duplicate local, sync batch, command, notification và log.
    - Có query kiểm tra sau khi chạy và gợi ý tạo `local_scan_id`, `batch_code`.
+
+12. `12-he-thong-huong-dan-va-xuat-pdf.md`
+   - Kiến trúc catalog hướng dẫn trong app.
+   - Quy ước folder, metadata và ảnh cho từng bước.
+   - Luồng hiển thị nội dung trước ảnh.
+   - Cách xuất PDF trong Electron và browser.
+   - Checklist thêm guide và kiểm tra trước release.

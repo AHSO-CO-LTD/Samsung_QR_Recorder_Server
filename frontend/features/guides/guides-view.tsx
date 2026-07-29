@@ -40,7 +40,8 @@ const copy = {
       { id: "getting-started", title: "Bắt đầu sử dụng", description: "Đăng nhập, điều hướng và đọc màn hình tổng quan.", from: 1, to: 4 },
       { id: "monitoring", title: "Giám sát vận hành", description: "Theo dõi phiên chạy, máy và lịch sử hoạt động.", from: 5, to: 8 },
       { id: "operation", title: "Nghiệp vụ sản xuất", description: "Quản lý mã, dữ liệu quét, báo cáo và đồng bộ.", from: 9, to: 15 },
-      { id: "system", title: "Quản trị hệ thống", description: "Người dùng, thông báo, nhật ký và cài đặt.", from: 16, to: 19 }
+      { id: "system", title: "Quản trị hệ thống", description: "Người dùng, thông báo, nhật ký và cài đặt.", from: 16, to: 19 },
+      { id: "local-machine", title: "Hướng dẫn máy local", description: "Thiết lập và sử dụng các chức năng trên máy local.", from: 20, to: 20 }
     ]
   },
   en: {
@@ -71,7 +72,8 @@ const copy = {
       { id: "getting-started", title: "Getting started", description: "Sign in, navigate, and read the overview screen.", from: 1, to: 4 },
       { id: "monitoring", title: "Operation monitoring", description: "Monitor runtime sessions, machines, and activity history.", from: 5, to: 8 },
       { id: "operation", title: "Production workflows", description: "Manage codes, scans, reports, and synchronization.", from: 9, to: 15 },
-      { id: "system", title: "System administration", description: "Users, notifications, audit logs, and settings.", from: 16, to: 19 }
+      { id: "system", title: "System administration", description: "Users, notifications, audit logs, and settings.", from: 16, to: 19 },
+      { id: "local-machine", title: "Local machine guide", description: "Set up and use features on the local machine.", from: 20, to: 20 }
     ]
   }
 } as const;

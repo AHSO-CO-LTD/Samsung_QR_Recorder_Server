@@ -218,8 +218,8 @@ function GuideManualPrintDocument({
                         </div>
                         <h3>{slide.title}</h3>
 
-                        {slide.src ? <img src={slide.src} alt="" loading="eager" /> : null}
                         <p className="guide-manual-step-content">{slide.content}</p>
+                        {slide.src ? <img src={slide.src} alt="" loading="eager" /> : null}
                       </article>
                     );
                   })}

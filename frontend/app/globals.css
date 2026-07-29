@@ -358,7 +358,7 @@ textarea {
   }
 
   .guide-manual-step-content {
-    margin: 2mm 0 0;
+    margin: 0 0 2mm;
     border-left: 1mm solid #1a51db;
     padding: 2mm 0 2mm 3mm;
     color: #374151;

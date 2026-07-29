@@ -780,6 +780,56 @@
           "content": "Mở lại ứng dụng sau khi cài đặt. Kiểm tra thông báo Windows cập nhật thành công và đối chiếu phiên bản hiện tại trong tab Cập nhật."
         }
       ]
+    },
+    {
+      "id": "20-local-manual",
+      "order": 20,
+      "title": "Một số lưu ý ở máy local",
+      "description": "Lưu ý một số tính năng mới và cách sử dụng chúng.",
+      "slides": [
+        {
+          "order": 1,
+          "image": "01.png",
+          "src": "/guides/20-local-manual/01.png",
+          "title": "Thay đổi địa chỉ IP của server",
+          "content": "Nhấn nút 'Change server IP' ở panel bên phải, thay đổi địa chỉ IP trong hộp thoại hiện ra và nhấn 'OK' để xác nhận."
+        },
+        {
+          "order": 2,
+          "image": "02.png",
+          "src": "/guides/20-local-manual/02.png",
+          "title": "Thêm reader mới",
+          "content": "1.Nhấn nút 'Configure' ở panel bên phải\n    2.Nhập thông tin reader vào mục 'Add Reader' và nhấn nút 'Add'. Lưu ý: địa chỉ IP và Data port phải giống với setting của reader (xem trong phần mềm Keyence)\n  3.Tích vào cột 'Master' tại reader vừa thêm"
+        },
+        {
+          "order": 3,
+          "image": "03.png",
+          "src": "/guides/20-local-manual/03.png",
+          "title": "Xóa reader",
+          "content": "1.Nhấn nút 'Configure' ở panel bên phải\n    2.Chọn reader cần xóa trong danh sách\n    3.Nhấn nút 'Remove'\n   4.Nhấn 'Yes' để xác nhận xóa"
+        },
+        {
+          "order": 4,
+          "image": "04.png",
+          "src": "/guides/20-local-manual/04.png",
+          "title": "Bật máy quét mã vạch cầm tay (HID)",
+          "content": "1.Nhấn nút 'Configure' ở panel bên phải\n    2.Tích vào ô 'Bật máy quét mã vạch cầm tay (HID)'\n    Lưu ý: Khi bật chế độ này thì không chạy phần mềm Keyence vì sẽ gây xung đột dẫn đến reader trả về kết quả trùng lặp."
+        },
+        {
+          "order": 5,
+          "image": "05.png",
+          "src": "/guides/20-local-manual/05.png",
+          "title": "Set thời gian chờ nhận mã tối đa trước khi báo lỗi",
+          "content": "1.Nhấn nút 'Configure' ở panel bên phải\n    2.Nhập thời gian chờ tối đa vào ô 'Timeout điền lỗi'\n    Lưu ý: Thời gian chờ tính từ lúc nhận mã đầu tiên của sản phẩm, sau khi hết thời gian chờ, các mã chưa nhận được sẽ được báo lỗi là không quét được."
+        },
+        {
+          "order": 6,
+          "image": "06.png",
+          "src": "/guides/20-local-manual/06.png",
+          "title": "Đồng bộ mã sản phẩm từ server",
+          "content": "1.Nhấn nút 'Register' ở panel bên phải\n    2.Nhấn nút 'Sync Profile' để đồng bộ mã sản phẩm từ server.\n    Lưu ý: Việc đồng bộ tự động đã được thực hiện tự động khi mở phần mềm, chỉ thực hiện đồng bộ thủ công khi có thay đổi trong lúc phần mềm đang chạy."
+        }
+      ]
     }
   ]
 }

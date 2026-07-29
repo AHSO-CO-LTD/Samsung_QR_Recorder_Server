@@ -83,6 +83,20 @@ export function GuideSlidePanel({
     >
       <div className="min-h-0 overflow-y-auto p-3 sm:p-4">
         <div className="mx-auto max-w-5xl">
+          <div
+            className={cn(
+              "border-l-2 border-primary pl-4",
+              slide.src ? "mb-4" : "flex min-h-[18rem] flex-col justify-center rounded-md border border-l-2 bg-muted/20 p-6 sm:p-8"
+            )}
+            aria-live="polite"
+          >
+            <Badge variant="outline" className="mb-3 w-fit">
+              {currentIndex + 1}/{guide.slides.length}
+            </Badge>
+            <h3 className="text-base font-semibold sm:text-lg">{slide.title}</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{slide.content}</p>
+          </div>
+
           {slide.src ? (
             <div className="flex min-h-[15rem] items-center justify-center overflow-hidden rounded-md border bg-muted/25 sm:min-h-[22rem]">
               {hasUsableImage ? (
@@ -105,20 +119,6 @@ export function GuideSlidePanel({
               )}
             </div>
           ) : null}
-
-          <div
-            className={cn(
-              "border-l-2 border-primary pl-4",
-              slide.src ? "mt-4" : "flex min-h-[18rem] flex-col justify-center rounded-md border border-l-2 bg-muted/20 p-6 sm:p-8"
-            )}
-            aria-live="polite"
-          >
-            <Badge variant="outline" className="mb-3 w-fit">
-              {currentIndex + 1}/{guide.slides.length}
-            </Badge>
-            <h3 className="text-base font-semibold sm:text-lg">{slide.title}</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{slide.content}</p>
-          </div>
         </div>
       </div>
 

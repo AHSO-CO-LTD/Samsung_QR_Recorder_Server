@@ -222,22 +222,22 @@ function buildDocumentDefinition({
             margin: [0, slideOffset === 0 ? 0 : 10, 0, 6]
           });
 
-          if (slide.src) {
-            pageContent.push({
-              image: imageKey,
-              fit: [520, slides.length === 1 ? 430 : 205],
-              alignment: "center",
-              margin: [0, 0, 0, 6]
-            });
-          }
-
           pageContent.push({
             text: slide.content,
             fontSize: 9,
             lineHeight: 1.2,
             color: "#374151",
-            margin: [0, 0, 0, 2]
+            margin: [0, 0, 0, 6]
           });
+
+          if (slide.src) {
+            pageContent.push({
+              image: imageKey,
+              fit: [520, slides.length === 1 ? 430 : 205],
+              alignment: "center",
+              margin: [0, 0, 0, 2]
+            });
+          }
         });
 
         content.push({
