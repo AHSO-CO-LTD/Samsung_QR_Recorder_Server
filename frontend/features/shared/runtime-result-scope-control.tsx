@@ -3,7 +3,7 @@
 import type React from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DatePickerInput } from "@/features/shared/date-time-picker";
 import { APP_TIME_ZONE_LABEL } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
@@ -74,15 +74,14 @@ export function RuntimeResultScopeControl({
           ))}
         </div>
         {scope === "since" ? (
-          <Input
-            type="date"
+          <DatePickerInput
             value={sinceDate}
             max={maxDate}
             className="h-8 w-40 text-xs"
-            aria-label={t("runtimeSinceDate")}
+            ariaLabel={t("runtimeSinceDate")}
             title={`${t("runtimeSinceDate")} (${APP_TIME_ZONE_LABEL})`}
             disabled={isLoading}
-            onChange={(event) => onSinceDateChange(event.target.value)}
+            onChange={onSinceDateChange}
           />
         ) : null}
         {isLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label={t("loading")} /> : null}

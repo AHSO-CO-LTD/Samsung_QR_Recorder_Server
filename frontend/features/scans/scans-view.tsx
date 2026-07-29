@@ -13,6 +13,7 @@ import { appDatetimeLocalToIso } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { GuideLauncher } from "@/features/guides/guide-launcher";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
+import { DateTimePickerField } from "@/features/shared/date-time-picker";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
 import { DuplicateAuditView } from "@/features/duplicates/duplicate-audit-view";
 import {
@@ -342,8 +343,8 @@ function ScanFiltersCard({
             <option value="PENDING">{t("pending")}</option>
           </SelectField>
         )}
-        <TextInputField type="datetime-local" label={t("fieldFromDate")} value={filters.from} onChange={(event) => onFiltersChange({ ...filters, from: event.target.value })} />
-        <TextInputField type="datetime-local" label={t("fieldToDate")} value={filters.to} onChange={(event) => onFiltersChange({ ...filters, to: event.target.value })} />
+        <DateTimePickerField label={t("fieldFromDate")} value={filters.from} onChange={(from) => onFiltersChange({ ...filters, from })} />
+        <DateTimePickerField label={t("fieldToDate")} value={filters.to} onChange={(to) => onFiltersChange({ ...filters, to })} />
         <div className="flex items-end">
           <Button type="button" variant="outline" onClick={() => onFiltersChange(emptyFilters)}>
             <FilterX className="h-4 w-4" aria-hidden="true" />

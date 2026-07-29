@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.7 - 2026-07-29
+
+### Added
+
+- Thêm bộ chọn ngày và ngày giờ dùng chung theo shadcn `Popover + Calendar`.
+- Bổ sung kiểm thử định dạng ngày, ngày giờ và chuyển đổi giá trị cho bộ chọn lịch.
+
+### Changed
+
+- Toàn bộ màn hình nhập/chọn ngày hiển thị theo thứ tự `dd/MM/yyyy`.
+- Các trường có giờ hiển thị theo định dạng `dd/MM/yyyy HH:mm`.
+- Chuẩn hóa ngày hiển thị ở cả giao diện tiếng Việt, tiếng Anh và biểu đồ xu hướng.
+- Báo cáo Excel giữ kiểu dữ liệu ngày thật và dùng định dạng `dd/mm/yyyy hh:mm:ss`.
+
+### Fixed
+
+- Loại bỏ định dạng `MM/DD/YYYY` phụ thuộc locale của Chromium trên các bộ lọc lịch.
+
 ## 1.1.6 - 2026-07-29
 
 ### Added

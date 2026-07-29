@@ -27,7 +27,7 @@ export function formatAppDateTime(
           second: "2-digit"
         };
 
-  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
+  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-GB", {
     timeZone: APP_TIME_ZONE,
     ...resolvedOptions
   }).format(date);
