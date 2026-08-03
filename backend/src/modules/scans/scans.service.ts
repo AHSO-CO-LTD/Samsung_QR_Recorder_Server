@@ -26,10 +26,7 @@ type SubmitScanOptions = {
   skipNotification?: boolean;
 };
 
-type ListScansQuery = {
-  take: number;
-  skip?: number;
-  q?: string;
+type ScanFilterQuery = {
   machine_code?: string;
   line_name?: string;
   profile_id?: number;
@@ -39,6 +36,13 @@ type ListScansQuery = {
   duplicate_only?: boolean;
   from?: string;
   to?: string;
+};
+
+type ListScansQuery = ScanFilterQuery & {
+  take: number;
+  skip?: number;
+  q?: string;
+  duplicate_only?: boolean;
 };
 
 type CompleteSubmitScanDto = SubmitScanDto & {
@@ -63,29 +67,7 @@ export class ScansService {
   async listLatestScans(query: ListScansQuery) {
     const take = Math.min(Math.max(query.take || 100, 1), 500);
     const skip = Math.max(query.skip || 0, 0);
-    const baseWhere: Prisma.ScanRecordWhereInput = {
-      machine:
-        query.machine_code || query.line_name
-          ? { machine_code: query.machine_code, line_name: query.line_name }
-          : undefined,
-      profile_id: query.profile_id,
-      full_vendor_char: query.vendor_char,
-      final_status: query.final_status,
-      ng_reason: query.duplicate_only ? { in: ["LOCAL_DUPLICATE", "SERVER_DUPLICATE"] } : undefined,
-      scan_at:
-        query.from || query.to
-          ? {
-              gte: query.from ? new Date(query.from) : undefined,
-              lte: query.to ? new Date(query.to) : undefined
-            }
-          : undefined
-    };
-    const searchWhere = this.buildScanSearchWhere(query.q);
-    const ngReasonWhere = buildNgReasonWhere(query.ng_reason);
-    const conditions = [baseWhere, ngReasonWhere, searchWhere].filter(
-      (condition): condition is Prisma.ScanRecordWhereInput => Boolean(condition)
-    );
-    const where: Prisma.ScanRecordWhereInput = conditions.length === 1 ? conditions[0] : { AND: conditions };
+    const where = this.buildScanWhere(query);
 
     const [total, scans, errorDefinitions] = await Promise.all([
       this.prisma.scanRecord.count({ where }),
@@ -140,6 +122,215 @@ export class ScansService {
         has_next: skip + scans.length < total
       }
     };
+  }
+
+  async getMachineErrorRanking(query: ScanFilterQuery) {
+    const filteredWhere = this.buildScanWhere(query);
+    const summaryWhere: Prisma.ScanRecordWhereInput = {
+      AND: [filteredWhere, { machine: { is_active: true } }]
+    };
+
+    const isLineSelected = Boolean(query.line_name);
+    const isProfileSelected = Boolean(query.profile_id);
+
+    // MODE 3: Both Line and Profile selected -> Error Type Ranking
+    if (isLineSelected && isProfileSelected) {
+      const ngScansWhere: Prisma.ScanRecordWhereInput = {
+        AND: [summaryWhere, { final_status: "NG" }]
+      };
+
+      const [groupedCounts, ngReasonGroups, errorCodes] = await Promise.all([
+        this.prisma.scanRecord.groupBy({
+          by: ["final_status"],
+          where: summaryWhere,
+          _count: { _all: true }
+        }),
+        this.prisma.scanRecord.groupBy({
+          by: ["ng_reason"],
+          where: ngScansWhere,
+          _count: { _all: true }
+        }),
+        this.prisma.errorCode.findMany()
+      ]);
+
+      const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
+      const ngCount = groupedCounts.reduce((total, item) => total + (item.final_status === "NG" ? item._count._all : 0), 0);
+
+      const errorCodeMap = new Map(errorCodes.map((ec) => [ec.code.toUpperCase(), ec]));
+      const errorData = ngReasonGroups
+        .filter((item) => item.ng_reason && item.ng_reason.trim() !== "")
+        .map((item) => {
+          const rawCode = item.ng_reason!.trim();
+          const upperCode = rawCode.toUpperCase();
+          const count = item._count._all;
+          const definition = errorCodeMap.get(upperCode);
+          return {
+            code: rawCode,
+            name_vi: definition?.name_vi ?? null,
+            name_en: definition?.name_en ?? null,
+            ng_count: count,
+            percentage: ngCount > 0 ? Number(((count / ngCount) * 100).toFixed(2)) : 0
+          };
+        })
+        .sort((left, right) => right.ng_count - left.ng_count || left.code.localeCompare(right.code));
+
+      return {
+        success: true,
+        code: "MACHINE_ERROR_RANKING_LOADED",
+        message: "Đã tải xếp hạng loại lỗi NG.",
+        data: {
+          ok_count: okCount,
+          ng_count: ngCount,
+          total_count: okCount + ngCount,
+          ranking_type: "error_type" as const,
+          machines: [],
+          errors: errorData
+        }
+      };
+    }
+
+    // MODE 2: Line selected, NO Profile selected -> Profile Error Ranking
+    if (isLineSelected && !isProfileSelected) {
+      const ngScansWhere: Prisma.ScanRecordWhereInput = {
+        AND: [summaryWhere, { final_status: "NG" }]
+      };
+
+      const [groupedCounts, profileGroups, profiles] = await Promise.all([
+        this.prisma.scanRecord.groupBy({
+          by: ["final_status"],
+          where: summaryWhere,
+          _count: { _all: true }
+        }),
+        this.prisma.scanRecord.groupBy({
+          by: ["profile_id"],
+          where: ngScansWhere,
+          _count: { _all: true }
+        }),
+        this.prisma.productProfile.findMany({
+          include: { chassis_code: true }
+        })
+      ]);
+
+      const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
+      const ngCount = groupedCounts.reduce((total, item) => total + (item.final_status === "NG" ? item._count._all : 0), 0);
+
+      const profileMap = new Map(profiles.map((p) => [p.id, p]));
+      const profileNgMap = new Map(
+        profileGroups.map((item) => [item.profile_id, item._count._all])
+      );
+
+      const relevantProfileIds = Array.from(new Set(profileGroups.map((item) => item.profile_id)));
+
+      const profileData = relevantProfileIds
+        .map((profileId) => {
+          const profile = profileId !== null ? profileMap.get(profileId) : null;
+          const count = profileNgMap.get(profileId) ?? 0;
+          return {
+            profile_id: profileId ?? 0,
+            profile_name: profile?.chassis_code?.code_full ?? (profileId ? `Profile #${profileId}` : "Chưa gắn hồ sơ"),
+            factory_code: profile?.factory_code ?? "-",
+            ng_count: count,
+            percentage: ngCount > 0 ? Number(((count / ngCount) * 100).toFixed(2)) : 0
+          };
+        })
+        .filter((item) => item.ng_count > 0)
+        .sort((left, right) => right.ng_count - left.ng_count || left.profile_name.localeCompare(right.profile_name));
+
+      return {
+        success: true,
+        code: "MACHINE_ERROR_RANKING_LOADED",
+        message: "Đã tải tỷ lệ lỗi NG theo hồ sơ.",
+        data: {
+          ok_count: okCount,
+          ng_count: ngCount,
+          total_count: okCount + ngCount,
+          ranking_type: "profile" as const,
+          machines: [],
+          profiles: profileData
+        }
+      };
+    }
+
+    // MODE 1 (Default): No Line selected -> Machine Error Ranking
+    const [machines, groupedCounts] = await Promise.all([
+      this.prisma.machine.findMany({
+        where: {
+          is_active: true,
+          machine_code: query.machine_code,
+          line_name: query.line_name
+        },
+        select: {
+          id: true,
+          machine_code: true,
+          machine_name: true,
+          line_name: true
+        },
+        orderBy: [{ line_name: "asc" }, { machine_code: "asc" }]
+      }),
+      this.prisma.scanRecord.groupBy({
+        by: ["machine_id", "final_status"],
+        where: summaryWhere,
+        _count: { _all: true }
+      })
+    ]);
+
+    const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
+    const ngCount = groupedCounts.reduce((total, item) => total + (item.final_status === "NG" ? item._count._all : 0), 0);
+    const ngCountByMachineId = new Map(
+      groupedCounts.filter((item) => item.final_status === "NG").map((item) => [item.machine_id, item._count._all])
+    );
+    const data = machines
+      .map((machine) => {
+        const machineNgCount = ngCountByMachineId.get(machine.id) ?? 0;
+        return {
+          machine_id: machine.id,
+          machine_code: machine.machine_code,
+          machine_name: machine.machine_name,
+          line_name: machine.line_name,
+          ng_count: machineNgCount,
+          percentage: ngCount > 0 ? Number(((machineNgCount / ngCount) * 100).toFixed(2)) : 0
+        };
+      })
+      .sort((left, right) => right.ng_count - left.ng_count || left.machine_code.localeCompare(right.machine_code));
+
+    return {
+      success: true,
+      code: "MACHINE_ERROR_RANKING_LOADED",
+      message: "Đã tải tỷ lệ lỗi NG theo máy.",
+      data: {
+        ok_count: okCount,
+        ng_count: ngCount,
+        total_count: okCount + ngCount,
+        ranking_type: "machine" as const,
+        machines: data
+      }
+    };
+  }
+
+  private buildScanWhere(
+    query: ScanFilterQuery & { q?: string; duplicate_only?: boolean }
+  ): Prisma.ScanRecordWhereInput {
+    const baseWhere: Prisma.ScanRecordWhereInput = {
+      machine:
+        query.machine_code || query.line_name
+          ? { machine_code: query.machine_code, line_name: query.line_name }
+          : undefined,
+      profile_id: query.profile_id,
+      full_vendor_char: query.vendor_char,
+      final_status: query.final_status,
+      ng_reason: query.duplicate_only ? { in: ["LOCAL_DUPLICATE", "SERVER_DUPLICATE"] } : undefined,
+      scan_at:
+        query.from || query.to
+          ? {
+              gte: query.from ? new Date(query.from) : undefined,
+              lte: query.to ? new Date(query.to) : undefined
+            }
+          : undefined
+    };
+    const conditions = [baseWhere, buildNgReasonWhere(query.ng_reason), this.buildScanSearchWhere(query.q)].filter(
+      (condition): condition is Prisma.ScanRecordWhereInput => Boolean(condition)
+    );
+    return conditions.length === 1 ? conditions[0] : { AND: conditions };
   }
 
   private buildScanSearchWhere(q?: string): Prisma.ScanRecordWhereInput | undefined {

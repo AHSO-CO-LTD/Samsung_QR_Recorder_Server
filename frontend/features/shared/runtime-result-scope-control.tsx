@@ -4,7 +4,7 @@ import type React from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DatePickerInput } from "@/features/shared/date-time-picker";
-import { APP_TIME_ZONE_LABEL } from "@/lib/app-time";
+import { APP_TIME_ZONE_LABEL, toAppDateInput, toAppDatetimeLocal } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
 import type { MachineRuntimeSession } from "@/features/shared/types";
@@ -128,4 +128,43 @@ export function resolveRuntimeResultCounts(
 
 function toSafeRuntimeCount(value: number | null | undefined) {
   return Number.isFinite(value) ? Math.max(0, Math.trunc(value ?? 0)) : 0;
+}
+
+export function buildScanTimeRangeFromScope(
+  scope: RuntimeResultScope,
+  sinceDate?: string,
+  sessionStartedAt?: string | null
+): { from: string; to: string } {
+  const now = new Date();
+  const to = toAppDatetimeLocal(now);
+
+  if (scope === "session") {
+    if (sessionStartedAt) {
+      const sessionFrom = toAppDatetimeLocal(sessionStartedAt);
+      if (sessionFrom) {
+        return { from: sessionFrom, to };
+      }
+    }
+    return { from: "", to: "" };
+  }
+
+  if (scope === "today") {
+    const todayDateStr = toAppDateInput(now);
+    return { from: `${todayDateStr}T00:00`, to };
+  }
+
+  if (scope === "last_12_hours") {
+    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+    return { from: toAppDatetimeLocal(twelveHoursAgo), to };
+  }
+
+  if (scope === "since") {
+    if (sinceDate) {
+      return { from: `${sinceDate}T00:00`, to };
+    }
+    return { from: "", to: "" };
+  }
+
+  // "all"
+  return { from: "", to: "" };
 }

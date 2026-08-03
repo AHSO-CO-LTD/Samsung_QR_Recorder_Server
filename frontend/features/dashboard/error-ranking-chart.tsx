@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { apiGet } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
+import { DashboardSectionHeader } from "./dashboard-section-header";
 import {
   ScanTrendRangeControl,
   scanTrendScopes,
@@ -23,6 +24,7 @@ type ErrorRankingItem = {
 
 type ErrorRankingChartItem = ErrorRankingItem & {
   label: string;
+  ranking_label: string;
 };
 
 const chartConfig = {
@@ -85,13 +87,28 @@ export function ErrorRankingChart() {
     };
   }, [preferencesReady, reloadKey, scope, t]);
 
+  const numberFormatter = useMemo(() => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"), [locale]);
+  const percentageFormatter = useMemo(
+    () => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", { maximumFractionDigits: 2 }),
+    [locale]
+  );
+
+  const totalOccurrences = useMemo(
+    () => items.reduce((sum, item) => sum + item.occurrence_count, 0),
+    [items]
+  );
+
   const chartData = useMemo<ErrorRankingChartItem[]>(
     () =>
-      items.map((item) => ({
-        ...item,
-        label: (locale === "vi" ? item.name_vi?.trim() : item.name_en?.trim()) || item.code
-      })),
-    [items, locale]
+      items.map((item) => {
+        const percentage = totalOccurrences > 0 ? (item.occurrence_count / totalOccurrences) * 100 : 0;
+        return {
+          ...item,
+          label: (locale === "vi" ? item.name_vi?.trim() : item.name_en?.trim()) || item.code,
+          ranking_label: `${numberFormatter.format(item.occurrence_count)} (${percentageFormatter.format(percentage)}%)`
+        };
+      }),
+    [items, locale, numberFormatter, percentageFormatter, totalOccurrences]
   );
   const chartHeight = Math.max(280, chartData.length * 42 + 40);
 
@@ -103,13 +120,11 @@ export function ErrorRankingChart() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <CardTitle>{t("errorRankingTitle")}</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">{t("errorRankingDesc")}</p>
-          </div>
-          <ScanTrendRangeControl scope={scope} disabled={isLoading} onScopeChange={updateScope} />
-        </div>
+        <DashboardSectionHeader
+          title={t("errorRankingTitle")}
+          description={t("errorRankingDesc")}
+          actions={<ScanTrendRangeControl scope={scope} disabled={isLoading} onScopeChange={updateScope} />}
+        />
       </CardHeader>
       <CardContent aria-busy={isLoading}>
         {isLoading ? (
@@ -129,26 +144,24 @@ export function ErrorRankingChart() {
           </div>
         ) : null}
         {!isLoading && !error && chartData.length > 0 ? (
-          <div className="max-h-[640px] overflow-auto">
-            <ChartContainer config={chartConfig} className="min-w-[720px]" style={{ height: chartHeight }}>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 12, right: 52, top: 8, bottom: 8 }}>
-                <CartesianGrid horizontal={false} />
-                <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
-                <YAxis
-                  dataKey="label"
-                  type="category"
-                  tickLine={false}
-                  axisLine={false}
-                  width={220}
-                  tick={{ fontSize: 12 }}
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="occurrence_count" fill="var(--color-occurrence_count)" radius={[0, 3, 3, 0]}>
-                  <LabelList dataKey="occurrence_count" position="right" className="fill-foreground" fontSize={12} />
-                </Bar>
-              </BarChart>
-            </ChartContainer>
-          </div>
+          <ChartContainer config={chartConfig} className="w-full" style={{ height: chartHeight }}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 12, right: 104, top: 8, bottom: 8 }}>
+              <CartesianGrid horizontal={false} />
+              <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
+              <YAxis
+                dataKey="label"
+                type="category"
+                tickLine={false}
+                axisLine={false}
+                width={220}
+                tick={{ fontSize: 12 }}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="occurrence_count" fill="var(--color-occurrence_count)" radius={[0, 3, 3, 0]}>
+                <LabelList dataKey="ranking_label" position="right" className="fill-foreground" fontSize={12} />
+              </Bar>
+            </BarChart>
+          </ChartContainer>
         ) : null}
       </CardContent>
     </Card>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { WifiOff } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,7 @@ type MachineRuntimeCardProps = {
   displayOptions?: Partial<MachineRuntimeCardDisplayOptions>;
   showCommonLocalNgReason?: boolean;
   showServerChart?: boolean;
+  ngHref?: string;
 };
 
 export function MachineRuntimeCard({
@@ -99,7 +101,8 @@ export function MachineRuntimeCard({
   timeAxis,
   displayOptions,
   showCommonLocalNgReason = false,
-  showServerChart = true
+  showServerChart = true,
+  ngHref
 }: MachineRuntimeCardProps) {
   const { t, locale } = useI18n();
   const { machine, session, isConnected } = row;
@@ -202,6 +205,7 @@ export function MachineRuntimeCard({
               ng={displayedCounts.ng}
               total={displayedCounts.total}
               status={runtimeStatus}
+              ngHref={ngHref}
             />
           ) : (
             <RuntimeStatusRow status={runtimeStatus} />
@@ -287,12 +291,14 @@ function MachineRuntimeOverview({
   ok,
   ng,
   total,
-  status
+  status,
+  ngHref
 }: {
   ok: number;
   ng: number;
   total: number;
   status: MachineRuntimeStatus;
+  ngHref?: string;
 }) {
   const { t } = useI18n();
 
@@ -303,7 +309,7 @@ function MachineRuntimeOverview({
       </div>
       <div className="grid min-h-52 grid-rows-4 gap-2">
         <RuntimeMetricRow label="OK" value={ok} tone="ok" />
-        <RuntimeMetricRow label="NG" value={ng} tone="ng" />
+        <RuntimeMetricRow label="NG" value={ng} tone="ng" href={ngHref} />
         <RuntimeMetricRow label={t("colTotal")} value={total} tone="total" />
         <RuntimeStatusRow status={status} />
       </div>
@@ -353,14 +359,25 @@ function OkNgDonut({ ok, ng, total }: { ok: number; ng: number; total: number })
   );
 }
 
-function RuntimeMetricRow({ label, value, tone }: { label: string; value: number; tone: "ok" | "ng" | "total" }) {
-  return (
+function RuntimeMetricRow({
+  label,
+  value,
+  tone,
+  href
+}: {
+  label: string;
+  value: number;
+  tone: "ok" | "ng" | "total";
+  href?: string;
+}) {
+  const content = (
     <div
       className={cn(
-        "grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm",
+        "grid h-full grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm transition-colors",
         tone === "ok" && "border-runtime-ok bg-runtime-ok/10",
         tone === "ng" && "border-runtime-ng bg-runtime-ng/10",
-        tone === "total" && "border-primary bg-primary/10"
+        tone === "total" && "border-primary bg-primary/10",
+        href && tone === "ng" && "hover:border-runtime-ng/80 hover:bg-runtime-ng/20"
       )}
     >
       <div
@@ -376,6 +393,16 @@ function RuntimeMetricRow({ label, value, tone }: { label: string; value: number
       <ResponsiveRuntimeCount value={value} />
     </div>
   );
+
+  if (href && tone === "ng") {
+    return (
+      <Link href={href} title="Xem lịch sử quét NG" className="block min-h-0 min-w-0 transition-transform active:scale-[0.99]">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
 
 function RuntimeStatusRow({ status }: { status: MachineRuntimeStatus }) {

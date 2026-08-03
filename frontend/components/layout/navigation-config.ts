@@ -5,7 +5,6 @@ import {
   FileSpreadsheet,
   Gauge,
   History,
-  Activity,
   MonitorCog,
   ScanLine,
   Settings,
@@ -44,8 +43,7 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navMonitoringDesc",
     icon: Gauge,
     items: [
-      { href: "/", key: "dashboard", descriptionKey: "dashboardNavDesc", icon: Gauge, permissionKey: "dashboard" },
-      { href: "/runtime-monitor", key: "runtimeMonitor", descriptionKey: "runtimeMonitorDesc", icon: Activity, permissionKey: "runtime" }
+      { href: "/", key: "dashboard", descriptionKey: "dashboardNavDesc", icon: Gauge, permissionKey: "dashboard" }
     ]
   },
   {

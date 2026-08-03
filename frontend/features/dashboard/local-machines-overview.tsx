@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { RefreshCw } from "lucide-react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
@@ -23,10 +23,16 @@ import {
   type ScanTrendPoint,
   type TrendByMachine
 } from "@/features/shared/machine-runtime-card";
+import { RuntimeDisplaySettingsMenu } from "@/features/shared/runtime-display-settings-menu";
+import {
+  buildRuntimeChartTimeAxis,
+  useRuntimeDisplayPreferences
+} from "@/features/shared/runtime-display-preferences";
 import {
   RUNTIME_RESULT_SCOPE_STORAGE_KEY,
   RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY,
   RuntimeResultScopeControl,
+  buildScanTimeRangeFromScope,
   indexRuntimeSummary,
   isRuntimeResultScope,
   resolveRuntimeResultCounts,
@@ -39,6 +45,7 @@ import { useVirtualMachineRuntimes } from "@/features/shared/use-virtual-machine
 import { getVirtualRuntimeCounts } from "@/features/shared/virtual-machine-runtime";
 import { NgSoundControls } from "@/features/sound/ng-sound-controls";
 import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
+import { DashboardSectionHeader } from "./dashboard-section-header";
 
 const RUNTIME_REFRESH_MS = 5000;
 const TREND_REFRESH_MS = 30000;
@@ -55,10 +62,18 @@ export function LocalMachinesOverview() {
   const [isScopeLoading, setIsScopeLoading] = useState(false);
   const [scopeError, setScopeError] = useState<string | null>(null);
   const [preferencesReady, setPreferencesReady] = useState(false);
+  const [timeAxisNowMs, setTimeAxisNowMs] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const summaryLoadSequence = useRef(0);
   const { virtualMachines, createVirtualMachine } = useVirtualMachineRuntimes(user?.id);
+  const {
+    columnsPerRow,
+    displayOptions,
+    updateColumnsPerRow,
+    updateDisplayOption,
+    resetDisplayOptions
+  } = useRuntimeDisplayPreferences();
 
   useEffect(() => {
     const savedScope = window.localStorage.getItem(RUNTIME_RESULT_SCOPE_STORAGE_KEY);
@@ -236,8 +251,10 @@ export function LocalMachinesOverview() {
   }, [load, loadResultSummary, loadTrendData]);
 
   useEffect(() => {
+    setTimeAxisNowMs(Date.now());
     void loadTrendData();
     const interval = window.setInterval(() => {
+      setTimeAxisNowMs(Date.now());
       void loadTrendData();
     }, TREND_REFRESH_MS);
 
@@ -274,6 +291,7 @@ export function LocalMachinesOverview() {
   );
 
   const connectedCount = rows.filter((row) => row.isConnected).length;
+  const gridStyle = { "--machine-columns": columnsPerRow } as CSSProperties;
 
   const updateResultScope = (scope: RuntimeResultScope) => {
     if (scope === "since" && !sinceDate) {
@@ -292,31 +310,47 @@ export function LocalMachinesOverview() {
 
   return (
     <section className="min-w-0 space-y-3" aria-label={t("dashboardLocalMachines")}>
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="truncate text-base font-semibold">{t("dashboardLocalMachines")}</h2>
+      <DashboardSectionHeader
+        title={t("dashboardLocalMachines")}
+        metadata={
+          <>
             <Badge variant="default" className="shrink-0">{connectedCount}/{rows.length} {t("connectedMachines")}</Badge>
             <InfoTooltip content={t("dashboardLocalMachinesDesc")} />
+          </>
+        }
+        actions={
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <DevVirtualMachineButton onCreate={createVirtualMachine} className="w-full sm:w-auto" />
+            <RuntimeDisplaySettingsMenu
+              columnsPerRow={columnsPerRow}
+              isLoading={isLoading || isScopeLoading}
+              options={displayOptions}
+              onColumnsPerRowChange={updateColumnsPerRow}
+              onOptionChange={updateDisplayOption}
+              onReload={() => {
+                void load(true);
+                void loadTrendData(true);
+                void loadResultSummary(true);
+              }}
+              onReset={resetDisplayOptions}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void load(true);
+                void loadTrendData(true);
+                void loadResultSummary(true);
+              }}
+              disabled={isLoading || isScopeLoading}
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={cn("h-4 w-4", (isLoading || isScopeLoading) && "animate-spin")} aria-hidden="true" />
+              {t("retry")}
+            </Button>
           </div>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <DevVirtualMachineButton onCreate={createVirtualMachine} className="w-full sm:w-auto" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void load(true);
-              void loadResultSummary(true);
-            }}
-            disabled={isLoading || isScopeLoading}
-            className="w-full sm:w-auto"
-          >
-            <RefreshCw className={cn("h-4 w-4", (isLoading || isScopeLoading) && "animate-spin")} aria-hidden="true" />
-            {t("retry")}
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       <RuntimeResultScopeControl
         scope={resultScope}
@@ -334,9 +368,22 @@ export function LocalMachinesOverview() {
       {!isLoading && !error && rows.length === 0 ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("empty")}</div> : null}
 
       {rows.length > 0 ? (
-        <div className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 34rem), 1fr))" }}>
+        <div
+          className="grid min-w-0 grid-cols-1 gap-3 lg:[grid-template-columns:repeat(var(--machine-columns),minmax(0,1fr))]"
+          style={gridStyle}
+        >
           {rows.map((row) => {
             const virtualRuntime = virtualRuntimeByMachineCode.get(row.machine.machine_code);
+            const timeRange = buildScanTimeRangeFromScope(resultScope, sinceDate, row.session?.started_at);
+            const ngParams = new URLSearchParams();
+            if (row.machine.line_name) {
+              ngParams.set("line_name", row.machine.line_name);
+            }
+            ngParams.set("final_status", "NG");
+            if (timeRange.from) ngParams.set("from", timeRange.from);
+            if (timeRange.to) ngParams.set("to", timeRange.to);
+            const ngHref = `/scans?${ngParams.toString()}`;
+
             return (
               <MachineRuntimeCard
                 key={row.machine.id}
@@ -347,6 +394,10 @@ export function LocalMachinesOverview() {
                     ? getVirtualRuntimeCounts(virtualRuntime.session)
                     : resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)
                 }
+                timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
+                displayOptions={displayOptions}
+                showCommonLocalNgReason
+                ngHref={ngHref}
               />
             );
           })}

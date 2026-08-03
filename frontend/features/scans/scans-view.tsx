@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -28,10 +29,12 @@ import { useAuth } from "@/lib/auth";
 import type { DuplicateKey, Machine, Profile, ScanRecord, Vendor } from "@/features/shared/types";
 import { ScanFiltersCard, type ScanErrorFilterOption } from "./scan-filters-card";
 import { emptyScanFilters, type ScanFilters } from "./scan-filter-state";
+import { ScanHistoryAnalytics } from "./scan-history-analytics";
 
 type ScansTab = "all-scans" | "active-duplicate-keys" | "scheduled-duplicate-check";
 
 export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab }) {
+  const searchParams = useSearchParams();
   const { t } = useI18n();
   const { user } = useAuth();
   const { canAccess, isLoading: isPermissionLoading } = usePermissions();
@@ -50,6 +53,28 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
   useEffect(() => {
     setScanDisplaySettings(readScanDisplaySettings());
   }, []);
+
+  useEffect(() => {
+    const line_name = searchParams.get("line_name");
+    const profile_id = searchParams.get("profile_id");
+    const vendor_char = searchParams.get("vendor_char");
+    const final_status = searchParams.get("final_status");
+    const ng_reason = searchParams.get("ng_reason");
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+
+    if (line_name || profile_id || vendor_char || final_status || ng_reason || from || to) {
+      setFilters((prev) => ({
+        line_name: line_name ?? prev.line_name,
+        profile_id: profile_id ?? prev.profile_id,
+        vendor_char: vendor_char ?? prev.vendor_char,
+        final_status: final_status ?? prev.final_status,
+        ng_reason: ng_reason ?? prev.ng_reason,
+        from: from ?? prev.from,
+        to: to ?? prev.to
+      }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!canViewScans) {
@@ -146,7 +171,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     return vendor ? `${vendor.vendor_name} (${vendor.vendor_char})` : vendorChar;
   };
 
-  const allScansEndpoint = useMemo(() => {
+  const scanFilterQuery = useMemo(() => {
     const params = new URLSearchParams();
     if (filters.line_name) params.set("line_name", filters.line_name);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
@@ -155,8 +180,21 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     if (filters.ng_reason) params.set("ng_reason", filters.ng_reason);
     if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
     if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
-    return `/scans?${params.toString()}`;
+    return params.toString();
   }, [filters]);
+
+  const analyticsFilterQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (filters.line_name) params.set("line_name", filters.line_name);
+    if (filters.profile_id) params.set("profile_id", filters.profile_id);
+    if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
+    if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
+    if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
+    return params.toString();
+  }, [filters.from, filters.line_name, filters.profile_id, filters.to, filters.vendor_char]);
+
+  const allScansEndpoint = `/scans?${scanFilterQuery}`;
+  const machineErrorRankingEndpoint = `/scans/machine-error-ranking?${analyticsFilterQuery}`;
 
   const columns: Column<ScanRecord>[] = [
     { key: "time", header: t("colScanTime"), className: "min-w-[10rem] whitespace-nowrap", render: (item) => <DateText value={item.scan_at} /> },
@@ -221,6 +259,11 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
 
         <TabsContent value="all-scans">
           <div className="space-y-4">
+            <ScanHistoryAnalytics
+              endpoint={machineErrorRankingEndpoint}
+              refreshSignal={realtimeRefreshSignal}
+              autoRefreshMs={scanDisplaySettings.refreshMode === "automatic" ? scanDisplaySettings.autoRefreshSeconds * 1000 : undefined}
+            />
             <DataTablePanel
               title={t("scanLatest")}
               endpoint={allScansEndpoint}

@@ -96,6 +96,7 @@ Mục đích:
 - Xem ng reason.
 - Bộ lọc `Line` thay cho lọc theo máy. Danh sách line được lấy từ các máy hiện có và loại bỏ giá trị trùng.
 - Bộ lọc `Kết quả` hỗ trợ OK, NG và PENDING; bộ lọc `Loại lỗi` lấy động từ danh sách lỗi đã cấu hình hoặc đã ghi nhận.
+- Hai biểu đồ dùng cùng bộ lọc với danh sách quét: `Tổng quan kết quả quét` hiển thị donut OK/NG và các tổng số; `Xếp hạng lỗi theo máy` dùng biểu đồ thanh ngang giống ranking ở trang Tổng quan, hiển thị số NG và tỷ lệ của toàn bộ máy đang hoạt động. Máy mới được tự động bổ sung vào ranking.
 - Chọn loại lỗi tự chuyển kết quả sang NG. Chuyển kết quả sang OK hoặc PENDING tự xóa loại lỗi để tránh điều kiện xung đột.
 - Ẩn tab danh sách mã trùng lặp vì trùng chức năng với luồng kiểm tra trùng chuyên biệt.
 - Tab khóa trùng đang hoạt động chỉ hiển thị cho DEV và dùng phân trang phía server.

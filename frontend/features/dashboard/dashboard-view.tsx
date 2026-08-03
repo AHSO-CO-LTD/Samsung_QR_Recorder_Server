@@ -4,7 +4,7 @@ import { ScanTrendChart } from "./scan-trend-chart";
 
 export function DashboardView() {
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-6">
       <ScanTrendChart />
 
       <LocalMachinesOverview />

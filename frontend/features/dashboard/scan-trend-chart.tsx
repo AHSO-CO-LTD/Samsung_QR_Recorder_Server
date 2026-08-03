@@ -11,6 +11,7 @@ import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { apiGet } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
+import { DashboardSectionHeader } from "./dashboard-section-header";
 import { formatTrendDateLabel } from "./scan-trend-label";
 import {
   ScanTrendRangeControl,
@@ -146,15 +147,12 @@ export function ScanTrendChart() {
 
   return (
     <section className="min-w-0 space-y-3" aria-labelledby="dashboard-trend-heading">
-      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <h2 id="dashboard-trend-heading" className="text-base font-semibold">
-            {t("dashboardOutcomeTrends")}
-          </h2>
-          <p className="text-xs text-muted-foreground">{t("dashboardOutcomeTrendsDesc")}</p>
-        </div>
-        <ScanTrendRangeControl scope={scope} disabled={isLoading} onScopeChange={updateScope} />
-      </div>
+      <DashboardSectionHeader
+        headingId="dashboard-trend-heading"
+        title={t("dashboardOutcomeTrends")}
+        description={t("dashboardOutcomeTrendsDesc")}
+        actions={<ScanTrendRangeControl scope={scope} disabled={isLoading} onScopeChange={updateScope} />}
+      />
 
       <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
         {trendDefinitions.map((definition) => (
@@ -202,7 +200,7 @@ function TrendChartCard({
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: definition.color }} aria-hidden="true" />
-            <CardTitle className="truncate">{t(definition.labelKey)}</CardTitle>
+            <CardTitle className="truncate text-base tracking-tight sm:text-lg">{t(definition.labelKey)}</CardTitle>
             <InfoTooltip content={t(definition.tooltipKey)} />
             {definition.comingSoon ? (
               <Badge className="border-orange-600/40 bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300" variant="outline">
@@ -210,7 +208,7 @@ function TrendChartCard({
               </Badge>
             ) : null}
           </div>
-          <span className="shrink-0 text-xl font-semibold tabular-nums" style={{ color: definition.color }}>
+          <span className="shrink-0 text-2xl font-semibold tabular-nums" style={{ color: definition.color }}>
             {new Intl.NumberFormat().format(total)}
           </span>
         </div>
