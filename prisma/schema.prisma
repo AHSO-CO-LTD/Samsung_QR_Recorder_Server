@@ -884,9 +884,11 @@ model SyncRequestLog {
 model ErrorCode {
   id              Int      @id @default(autoincrement())
   code            String   @unique
-  group_name      String
+  name_vi         String?
+  name_en         String?
+  group_name      String?
   severity        Severity
-  default_message String
+  default_message String?
   local_action    String?
   is_active       Boolean  @default(true)
   created_at      DateTime @default(now())

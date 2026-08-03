@@ -1598,9 +1598,19 @@ function requestMainWindowCloseConfirmation() {
   mainWindow.webContents.send("app:close-requested");
 }
 
-function registerHiddenTerminalShortcut(targetWindow: BrowserWindow) {
+function registerHiddenShortcuts(targetWindow: BrowserWindow) {
   targetWindow.webContents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown" || input.key !== "F12") {
+    if (input.type !== "keyDown") {
+      return;
+    }
+
+    if (input.key === "F11" && input.control && !input.isAutoRepeat) {
+      event.preventDefault();
+      targetWindow.webContents.send("dev-recovery-shortcut:pressed");
+      return;
+    }
+
+    if (input.key !== "F12") {
       return;
     }
 
@@ -1712,7 +1722,7 @@ function createMainWindow() {
     }
   });
 
-  registerHiddenTerminalShortcut(mainWindow);
+  registerHiddenShortcuts(mainWindow);
 
   mainWindow.on("close", (event) => {
     if (isQuitting) {

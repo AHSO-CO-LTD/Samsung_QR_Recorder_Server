@@ -8,8 +8,15 @@ import { RuntimeGateway } from "../runtime/runtime.gateway";
 import { RuntimeService } from "../runtime/runtime.service";
 import { FullCodePayloadDto, LedScanPayloadDto, SubmitScanDto } from "./dto/submit-scan.dto";
 import { isRuntimeSummaryScope, resolveRuntimeSummaryRange, type RuntimeSummaryScope } from "./runtime-summary-range";
-import { isScanTrendScope, resolveScanTrendRange, type ScanTrendScope } from "./scan-trend-range";
+import {
+  isErrorRankingScope,
+  isScanTrendScope,
+  resolveScanTrendRange,
+  type ErrorRankingScope,
+  type ScanTrendScope
+} from "./scan-trend-range";
 import { resolveLocalNgReason } from "./scan-failure-reason";
+import { buildNgReasonWhere } from "./scan-query-filter";
 
 type SubmitScanOptions = {
   syncBatchId?: number;
@@ -24,6 +31,7 @@ type ListScansQuery = {
   skip?: number;
   q?: string;
   machine_code?: string;
+  line_name?: string;
   profile_id?: number;
   vendor_char?: string;
   final_status?: "OK" | "NG" | "PENDING";
@@ -56,11 +64,14 @@ export class ScansService {
     const take = Math.min(Math.max(query.take || 100, 1), 500);
     const skip = Math.max(query.skip || 0, 0);
     const baseWhere: Prisma.ScanRecordWhereInput = {
-      machine: query.machine_code ? { machine_code: query.machine_code } : undefined,
+      machine:
+        query.machine_code || query.line_name
+          ? { machine_code: query.machine_code, line_name: query.line_name }
+          : undefined,
       profile_id: query.profile_id,
       full_vendor_char: query.vendor_char,
       final_status: query.final_status,
-      ng_reason: query.duplicate_only ? { in: ["LOCAL_DUPLICATE", "SERVER_DUPLICATE"] } : query.ng_reason,
+      ng_reason: query.duplicate_only ? { in: ["LOCAL_DUPLICATE", "SERVER_DUPLICATE"] } : undefined,
       scan_at:
         query.from || query.to
           ? {
@@ -70,9 +81,13 @@ export class ScansService {
           : undefined
     };
     const searchWhere = this.buildScanSearchWhere(query.q);
-    const where: Prisma.ScanRecordWhereInput = searchWhere ? { AND: [baseWhere, searchWhere] } : baseWhere;
+    const ngReasonWhere = buildNgReasonWhere(query.ng_reason);
+    const conditions = [baseWhere, ngReasonWhere, searchWhere].filter(
+      (condition): condition is Prisma.ScanRecordWhereInput => Boolean(condition)
+    );
+    const where: Prisma.ScanRecordWhereInput = conditions.length === 1 ? conditions[0] : { AND: conditions };
 
-    const [total, scans] = await Promise.all([
+    const [total, scans, errorDefinitions] = await Promise.all([
       this.prisma.scanRecord.count({ where }),
       this.prisma.scanRecord.findMany({
         where,
@@ -96,14 +111,24 @@ export class ScansService {
             orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
           }
         }
-      })
+      }),
+      this.prisma.errorCode.findMany()
     ]);
+    const definitionByCode = new Map(errorDefinitions.map((definition) => [definition.code, definition]));
+    const scansWithDefinitions = scans.map((scan) => ({
+      ...scan,
+      ng_reason_definition: scan.ng_reason ? (definitionByCode.get(scan.ng_reason.trim().toUpperCase()) ?? null) : null,
+      led_items: scan.led_items.map((item) => ({
+        ...item,
+        ng_reason_definition: item.ng_reason ? (definitionByCode.get(item.ng_reason.trim().toUpperCase()) ?? null) : null
+      }))
+    }));
 
     return {
       success: true,
       code: "SCANS_LISTED",
       message: "Đã tải lượt quét mới nhất.",
-      data: scans,
+      data: scansWithDefinitions,
       meta: {
         total,
         take,
@@ -366,6 +391,74 @@ export class ScansService {
     };
   }
 
+  async getErrorRanking(query: { scope?: ErrorRankingScope }) {
+    if (!query.scope || !isErrorRankingScope(query.scope)) {
+      throw new BadRequestException("Phạm vi xếp hạng lỗi không hợp lệ.");
+    }
+
+    const range = resolveScanTrendRange(query.scope, undefined);
+    const scanRangeCondition = range.start
+      ? Prisma.sql`sr."scan_at" >= ${range.start} AND sr."scan_at" <= ${range.end}`
+      : Prisma.sql`sr."scan_at" <= ${range.end}`;
+    const rows = await this.prisma.$queryRaw<
+      Array<{ code: string; name_vi: string | null; name_en: string | null; occurrence_count: number }>
+    >(Prisma.sql`
+      WITH observed AS (
+        SELECT
+          sr."id" AS scan_record_id,
+          UPPER(BTRIM(sr."ng_reason")) AS code
+        FROM "scan_records" sr
+        WHERE sr."final_status" = 'NG'
+          AND sr."ng_reason" IS NOT NULL
+          AND BTRIM(sr."ng_reason") <> ''
+          AND ${scanRangeCondition}
+
+        UNION
+
+        SELECT
+          sli."scan_record_id",
+          UPPER(BTRIM(sli."ng_reason")) AS code
+        FROM "scan_led_items" sli
+        INNER JOIN "scan_records" sr ON sr."id" = sli."scan_record_id"
+        WHERE sr."final_status" = 'NG'
+          AND sli."ng_reason" IS NOT NULL
+          AND BTRIM(sli."ng_reason") <> ''
+          AND ${scanRangeCondition}
+      )
+      , observed_counts AS (
+        SELECT code, COUNT(*)::INTEGER AS occurrence_count
+        FROM observed
+        GROUP BY code
+      ), known_codes AS (
+        SELECT "code" FROM "error_codes"
+        UNION
+        SELECT UPPER(BTRIM("ng_reason")) AS code
+        FROM "scan_records"
+        WHERE "ng_reason" IS NOT NULL AND BTRIM("ng_reason") <> ''
+        UNION
+        SELECT UPPER(BTRIM("ng_reason")) AS code
+        FROM "scan_led_items"
+        WHERE "ng_reason" IS NOT NULL AND BTRIM("ng_reason") <> ''
+      )
+      SELECT
+        known_codes.code,
+        error_code."name_vi",
+        error_code."name_en",
+        COALESCE(observed_counts.occurrence_count, 0)::INTEGER AS occurrence_count
+      FROM known_codes
+      LEFT JOIN observed_counts ON observed_counts.code = known_codes.code
+      LEFT JOIN "error_codes" error_code ON error_code."code" = known_codes.code
+      ORDER BY occurrence_count DESC, known_codes.code ASC
+    `);
+
+    return {
+      success: true,
+      code: "ERROR_RANKING_LOADED",
+      message: "Đã tải xếp hạng lỗi NG.",
+      data: rows
+    };
+  }
+
   private async getScopedScanTrend(scope: ScanTrendScope, from?: string) {
     let range: ReturnType<typeof resolveScanTrendRange>;
     try {
@@ -389,7 +482,9 @@ export class ScansService {
             floor(extract(minute from "scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh') / 30) * interval '30 minutes',
             'YYYY-MM-DD HH24:MI'
           )`
-        : Prisma.sql`to_char("scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')`;
+        : range.bucket === "month"
+          ? Prisma.sql`to_char("scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM')`
+          : Prisma.sql`to_char("scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')`;
 
     const groupedRows = await this.prisma.$queryRaw<
       Array<{ bucket: string; ok: bigint; ng: bigint; pending: bigint }>
@@ -428,9 +523,33 @@ export class ScansService {
   private buildScopedTrendBuckets(
     start: Date,
     end: Date,
-    bucket: "30_minutes" | "day",
+    bucket: "30_minutes" | "day" | "month",
     countsByBucket: Map<string, { ok: number; ng: number; pending: number }>
   ) {
+    if (bucket === "month") {
+      const startInVietnam = new Date(start.getTime() + 7 * 60 * 60 * 1000);
+      const endInVietnam = new Date(end.getTime() + 7 * 60 * 60 * 1000);
+      const data = [];
+
+      for (
+        let cursor = new Date(Date.UTC(startInVietnam.getUTCFullYear(), startInVietnam.getUTCMonth(), 1));
+        cursor.getTime() <= endInVietnam.getTime();
+        cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))
+      ) {
+        const bucketKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+        const counts = countsByBucket.get(bucketKey) ?? { ok: 0, ng: 0, pending: 0 };
+        data.push({
+          date: bucketKey,
+          ok: counts.ok,
+          ng: counts.ng,
+          pending: counts.pending,
+          total: counts.ok + counts.ng + counts.pending
+        });
+      }
+
+      return data;
+    }
+
     const bucketMs = bucket === "30_minutes" ? 30 * 60 * 1000 : 24 * 60 * 60 * 1000;
     const firstBucket =
       bucket === "30_minutes"

@@ -101,6 +101,7 @@ export type DesktopAppBridge = {
   quit: () => Promise<void>;
   restart: () => Promise<void>;
   onCloseRequest?: (handler: () => void) => () => void;
+  onDevRecoveryShortcutPress?: (handler: () => void) => () => void;
   getWindowState: () => Promise<DesktopWindowState>;
   getDisplaySettings: () => Promise<DesktopDisplaySettings>;
   saveDisplaySettings: (settings: DesktopDisplaySettings) => Promise<DesktopDisplaySettings>;

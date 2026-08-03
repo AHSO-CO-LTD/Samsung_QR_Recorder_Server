@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { UserRole } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../../prisma/prisma.service";
-import { CreateUserDto, UpdateUserDto } from "./dto/user-crud.dto";
+import { CreateUserDto, RecoverDevAccountDto, UpdateUserDto } from "./dto/user-crud.dto";
 
 const userSelect = {
   id: true,
@@ -61,6 +61,108 @@ export class UsersService {
       success: true,
       code: "USER_CREATED",
       message: "Đã tạo người dùng.",
+      data: user
+    };
+  }
+
+  async getDevRecoveryStatus(actorRole?: UserRole) {
+    this.assertAdminRecovery(actorRole);
+    const accounts = await this.prisma.user.findMany({
+      where: { role: "DEV" },
+      orderBy: [{ is_active: "desc" }, { username: "asc" }],
+      select: userSelect
+    });
+
+    return {
+      success: true,
+      code: "DEV_RECOVERY_STATUS_LOADED",
+      message: "Đã tải trạng thái tài khoản DEV.",
+      data: { accounts }
+    };
+  }
+
+  async recoverDevAccount(dto: RecoverDevAccountDto, actorUserId?: number | null, actorRole?: UserRole) {
+    this.assertAdminRecovery(actorRole);
+    const existingDevAccounts = await this.prisma.user.findMany({
+      where: { role: "DEV" },
+      select: userSelect
+    });
+
+    if (existingDevAccounts.length > 0) {
+      if (!dto.user_id) {
+        throw new BadRequestException({
+          success: false,
+          code: "DEV_ACCOUNT_REQUIRED",
+          message: "Vui lòng chọn tài khoản DEV cần đặt lại mật khẩu."
+        });
+      }
+      const target = existingDevAccounts.find((account) => account.id === dto.user_id);
+      if (!target) {
+        throw new NotFoundException({
+          success: false,
+          code: "DEV_ACCOUNT_NOT_FOUND",
+          message: "Không tìm thấy tài khoản DEV."
+        });
+      }
+
+      const user = await this.prisma.user.update({
+        where: { id: target.id },
+        data: {
+          password_hash: this.hashPassword(dto.password),
+          is_active: true
+        },
+        select: userSelect
+      });
+      await this.audit.write({
+        userId: actorUserId,
+        action: "RESET_DEV_PASSWORD",
+        tableName: "users",
+        recordId: user.id,
+        oldValue: target,
+        newValue: user
+      });
+
+      return {
+        success: true,
+        code: "DEV_PASSWORD_RESET",
+        message: "Đã đặt lại mật khẩu DEV.",
+        data: user
+      };
+    }
+
+    const username = dto.username?.trim() || "dev";
+    const fullName = dto.full_name?.trim() || "Support Service";
+    const usernameExists = await this.prisma.user.findUnique({ where: { username } });
+    if (usernameExists) {
+      throw new ConflictException({
+        success: false,
+        code: "USERNAME_EXISTS",
+        message: "Tên đăng nhập đã tồn tại."
+      });
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        username,
+        full_name: fullName,
+        role: "DEV",
+        password_hash: this.hashPassword(dto.password),
+        is_active: true
+      },
+      select: userSelect
+    });
+    await this.audit.write({
+      userId: actorUserId,
+      action: "CREATE_DEV_RECOVERY",
+      tableName: "users",
+      recordId: user.id,
+      newValue: user
+    });
+
+    return {
+      success: true,
+      code: "DEV_ACCOUNT_CREATED",
+      message: "Đã tạo tài khoản DEV.",
       data: user
     };
   }
@@ -163,6 +265,16 @@ export class UsersService {
         success: false,
         code: "USER_NOT_FOUND",
         message: "Không tìm thấy người dùng."
+      });
+    }
+  }
+
+  private assertAdminRecovery(actorRole?: UserRole) {
+    if (actorRole !== "ADMIN") {
+      throw new ForbiddenException({
+        success: false,
+        code: "DEV_RECOVERY_ADMIN_REQUIRED",
+        message: "Chỉ ADMIN đã đăng nhập mới được khôi phục tài khoản DEV."
       });
     }
   }

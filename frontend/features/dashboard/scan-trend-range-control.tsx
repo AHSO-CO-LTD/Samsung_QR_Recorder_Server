@@ -1,38 +1,30 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { DatePickerInput } from "@/features/shared/date-time-picker";
 import { APP_TIME_ZONE_LABEL } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
 
-export const scanTrendScopes = ["today", "last_12_hours", "last_7_days", "last_30_days", "all", "since"] as const;
+export const scanTrendScopes = ["today", "last_7_days", "last_30_days", "last_1_year", "all"] as const;
 
 export type ScanTrendScope = (typeof scanTrendScopes)[number];
 
 const scopeLabelKeys: Record<ScanTrendScope, MessageKey> = {
-  today: "runtimeScopeToday",
-  last_12_hours: "runtimeScopeLast12Hours",
+  today: "todayPeriod",
   last_7_days: "scanTrendLast7Days",
   last_30_days: "scanTrendLast30Days",
-  all: "runtimeScopeAll",
-  since: "runtimeScopeSince"
+  last_1_year: "scanTrendLast1Year",
+  all: "runtimeScopeAll"
 };
 
 export function ScanTrendRangeControl({
   scope,
-  sinceDate,
-  maxDate,
   disabled,
-  onScopeChange,
-  onSinceDateChange
+  onScopeChange
 }: {
   scope: ScanTrendScope;
-  sinceDate: string;
-  maxDate: string;
   disabled: boolean;
   onScopeChange: (scope: ScanTrendScope) => void;
-  onSinceDateChange: (value: string) => void;
 }) {
   const { t } = useI18n();
 
@@ -57,17 +49,6 @@ export function ScanTrendRangeControl({
           </Button>
         ))}
       </div>
-      {scope === "since" ? (
-        <DatePickerInput
-          value={sinceDate}
-          max={maxDate}
-          className="h-8 w-40 text-xs"
-          ariaLabel={t("runtimeSinceDate")}
-          title={`${t("runtimeSinceDate")} (${APP_TIME_ZONE_LABEL})`}
-          disabled={disabled}
-          onChange={onSinceDateChange}
-        />
-      ) : null}
     </div>
   );
 }

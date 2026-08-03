@@ -2,18 +2,33 @@ import { getVietnamDayRange, parseVietnamDateStart } from "../../common/time/vie
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const SCAN_TREND_SCOPES = ["today", "last_12_hours", "last_7_days", "last_30_days", "all", "since"] as const;
+export const SCAN_TREND_SCOPES = [
+  "today",
+  "last_12_hours",
+  "last_7_days",
+  "last_30_days",
+  "last_1_year",
+  "all",
+  "since"
+] as const;
+
+export const ERROR_RANKING_SCOPES = ["today", "last_7_days", "last_30_days", "last_1_year", "all"] as const;
 
 export type ScanTrendScope = (typeof SCAN_TREND_SCOPES)[number];
+export type ErrorRankingScope = (typeof ERROR_RANKING_SCOPES)[number];
 
 export type ScanTrendRange = {
   start?: Date;
   end: Date;
-  bucket: "30_minutes" | "day";
+  bucket: "30_minutes" | "day" | "month";
 };
 
 export function isScanTrendScope(value: string): value is ScanTrendScope {
   return SCAN_TREND_SCOPES.includes(value as ScanTrendScope);
+}
+
+export function isErrorRankingScope(value: string): value is ErrorRankingScope {
+  return ERROR_RANKING_SCOPES.includes(value as ErrorRankingScope);
 }
 
 export function resolveScanTrendRange(scope: ScanTrendScope, from: string | undefined, now: Date = new Date()): ScanTrendRange {
@@ -45,6 +60,13 @@ export function resolveScanTrendRange(scope: ScanTrendScope, from: string | unde
       start: new Date(todayStart.getTime() - 29 * DAY_MS),
       end: now,
       bucket: "day"
+    };
+  }
+  if (scope === "last_1_year") {
+    return {
+      start: new Date(todayStart.getTime() - 364 * DAY_MS),
+      end: now,
+      bucket: "month"
     };
   }
   if (scope === "all") {

@@ -3,7 +3,12 @@ import { ApiOkResponse, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Public } from "../../common/auth/auth.decorators";
 import { SubmitScanDto } from "./dto/submit-scan.dto";
 import { RUNTIME_SUMMARY_SCOPES, type RuntimeSummaryScope } from "./runtime-summary-range";
-import { SCAN_TREND_SCOPES, type ScanTrendScope } from "./scan-trend-range";
+import {
+  ERROR_RANKING_SCOPES,
+  SCAN_TREND_SCOPES,
+  type ErrorRankingScope,
+  type ScanTrendScope
+} from "./scan-trend-range";
 import { ScansService } from "./scans.service";
 
 @Controller("scans")
@@ -63,16 +68,25 @@ export class ScansController {
     });
   }
 
+  @Get("error-ranking")
+  @ApiTags("scan-dashboard")
+  @ApiQuery({ name: "scope", required: true, enum: ERROR_RANKING_SCOPES })
+  @ApiOkResponse({ description: "Rank observed NG reason codes by affected scan count for the selected app-time range." })
+  getErrorRanking(@Query("scope") scope?: ErrorRankingScope) {
+    return this.scansService.getErrorRanking({ scope });
+  }
+
   @Get()
   @ApiTags("scan-dashboard")
   @ApiQuery({ name: "take", required: false, example: 100 })
   @ApiQuery({ name: "skip", required: false, example: 0 })
   @ApiQuery({ name: "q", required: false, example: "LOCAL01" })
   @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
+  @ApiQuery({ name: "line_name", required: false, example: "LINE-01" })
   @ApiQuery({ name: "profile_id", required: false, example: 1 })
   @ApiQuery({ name: "vendor_char", required: false, example: "S" })
   @ApiQuery({ name: "final_status", required: false, enum: ["OK", "NG", "PENDING"] })
-  @ApiQuery({ name: "ng_reason", required: false, example: "SERVER_DUPLICATE" })
+  @ApiQuery({ name: "ng_reason", required: false, example: "SERVER_DUPLICATE", description: "Match the NG reason on the scan record or any LED item." })
   @ApiQuery({ name: "duplicate_only", required: false, enum: ["true", "false"], description: "Include duplicate scans detected by either the local machine or server." })
   @ApiQuery({ name: "from", required: false, example: "2026-07-01T00:00:00+07:00" })
   @ApiQuery({ name: "to", required: false, example: "2026-07-10T23:59:59+07:00" })
@@ -82,6 +96,7 @@ export class ScansController {
     @Query("skip") skip?: string,
     @Query("q") q?: string,
     @Query("machine_code") machineCode?: string,
+    @Query("line_name") lineName?: string,
     @Query("profile_id") profileId?: string,
     @Query("vendor_char") vendorChar?: string,
     @Query("final_status") finalStatus?: "OK" | "NG" | "PENDING",
@@ -94,7 +109,8 @@ export class ScansController {
       take: Number(take || 100),
       skip: Number(skip || 0),
       q: q?.trim() || undefined,
-      machine_code: machineCode,
+      machine_code: machineCode?.trim() || undefined,
+      line_name: lineName?.trim() || undefined,
       profile_id: profileId ? Number(profileId) : undefined,
       vendor_char: vendorChar?.trim() || undefined,
       final_status: finalStatus,

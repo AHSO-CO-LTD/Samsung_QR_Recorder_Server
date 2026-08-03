@@ -1,5 +1,6 @@
 import {
   BookOpenCheck,
+  CircleAlert,
   Database,
   FileSpreadsheet,
   Gauge,
@@ -79,6 +80,7 @@ export const navGroups: readonly NavGroup[] = [
     descriptionKey: "navSystemDesc",
     icon: Settings,
     items: [
+      { href: "/error-config", key: "errorConfig", descriptionKey: "errorConfigDesc", icon: CircleAlert, permissionKey: "error-config" },
       { href: "/sync", key: "sync", descriptionKey: "syncDesc", icon: Workflow, permissionKey: "sync" },
       { href: "/users", key: "users", descriptionKey: "usersDesc", icon: UsersRound, permissionKey: "users" },
       { href: "/audit-logs", key: "auditLogs", descriptionKey: "auditLogsDesc", icon: History, permissionKey: "audit-logs" }

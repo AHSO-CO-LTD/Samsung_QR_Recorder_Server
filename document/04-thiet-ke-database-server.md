@@ -219,6 +219,8 @@ Lưu request/response từ local để debug.
 
 Chuẩn hóa mã lỗi. Không nên để mỗi nơi tự viết message khác nhau.
 
+`name_vi` và `name_en` lưu tên lỗi theo từng ngôn ngữ. Hai trường này tách biệt với `default_message`, là nội dung thông báo mặc định tùy chọn. `group_name` là tùy chọn. Mã lỗi được tra cứu trực tiếp bằng `code`; nhóm chỉ hỗ trợ lọc hoặc báo cáo khi cần. Mã lỗi đã xuất hiện trong dữ liệu quét nhưng chưa có bản ghi tại `error_codes` được xem là chưa định danh và vẫn phải hiển thị trên màn hình cấu hình lỗi.
+
 Ví dụ:
 
 - `SERVER_DUPLICATE`

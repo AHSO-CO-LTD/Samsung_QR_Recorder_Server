@@ -37,9 +37,13 @@ Route:
 
 Mục đích:
 
-- Hiển thị trạng thái API.
-- Hiển thị trạng thái máy local.
-- Hiển thị số liệu nhanh: OK hôm nay, NG hôm nay, pending sync, duplicate window.
+- Hiển thị trạng thái API và trạng thái máy local.
+- Hiển thị bốn biểu đồ đường: Tổng màu xanh dương, OK màu xanh lá, NG màu đỏ và Rework màu cam.
+- Mỗi biểu đồ hỗ trợ các mốc hôm nay, 7 ngày, 30 ngày, 1 năm và toàn bộ; lựa chọn được lưu riêng trên máy.
+- Dữ liệu theo năm dùng nhãn tháng theo ngôn ngữ hiện tại; không ép cố định đủ 12 điểm nếu khoảng dữ liệu không yêu cầu.
+- Rework hiện mang nhãn `Sắp có` và trả về 0 cho đến khi có logic xác định mã NG được sửa thành OK.
+- Bên dưới khu vực máy local có biểu đồ xếp hạng toàn bộ lỗi NG từ nhiều đến ít theo mốc thời gian đã chọn.
+- Xếp hạng vẫn hiển thị lỗi đã biết với giá trị 0 khi khoảng thời gian chưa ghi nhận lỗi.
 
 ### Máy local
 
@@ -90,6 +94,11 @@ Mục đích:
 - Xem LED raw.
 - Xem local status, server status, final status.
 - Xem ng reason.
+- Bộ lọc `Line` thay cho lọc theo máy. Danh sách line được lấy từ các máy hiện có và loại bỏ giá trị trùng.
+- Bộ lọc `Kết quả` hỗ trợ OK, NG và PENDING; bộ lọc `Loại lỗi` lấy động từ danh sách lỗi đã cấu hình hoặc đã ghi nhận.
+- Chọn loại lỗi tự chuyển kết quả sang NG. Chuyển kết quả sang OK hoặc PENDING tự xóa loại lỗi để tránh điều kiện xung đột.
+- Ẩn tab danh sách mã trùng lặp vì trùng chức năng với luồng kiểm tra trùng chuyên biệt.
+- Tab khóa trùng đang hoạt động chỉ hiển thị cho DEV và dùng phân trang phía server.
 
 ### Duplicate
 
@@ -121,6 +130,24 @@ Mục đích:
 - Debug máy local gửi gì, server trả gì.
 - Sau này hiển thị offline incident.
 
+### Cấu hình lỗi
+
+Route:
+
+```txt
+/error-config
+```
+
+Mục đích:
+
+- Hợp nhất mã lỗi đã cấu hình với các mã thực tế trong `scan_records` và `scan_led_items`.
+- Tự hiển thị mã lỗi mới được máy local gửi lên mà không cần cập nhật danh sách cố định trong frontend.
+- Phân biệt mã đã định danh và chưa định danh.
+- Tìm trực tiếp theo mã lỗi; nhóm lỗi là thông tin tùy chọn, không dùng để ép thứ tự hiển thị.
+- Cho phép kỹ thuật viên, admin và dev đặt riêng tên tiếng Việt, tên tiếng Anh, thông báo mặc định, mức độ, nhóm tùy chọn và hướng xử lý local.
+- Ghi audit log cho thao tác định danh hoặc cập nhật cấu hình lỗi.
+- Giữ cơ chế hiển thị dự phòng cho mã chưa định danh.
+
 ### Thông báo
 
 Route:
@@ -149,6 +176,15 @@ Mục đích:
 - Mở Swagger.
 - Xem duplicate rule.
 - Sau này cấu hình duplicate days, heartbeat timeout, port, DB.
+
+### Khôi phục tài khoản DEV
+
+- Chỉ hoạt động khi người dùng đang đăng nhập bằng tài khoản ADMIN.
+- Giữ `Ctrl` và nhấn/thả `F11` đủ 10 lần trong tối đa 5 giây để mở modal ẩn.
+- Electron bắt phím ở tiến trình desktop rồi chuyển sự kiện an toàn vào frontend; trình duyệt dùng listener capture làm phương án dự phòng.
+- Nếu đã có tài khoản DEV, ADMIN có thể đặt lại mật khẩu và kích hoạt lại tài khoản được chọn.
+- Nếu chưa có tài khoản DEV, modal cho phép tạo tài khoản DEV đầu tiên.
+- API kiểm tra lại vai trò ADMIN, băm mật khẩu bằng PBKDF2 và ghi audit log; quá 5 giây bộ đếm bắt đầu lại.
 
 ### Hướng dẫn
 

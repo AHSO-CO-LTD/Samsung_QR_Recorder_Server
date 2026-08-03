@@ -131,6 +131,7 @@ export type ScanRecord = {
   server_status: string;
   final_status: string;
   ng_reason?: string | null;
+  ng_reason_definition?: ScanErrorDefinition | null;
   scan_at: string;
   machine?: Machine;
   profile?: Profile;
@@ -144,7 +145,20 @@ export type ScanRecord = {
     led_suffix: string;
     local_status: string;
     ng_reason?: string | null;
+    ng_reason_definition?: ScanErrorDefinition | null;
   }>;
+};
+
+export type ScanErrorDefinition = {
+  id: number;
+  code: string;
+  name_vi?: string | null;
+  name_en?: string | null;
+  group_name?: string | null;
+  severity: "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+  default_message?: string | null;
+  local_action?: string | null;
+  is_active: boolean;
 };
 
 export type DuplicateKey = {

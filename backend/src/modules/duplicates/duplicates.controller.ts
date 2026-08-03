@@ -11,10 +11,13 @@ export class DuplicatesController {
   constructor(private readonly duplicatesService: DuplicatesService) {}
 
   @Get("recent-keys")
+  @Roles("DEV")
   @ApiQuery({ name: "take", required: false, example: 100 })
+  @ApiQuery({ name: "skip", required: false, example: 0 })
+  @ApiQuery({ name: "q", required: false, example: "DUPLICATE-KEY" })
   @ApiOkResponse({ description: "List active duplicate keys in the server window." })
-  listRecentKeys(@Query("take") take?: string) {
-    return this.duplicatesService.listRecentKeys(Number(take || 100));
+  listRecentKeys(@Query("take") take?: string, @Query("skip") skip?: string, @Query("q") q?: string) {
+    return this.duplicatesService.listRecentKeys(Number(take || 100), Number(skip || 0), q?.trim() || undefined);
   }
 
   @Get("historical-results")

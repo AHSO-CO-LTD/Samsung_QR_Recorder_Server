@@ -18,6 +18,7 @@ import { usePermissions } from "@/lib/permissions";
 import { getScreenPermissionKeyForPath } from "@/lib/screen-permissions";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
+import { DevRecoveryShortcut } from "@/features/users/dev-recovery-shortcut";
 
 type ConfirmAction = "logout" | "quit" | "restart";
 
@@ -270,6 +271,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </DialogContent>
       </Dialog>
+      <DevRecoveryShortcut />
     </>
   );
 }
