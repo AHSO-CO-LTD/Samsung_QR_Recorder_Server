@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MinLength } from "class-validator";
 
 export class CreateUserDto {
   @ApiProperty({ example: "operator01" })
@@ -46,4 +46,26 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+}
+
+export class RecoverDevAccountDto {
+  @ApiPropertyOptional({ description: "Existing DEV user ID. Omit only when no DEV account exists." })
+  @IsOptional()
+  @IsInt()
+  user_id?: number;
+
+  @ApiPropertyOptional({ example: "dev" })
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @ApiPropertyOptional({ example: "Support Service" })
+  @IsOptional()
+  @IsString()
+  full_name?: string;
+
+  @ApiProperty({ example: "Dev@123456" })
+  @IsString()
+  @MinLength(8)
+  password!: string;
 }

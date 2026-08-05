@@ -5,6 +5,7 @@ export type ScreenPermissionKey =
   | "scans"
   | "reports"
   | "master-data"
+  | "error-config"
   | "sync"
   | "duplicate-audit"
   | "duplicates"
@@ -30,6 +31,7 @@ export const screenPermissionKeys: readonly ScreenPermissionKey[] = [
   "scans",
   "reports",
   "master-data",
+  "error-config",
   "sync",
   "duplicate-audit",
   "duplicates",
@@ -47,6 +49,7 @@ export const routeByPermissionKey: Partial<Record<ScreenPermissionKey, string>> 
   scans: "/scans",
   reports: "/reports",
   "master-data": "/master-data",
+  "error-config": "/error-config",
   sync: "/sync",
   "duplicate-audit": "/duplicate-audit",
   duplicates: "/duplicates",

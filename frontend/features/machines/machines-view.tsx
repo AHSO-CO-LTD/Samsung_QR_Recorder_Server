@@ -67,7 +67,8 @@ export function MachinesView() {
   const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
   const [commandMachine, setCommandMachine] = useState<Machine | null>(null);
   const [commandDraft, setCommandDraft] = useState<CommandDraft>(emptyCommandDraft);
-  const canViewIdentity = user?.role === "DEV";
+  const isDev = user?.role === "DEV";
+  const canViewIdentity = isDev;
 
   const columns = useMemo<Column<Machine>[]>(
     () => [
@@ -303,14 +304,16 @@ export function MachinesView() {
         }
         toolbarContent={<MachineStatusFilter value={machineFilter} onChange={setMachineFilter} />}
         actions={
-          <Button type="button" size="sm" onClick={() => openForm()}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {t("addMachine")}
-          </Button>
+          isDev ? (
+            <Button type="button" size="sm" onClick={() => openForm()}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {t("addMachine")}
+            </Button>
+          ) : undefined
         }
       />
 
-      <MachineRegistrationRequestsPanel onChanged={() => setRefreshId((value) => value + 1)} />
+      {isDev ? <MachineRegistrationRequestsPanel onChanged={() => setRefreshId((value) => value + 1)} /> : null}
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-2xl">

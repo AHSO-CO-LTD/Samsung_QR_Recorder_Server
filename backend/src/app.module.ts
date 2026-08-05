@@ -2,9 +2,11 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { ApiAuthGuard } from "./common/auth/auth.guard";
+import { RuntimeConnectionModule } from "./common/runtime/runtime-connection.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DuplicatesModule } from "./modules/duplicates/duplicates.module";
+import { ErrorConfigModule } from "./modules/error-config/error-config.module";
 import { HealthModule } from "./modules/health/health.module";
 import { MachinesModule } from "./modules/machines/machines.module";
 import { MasterDataModule } from "./modules/master-data/master-data.module";
@@ -27,6 +29,7 @@ import { PrismaModule } from "./prisma/prisma.module";
       envFilePath: ["../.env", ".env"]
     }),
     PrismaModule,
+    RuntimeConnectionModule,
     AuditModule,
     AuthModule,
     HealthModule,
@@ -35,6 +38,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     ProfilesModule,
     RuntimeModule,
     ScansModule,
+    ErrorConfigModule,
     DuplicatesModule,
     SyncModule,
     NotificationsModule,

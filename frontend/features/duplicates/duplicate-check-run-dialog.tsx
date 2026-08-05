@@ -5,7 +5,8 @@ import { Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { SelectField, TextInputField } from "@/features/shared/form-fields";
+import { DateTimePickerField } from "@/features/shared/date-time-picker";
+import { SelectField } from "@/features/shared/form-fields";
 import type { HistoricalDuplicateJob, HistoricalDuplicateResult } from "@/features/shared/types";
 import { apiPost } from "@/lib/api";
 import { appDatetimeLocalToIso, toAppDatetimeLocal } from "@/lib/app-time";
@@ -89,19 +90,17 @@ export function DuplicateCheckRunDialog({ onCompleted }: { onCompleted: (job: Hi
 
           {draft.scope === "range" ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextInputField
+              <DateTimePickerField
                 required
-                type="datetime-local"
                 label={t("fieldFromDate")}
                 value={draft.fromDate}
-                onChange={(event) => setDraft({ ...draft, fromDate: event.target.value })}
+                onChange={(fromDate) => setDraft({ ...draft, fromDate })}
               />
-              <TextInputField
+              <DateTimePickerField
                 required
-                type="datetime-local"
                 label={t("fieldToDate")}
                 value={draft.toDate}
-                onChange={(event) => setDraft({ ...draft, toDate: event.target.value })}
+                onChange={(toDate) => setDraft({ ...draft, toDate })}
               />
             </div>
           ) : null}

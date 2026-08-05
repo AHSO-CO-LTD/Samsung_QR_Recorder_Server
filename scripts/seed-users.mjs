@@ -103,12 +103,12 @@ function buildUsers() {
 const users = buildUsers();
 
 const errorCodes = [
-  ["SERVER_DUPLICATE", "duplicate", Severity.ERROR, "Máy chủ phát hiện khóa trùng lặp trong cửa sổ kiểm trùng."],
-  ["LED_SUFFIX_NOT_MATCH", "local-parse", Severity.ERROR, "Hậu tố LED không khớp quy tắc hồ sơ."],
-  ["MACHINE_NOT_FOUND", "machine", Severity.ERROR, "Mã máy không tồn tại hoặc đã bị tắt."],
-  ["PROFILE_NOT_FOUND", "profile", Severity.ERROR, "Hồ sơ không tồn tại hoặc đã bị tắt."],
-  ["LOCAL_DUPLICATE", "local-duplicate", Severity.WARNING, "Ứng dụng cục bộ phát hiện trùng lặp trong phạm vi cục bộ."],
-  ["PAYLOAD_INVALID", "api", Severity.ERROR, "Dữ liệu gửi lên không hợp lệ."]
+  ["SERVER_DUPLICATE", "duplicate", Severity.ERROR, "Trùng dữ liệu trên máy chủ", "Server duplicate", "Máy chủ phát hiện khóa trùng lặp trong cửa sổ kiểm trùng."],
+  ["LED_SUFFIX_NOT_MATCH", "local-parse", Severity.ERROR, "Hậu tố LED không khớp", "LED suffix mismatch", "Hậu tố LED không khớp quy tắc hồ sơ."],
+  ["MACHINE_NOT_FOUND", "machine", Severity.ERROR, "Không tìm thấy máy", "Machine not found", "Mã máy không tồn tại hoặc đã bị tắt."],
+  ["PROFILE_NOT_FOUND", "profile", Severity.ERROR, "Không tìm thấy hồ sơ", "Profile not found", "Hồ sơ không tồn tại hoặc đã bị tắt."],
+  ["LOCAL_DUPLICATE", "local-duplicate", Severity.WARNING, "Trùng dữ liệu tại máy local", "Local duplicate", "Ứng dụng cục bộ phát hiện trùng lặp trong phạm vi cục bộ."],
+  ["PAYLOAD_INVALID", "api", Severity.ERROR, "Dữ liệu gửi lên không hợp lệ", "Invalid payload", "Dữ liệu gửi lên không hợp lệ."]
 ];
 
 const notificationTemplates = [
@@ -245,22 +245,21 @@ try {
     console.log(`Role screen permissions already exist: ${rolePermissionCount}`);
   }
 
-  for (const [code, groupName, severity, defaultMessage] of errorCodes) {
+  for (const [code, groupName, severity, nameVi, nameEn, defaultMessage] of errorCodes) {
     await prisma.errorCode.upsert({
       where: { code },
       create: {
         code,
+        name_vi: nameVi,
+        name_en: nameEn,
         group_name: groupName,
         severity,
         default_message: defaultMessage,
         is_active: true
       },
-      update: {
-        group_name: groupName,
-        severity,
-        default_message: defaultMessage,
-        is_active: true
-      }
+      // Error definitions are administrator-owned configuration after creation.
+      // Running the seed again must not overwrite names or handling guidance.
+      update: {}
     });
   }
   console.log(`Seeded ${errorCodes.length} error codes`);

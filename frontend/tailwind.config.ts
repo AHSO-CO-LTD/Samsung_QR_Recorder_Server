@@ -27,6 +27,11 @@ const config: Config = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))"
         },
+        runtime: {
+          ok: "rgb(var(--runtime-ok-channels) / <alpha-value>)",
+          ng: "rgb(var(--runtime-ng-channels) / <alpha-value>)",
+          warning: "rgb(var(--runtime-warning-channels) / <alpha-value>)"
+        },
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))"

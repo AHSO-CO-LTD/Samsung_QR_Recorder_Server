@@ -10,6 +10,8 @@ import {
 type NotificationSeverity = "INFO" | "WARNING" | "ERROR" | "CRITICAL";
 type NotificationEventStatus = "NEW" | "SENT" | "READ" | "DISMISSED";
 
+const VISIBLE_NOTIFICATION_CODES = ["MACHINE_RUNTIME_DISCONNECTED", "SERVER_DUPLICATE"];
+
 type CreateNotificationEventInput = {
   notiCode: string;
   title: string;
@@ -68,7 +70,7 @@ export class NotificationsService {
       take: Math.min(Math.max(take || 50, 1), 200),
       where: {
         noti_code: {
-          notIn: ["LOCAL_POST_HEARTBEAT", "LOCAL_POST_SCAN_SUBMIT"]
+          in: VISIBLE_NOTIFICATION_CODES
         }
       },
       orderBy: { created_at: "desc" },

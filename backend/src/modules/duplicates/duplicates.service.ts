@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import type { HistoricalDuplicateJobTrigger, HistoricalDuplicateSchedule, HistoricalDuplicateScheduleFrequency } from "@prisma/client";
+import { Prisma, type HistoricalDuplicateJobTrigger, type HistoricalDuplicateSchedule, type HistoricalDuplicateScheduleFrequency } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RunHistoricalDuplicateJobDto, UpsertHistoricalDuplicateScheduleDto } from "./dto/historical-duplicate-job.dto";
@@ -43,26 +43,56 @@ export class DuplicatesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async listRecentKeys(take: number) {
-    const keys = await this.prisma.recentDuplicateKey.findMany({
-      take: Math.min(Math.max(take || 100, 1), 500),
-      orderBy: { created_at: "desc" },
-      include: {
-        profile: {
-          include: {
-            chassis_code: true
-          }
-        },
-        first_machine: true,
-        first_scan_record: true
-      }
-    });
+  async listRecentKeys(take: number, skip = 0, q?: string) {
+    const boundedTake = Math.min(Math.max(take || 100, 1), 500);
+    const boundedSkip = Math.max(skip || 0, 0);
+    const searchText = q?.trim();
+    const textFilter = searchText
+      ? { contains: searchText, mode: Prisma.QueryMode.insensitive }
+      : undefined;
+    const where = textFilter
+      ? {
+          OR: [
+            { duplicate_key: textFilter },
+            { profile: { chassis_code: { code_full: textFilter } } },
+            { first_machine: { machine_code: textFilter } }
+          ]
+        }
+      : undefined;
+    const [total, keys] = await Promise.all([
+      this.prisma.recentDuplicateKey.count({ where }),
+      this.prisma.recentDuplicateKey.findMany({
+        take: boundedTake,
+        skip: boundedSkip,
+        where,
+        orderBy: { created_at: "desc" },
+        include: {
+          profile: {
+            include: {
+              chassis_code: true
+            }
+          },
+          first_machine: true,
+          first_scan_record: true
+        }
+      })
+    ]);
 
     return {
       success: true,
       code: "RECENT_DUPLICATE_KEYS_LISTED",
       message: "Đã tải khóa trùng lặp gần đây.",
-      data: keys
+      data: keys,
+      meta: {
+        total,
+        take: boundedTake,
+        skip: boundedSkip,
+        page: Math.floor(boundedSkip / boundedTake) + 1,
+        page_size: boundedTake,
+        total_pages: Math.max(1, Math.ceil(total / boundedTake)),
+        has_previous: boundedSkip > 0,
+        has_next: boundedSkip + keys.length < total
+      }
     };
   }
 

@@ -1,0 +1,4 @@
+{
+  "title": "Chọn mức độ và nơi nhận",
+  "content": "Chọn INFO, WARNING, ERROR hoặc CRITICAL và SERVER_UI, LOCAL_UI hoặc BOTH. Lưu thay đổi hoặc tắt mẫu không còn sử dụng."
+}

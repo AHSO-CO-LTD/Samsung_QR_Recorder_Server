@@ -1,0 +1,4 @@
+{
+  "title": "Kiểm tra nhật ký request",
+  "content": "Trong bảng Request log, xem thời gian, máy, loại request, ID scan cục bộ, batch, trạng thái và thông báo lỗi."
+}

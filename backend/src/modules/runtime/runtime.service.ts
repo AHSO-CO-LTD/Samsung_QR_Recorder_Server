@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { hasNewRuntimeResult } from "../../common/runtime/runtime-state";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MachinesService } from "../machines/machines.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -74,9 +75,20 @@ export class RuntimeService {
     };
   }
 
-  async markDisconnected(machine: RuntimeMachine, reason?: string, socketIp?: string | null) {
+  async markDisconnected(
+    machine: RuntimeMachine,
+    reason?: string,
+    socketIp?: string | null,
+    options: {
+      graceful?: boolean;
+    } = {}
+  ) {
     const now = new Date();
     const session = await this.findOpenSession(machine.id);
+    const isGraceful = options.graceful === true;
+    const disconnectMessage = isGraceful
+      ? "Socket đã đóng sau khi phiên chạy dừng bình thường."
+      : reason || "Kết nối phiên chạy WebSocket đã ngắt.";
 
     await (this.prisma as any).machineSyncState.upsert({
       where: { machine_id: machine.id },
@@ -100,30 +112,35 @@ export class RuntimeService {
         machine_code: machine.machine_code,
         event_type: "DISCONNECTED",
         ip_address: socketIp ?? null,
-        message: reason || "Kết nối phiên chạy WebSocket đã ngắt.",
-        payload_json: this.toJson({ reason })
+        message: disconnectMessage,
+        payload_json: this.toJson({
+          reason,
+          graceful: isGraceful
+        })
       }
     });
 
-    await this.notifications.createEvent({
-      notiCode: "MACHINE_RUNTIME_DISCONNECTED",
-      machineId: machine.id,
-      title: "Máy cục bộ mất kết nối",
-      titleVi: "Máy cục bộ mất kết nối",
-      titleEn: "Local machine disconnected",
-      message: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối phiên chạy WebSocket đã ngắt."}`,
-      messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${reason || "Kết nối phiên chạy WebSocket đã ngắt."}`,
-      messageEn: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
-      payload: {
-        machine_code: machine.machine_code,
-        socket_ip: socketIp ?? null,
-        reason: reason ?? null
-      },
-      severity: "WARNING",
-      errorCode: "MACHINE_RUNTIME_DISCONNECTED"
-    });
+    if (!isGraceful) {
+      await this.notifications.createEvent({
+        notiCode: "MACHINE_RUNTIME_DISCONNECTED",
+        machineId: machine.id,
+        title: "Máy cục bộ mất kết nối",
+        titleVi: "Máy cục bộ mất kết nối",
+        titleEn: "Local machine disconnected",
+        message: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${disconnectMessage}`,
+        messageVi: `Máy ${machine.machine_code} mất kết nối${socketIp ? ` từ ${socketIp}` : ""}. ${disconnectMessage}`,
+        messageEn: `Machine ${machine.machine_code} disconnected${socketIp ? ` from ${socketIp}` : ""}. ${reason || "WebSocket runtime connection disconnected."}`,
+        payload: {
+          machine_code: machine.machine_code,
+          socket_ip: socketIp ?? null,
+          reason: reason ?? null
+        },
+        severity: "WARNING",
+        errorCode: "MACHINE_RUNTIME_DISCONNECTED"
+      });
+    }
 
-    if (session && session.status === "RUNNING") {
+    if (session && ["RUNNING", "PAUSED"].includes(session.status)) {
       const updatedSession = await (this.prisma as any).machineRuntimeSession.update({
         where: { id: session.id },
         data: {
@@ -140,7 +157,10 @@ export class RuntimeService {
         productId: session.current_product_id,
         eventType: "SOCKET_DISCONNECTED",
         ipAddress: socketIp ?? null,
-        payload: { reason }
+        payload: {
+          reason,
+          graceful: isGraceful
+        }
       });
 
       return updatedSession;
@@ -152,7 +172,10 @@ export class RuntimeService {
       productId: session?.current_product_id,
       eventType: "SOCKET_DISCONNECTED",
       ipAddress: socketIp ?? null,
-      payload: { reason }
+      payload: {
+        reason,
+        graceful: isGraceful
+      }
     });
 
     return session;
@@ -169,11 +192,14 @@ export class RuntimeService {
     const now = new Date();
     const product = await this.ensureCurrentProduct(session, machine, dto, now);
     const wasDisconnected = session.status === "DISCONNECTED";
+    const hasNewResult = hasNewRuntimeResult(session, dto);
+    const wasPaused = session.status === "PAUSED";
+    const nextStatus = wasPaused && !hasNewResult ? "PAUSED" : "RUNNING";
 
     const updatedSession = await (this.prisma as any).machineRuntimeSession.update({
       where: { id: session.id },
       data: {
-        status: "RUNNING",
+        status: nextStatus,
         current_product_id: product?.id ?? null,
         total_count: dto.total_count ?? undefined,
         ok_count: dto.ok_count ?? undefined,
@@ -181,6 +207,7 @@ export class RuntimeService {
         last_result: this.clean(dto.last_result) ?? undefined,
         last_code: this.clean(dto.last_code) ?? undefined,
         last_local_scan_id: this.clean(dto.local_scan_id) ?? undefined,
+        last_result_at: hasNewResult ? now : undefined,
         disconnected_at: null,
         last_seen_at: now,
         reconnect_count: wasDisconnected ? { increment: 1 } : undefined
@@ -211,6 +238,22 @@ export class RuntimeService {
       payload: dto,
       counts: dto
     });
+
+    if (wasPaused && hasNewResult) {
+      await this.writeRuntimeEvent({
+        machine,
+        sessionId: updatedSession.id,
+        productId: product?.id,
+        profileId: product?.profile_id,
+        eventType: "RESUMED",
+        ipAddress: socketIp ?? null,
+        payload: {
+          reason: "NEW_RESULT",
+          resumed_at: now
+        },
+        counts: dto
+      });
+    }
 
     return this.getSessionEntity(updatedSession.id);
   }
@@ -358,6 +401,64 @@ export class RuntimeService {
     };
   }
 
+  async recordScanActivity(input: {
+    machineId: number;
+    localScanId: string;
+    finalStatus: string;
+    receivedAt: Date;
+  }) {
+    const session = await this.findOpenSession(input.machineId);
+    if (!session || !["RUNNING", "PAUSED"].includes(session.status)) {
+      return session;
+    }
+
+    const wasPaused = session.status === "PAUSED";
+    const updatedSession = await (this.prisma as any).machineRuntimeSession.update({
+      where: { id: session.id },
+      data: {
+        status: "RUNNING",
+        last_result: input.finalStatus,
+        last_local_scan_id: input.localScanId,
+        last_result_at: input.receivedAt,
+        last_seen_at: input.receivedAt
+      },
+      include: this.sessionInclude()
+    });
+
+    if (session.current_product_id) {
+      await (this.prisma as any).machineRuntimeProduct.update({
+        where: { id: session.current_product_id },
+        data: {
+          last_result: input.finalStatus,
+          last_local_scan_id: input.localScanId
+        }
+      });
+    }
+
+    if (wasPaused) {
+      await this.writeRuntimeEvent({
+        machine: {
+          id: session.machine_id,
+          machine_code: session.machine_code
+        },
+        sessionId: session.id,
+        productId: session.current_product_id,
+        eventType: "RESUMED",
+        payload: {
+          reason: "NEW_SCAN",
+          local_scan_id: input.localScanId,
+          resumed_at: input.receivedAt
+        },
+        counts: {
+          last_result: input.finalStatus,
+          local_scan_id: input.localScanId
+        }
+      });
+    }
+
+    return updatedSession;
+  }
+
   private async createSession(machine: RuntimeMachine, dto: RuntimeStartDto | RuntimeUpdateDto | RuntimeErrorDto, eventType: "STARTED" | "SNAPSHOT" | "UPDATED" | "ERROR", socketIp?: string | null) {
     const now = "started_at" in dto && dto.started_at ? new Date(dto.started_at) : new Date();
     const identity = await this.resolveProductIdentity(dto);
@@ -367,6 +468,7 @@ export class RuntimeService {
         machine_id: machine.id,
         machine_code: machine.machine_code,
         status: eventType === "ERROR" ? "ERROR" : "RUNNING",
+        source: "WEBSOCKET",
         total_count: dto.total_count ?? 0,
         ok_count: dto.ok_count ?? 0,
         ng_count: dto.ng_count ?? 0,
@@ -484,7 +586,7 @@ export class RuntimeService {
       where: {
         machine_id: machineId,
         status: {
-          in: ["RUNNING", "DISCONNECTED", "ERROR"]
+          in: ["RUNNING", "PAUSED", "DISCONNECTED", "ERROR"]
         },
         ended_at: null
       },
@@ -528,7 +630,7 @@ export class RuntimeService {
       where: {
         machine_id: machineId,
         status: {
-          in: ["RUNNING", "DISCONNECTED", "ERROR"]
+          in: ["RUNNING", "PAUSED", "DISCONNECTED", "ERROR"]
         },
         ended_at: null
       },
@@ -683,6 +785,11 @@ export class RuntimeService {
           include: {
             chassis_code: true
           }
+        },
+        led_items: {
+          select: {
+            led_scan_raw: true
+          }
         }
       }
     });
@@ -718,6 +825,11 @@ export class RuntimeService {
           profile: {
             include: {
               chassis_code: true
+            }
+          },
+          led_items: {
+            select: {
+              led_scan_raw: true
             }
           }
         }

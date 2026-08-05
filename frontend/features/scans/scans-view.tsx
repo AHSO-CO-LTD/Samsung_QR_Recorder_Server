@@ -1,17 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FilterX } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiGet } from "@/lib/api";
 import { appDatetimeLocalToIso } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
-import { SelectField, TextInputField } from "@/features/shared/form-fields";
+import { GuideLauncher } from "@/features/guides/guide-launcher";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
 import { DuplicateAuditView } from "@/features/duplicates/duplicate-audit-view";
 import {
@@ -21,39 +20,32 @@ import {
   type ScanColumnKey,
   type ScanDisplaySettings
 } from "@/features/scans/scan-display-settings-dialog";
-import { buildRuntimeSocketUrl, formatIssueReason } from "@/features/shared/machine-runtime-card";
+import { buildRuntimeSocketUrl } from "@/features/shared/machine-runtime-card";
+import { formatIssueReason, formatLedIssueReason } from "@/features/shared/scan-issue-reason";
+import { NgSoundControls } from "@/features/sound/ng-sound-controls";
+import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
 import { usePermissions } from "@/lib/permissions";
+import { useAuth } from "@/lib/auth";
 import type { DuplicateKey, Machine, Profile, ScanRecord, Vendor } from "@/features/shared/types";
+import { ScanFiltersCard, type ScanErrorFilterOption } from "./scan-filters-card";
+import { emptyScanFilters, type ScanFilters } from "./scan-filter-state";
+import { ScanHistoryAnalytics } from "./scan-history-analytics";
 
-type ScanFilters = {
-  machine_code: string;
-  profile_id: string;
-  vendor_char: string;
-  final_status: string;
-  from: string;
-  to: string;
-};
-
-const emptyFilters: ScanFilters = {
-  machine_code: "",
-  profile_id: "",
-  vendor_char: "",
-  final_status: "",
-  from: "",
-  to: ""
-};
-
-type ScansTab = "all-scans" | "duplicate-scans" | "active-duplicate-keys" | "scheduled-duplicate-check";
+type ScansTab = "all-scans" | "active-duplicate-keys" | "scheduled-duplicate-check";
 
 export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab }) {
+  const searchParams = useSearchParams();
   const { t } = useI18n();
+  const { user } = useAuth();
   const { canAccess, isLoading: isPermissionLoading } = usePermissions();
   const canViewScans = canAccess("scans");
   const canScheduleDuplicateCheck = canAccess("duplicate-audit");
+  const canViewActiveDuplicateKeys = canViewScans && user?.role === "DEV";
   const [machines, setMachines] = useState<Machine[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [filters, setFilters] = useState<ScanFilters>(emptyFilters);
+  const [errorOptions, setErrorOptions] = useState<ScanErrorFilterOption[]>([]);
+  const [filters, setFilters] = useState<ScanFilters>(emptyScanFilters);
   const [activeTab, setActiveTab] = useState<ScansTab>(defaultTab);
   const [scanDisplaySettings, setScanDisplaySettings] = useState<ScanDisplaySettings>(defaultScanDisplaySettings);
   const [realtimeRefreshSignal, setRealtimeRefreshSignal] = useState(0);
@@ -61,6 +53,28 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
   useEffect(() => {
     setScanDisplaySettings(readScanDisplaySettings());
   }, []);
+
+  useEffect(() => {
+    const line_name = searchParams.get("line_name");
+    const profile_id = searchParams.get("profile_id");
+    const vendor_char = searchParams.get("vendor_char");
+    const final_status = searchParams.get("final_status");
+    const ng_reason = searchParams.get("ng_reason");
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+
+    if (line_name || profile_id || vendor_char || final_status || ng_reason || from || to) {
+      setFilters((prev) => ({
+        line_name: line_name ?? prev.line_name,
+        profile_id: profile_id ?? prev.profile_id,
+        vendor_char: vendor_char ?? prev.vendor_char,
+        final_status: final_status ?? prev.final_status,
+        ng_reason: ng_reason ?? prev.ng_reason,
+        from: from ?? prev.from,
+        to: to ?? prev.to
+      }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!canViewScans) {
@@ -80,22 +94,35 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
         toast.error(error instanceof Error ? error.message : t("scanFilterLoadFailed"));
       });
 
+    void apiGet<ScanErrorFilterOption[]>("/error-config")
+      .then((result) => {
+        if (isMounted) {
+          setErrorOptions(result.data ?? []);
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : t("scanFilterLoadFailed"));
+      });
+
     return () => {
       isMounted = false;
     };
   }, [canViewScans, t]);
 
-  const visibleTab: ScansTab =
-    activeTab === "scheduled-duplicate-check"
-      ? canScheduleDuplicateCheck
-        ? "scheduled-duplicate-check"
+  const visibleTab: ScansTab = activeTab === "scheduled-duplicate-check"
+    ? canScheduleDuplicateCheck
+      ? "scheduled-duplicate-check"
+      : "all-scans"
+    : activeTab === "active-duplicate-keys"
+      ? canViewActiveDuplicateKeys
+        ? "active-duplicate-keys"
         : "all-scans"
       : canViewScans
-        ? activeTab
+        ? "all-scans"
         : "scheduled-duplicate-check";
 
   useEffect(() => {
-    if (visibleTab !== "all-scans" || scanDisplaySettings.refreshMode !== "realtime") {
+    if (visibleTab !== "all-scans") {
       return;
     }
 
@@ -105,7 +132,11 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
       transports: ["websocket", "polling"]
     });
 
-    socket.on("server:scan-updated", () => {
+    socket.on("server:scan-updated", (payload: unknown) => {
+      handleNgSoundScanEvent(payload, t("ngSoundPlaybackFailed"));
+      if (scanDisplaySettings.refreshMode !== "realtime") {
+        return;
+      }
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         setRealtimeRefreshSignal((value) => value + 1);
@@ -140,30 +171,36 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     return vendor ? `${vendor.vendor_name} (${vendor.vendor_char})` : vendorChar;
   };
 
-  const allScansEndpoint = useMemo(() => {
+  const scanFilterQuery = useMemo(() => {
     const params = new URLSearchParams();
-    if (filters.machine_code) params.set("machine_code", filters.machine_code);
+    if (filters.line_name) params.set("line_name", filters.line_name);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
     if (filters.final_status) params.set("final_status", filters.final_status);
+    if (filters.ng_reason) params.set("ng_reason", filters.ng_reason);
     if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
     if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
-    return `/scans?${params.toString()}`;
+    return params.toString();
   }, [filters]);
 
-  const duplicateScansEndpoint = useMemo(() => {
-    const params = new URLSearchParams({ ng_reason: "SERVER_DUPLICATE" });
-    if (filters.machine_code) params.set("machine_code", filters.machine_code);
+  const analyticsFilterQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (filters.line_name) params.set("line_name", filters.line_name);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
     if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
     if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
-    return `/scans?${params.toString()}`;
-  }, [filters]);
+    return params.toString();
+  }, [filters.from, filters.line_name, filters.profile_id, filters.to, filters.vendor_char]);
+
+  const allScansEndpoint = `/scans?${scanFilterQuery}`;
+  const machineErrorRankingEndpoint = `/scans/machine-error-ranking?${analyticsFilterQuery}`;
 
   const columns: Column<ScanRecord>[] = [
     { key: "time", header: t("colScanTime"), className: "min-w-[10rem] whitespace-nowrap", render: (item) => <DateText value={item.scan_at} /> },
-    { key: "machine", header: t("colMachine"), className: "min-w-[7rem] whitespace-nowrap", render: (item) => <MonoText value={item.machine?.machine_code} /> },
+    { key: "machine", header: t("colMachineCode"), className: "min-w-[7rem] whitespace-nowrap", render: (item) => <MonoText value={item.machine?.machine_code} /> },
+    { key: "machine_name", header: t("colMachineName"), className: "min-w-[10rem]", render: (item) => item.machine?.machine_name ?? "-" },
+    { key: "line", header: t("colLine"), className: "min-w-[8rem]", render: (item) => item.machine?.line_name ?? "-" },
     { key: "chassis", header: t("colChassis"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <MonoText value={getChassisCode(item)} /> },
     { key: "vendor", header: t("colVendor"), className: "min-w-[8rem] whitespace-nowrap", render: (item) => <span className="text-sm">{getVendorLabel(item.full_vendor_char)}</span> },
     { key: "local_id", header: t("colLocalId"), className: "min-w-[9rem] whitespace-nowrap", render: (item) => <MonoText value={item.local_scan_id} /> },
@@ -172,7 +209,12 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     { key: "local", header: t("colLocal"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.local_status} /> },
     { key: "server", header: t("colServer"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.server_status} /> },
     { key: "final", header: t("colFinal"), className: "w-24 min-w-[6rem] whitespace-nowrap", render: (item) => <StatusBadge value={item.final_status} /> },
-    { key: "reason", header: t("colNgReason"), className: "min-w-[10rem]", render: (item) => <NgReasonText value={item.ng_reason} /> }
+    {
+      key: "reason",
+      header: t("colNgReason"),
+      className: "min-w-[10rem]",
+      render: (item) => <NgReasonText value={item.ng_reason} definition={item.ng_reason_definition} scan={item} />
+    }
   ];
   const visibleAllScanColumns = columns.filter((column) => scanDisplaySettings.visibleColumns.includes(column.key as ScanColumnKey));
 
@@ -189,25 +231,39 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     <div className="min-w-0 space-y-4">
       {isPermissionLoading ? (
         <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div>
-      ) : (
+        ) : (
       <Tabs value={visibleTab} onValueChange={(value) => setActiveTab(value as ScansTab)}>
         <div className="sticky top-[var(--app-header-height,4rem)] z-30 rounded-md border bg-background p-3 shadow-sm">
-          <TabsList className="w-full justify-start overflow-x-auto bg-muted [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
-            {canViewScans ? <TabsTrigger value="all-scans">{t("scanTabAll")}</TabsTrigger> : null}
-            {canViewScans ? <TabsTrigger value="duplicate-scans">{t("scanTabDuplicates")}</TabsTrigger> : null}
-            {canViewScans ? <TabsTrigger value="active-duplicate-keys">{t("scanTabActiveDuplicateKeys")}</TabsTrigger> : null}
-            {canScheduleDuplicateCheck ? <TabsTrigger value="scheduled-duplicate-check">{t("duplicateScheduleTab")}</TabsTrigger> : null}
-          </TabsList>
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <TabsList className="w-full justify-start overflow-x-auto bg-muted [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
+              {canViewScans ? <TabsTrigger value="all-scans">{t("scanTabAll")}</TabsTrigger> : null}
+              {canViewActiveDuplicateKeys ? <TabsTrigger value="active-duplicate-keys">{t("scanTabActiveDuplicateKeys")}</TabsTrigger> : null}
+              {canScheduleDuplicateCheck ? <TabsTrigger value="scheduled-duplicate-check">{t("duplicateScheduleTab")}</TabsTrigger> : null}
+            </TabsList>
+            <GuideLauncher guideIds={getScanGuideIds(visibleTab)} />
+          </div>
 
-          {canViewScans && (visibleTab === "all-scans" || visibleTab === "duplicate-scans") ? (
+          {canViewScans && visibleTab === "all-scans" ? (
             <div className="mt-3">
-              <ScanFiltersCard filters={filters} machines={machines} profiles={profiles} vendors={vendors} onFiltersChange={setFilters} hideFinalStatus={activeTab === "duplicate-scans"} />
+              <ScanFiltersCard
+                filters={filters}
+                machines={machines}
+                profiles={profiles}
+                vendors={vendors}
+                errorOptions={errorOptions}
+                onFiltersChange={setFilters}
+              />
             </div>
           ) : null}
         </div>
 
         <TabsContent value="all-scans">
           <div className="space-y-4">
+            <ScanHistoryAnalytics
+              endpoint={machineErrorRankingEndpoint}
+              refreshSignal={realtimeRefreshSignal}
+              autoRefreshMs={scanDisplaySettings.refreshMode === "automatic" ? scanDisplaySettings.autoRefreshSeconds * 1000 : undefined}
+            />
             <DataTablePanel
               title={t("scanLatest")}
               endpoint={allScansEndpoint}
@@ -215,6 +271,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
               getRowKey={(item) => item.id}
               actions={
                 <>
+                  <NgSoundControls />
                   <Badge variant="outline">{getRefreshModeLabel(scanDisplaySettings, t)}</Badge>
                   <ScanDisplaySettingsDialog settings={scanDisplaySettings} onSave={setScanDisplaySettings} />
                 </>
@@ -230,30 +287,18 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
           </div>
         </TabsContent>
 
-        <TabsContent value="duplicate-scans">
-          <div className="space-y-4">
+        {canViewActiveDuplicateKeys ? (
+          <TabsContent value="active-duplicate-keys">
             <DataTablePanel
-              title={t("scanDuplicateLatest")}
-              endpoint={duplicateScansEndpoint}
-              columns={columns}
+              title={t("recentDuplicateKeys")}
+              endpoint="/duplicates/recent-keys"
+              columns={recentColumns}
               getRowKey={(item) => item.id}
-              singleExpandedRow
-              pagination={{ pageSize: 100, mode: "server" }}
-              renderExpandedRow={(item) => <ScanLedDetails scan={item} vendorLabel={getVendorLabel(item.full_vendor_char)} />}
-              searchableText={getScanSearchableText(getVendorLabel)}
+              searchableText={(item) => `${item.duplicate_key} ${item.profile?.chassis_code?.code_full ?? ""} ${item.first_machine?.machine_code ?? ""}`}
+              pagination={{ pageSize: 25, mode: "server" }}
             />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="active-duplicate-keys">
-          <DataTablePanel
-            title={t("recentDuplicateKeys")}
-            endpoint="/duplicates/recent-keys?take=100"
-            columns={recentColumns}
-            getRowKey={(item) => item.id}
-            searchableText={(item) => `${item.duplicate_key} ${item.profile?.chassis_code?.code_full ?? ""} ${item.first_machine?.machine_code ?? ""}`}
-          />
-        </TabsContent>
+          </TabsContent>
+        ) : null}
 
         {canScheduleDuplicateCheck ? (
           <TabsContent value="scheduled-duplicate-check">
@@ -266,74 +311,21 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
   );
 }
 
-function ScanFiltersCard({
-  filters,
-  machines,
-  profiles,
-  vendors,
-  hideFinalStatus,
-  onFiltersChange
-}: {
-  filters: ScanFilters;
-  machines: Machine[];
-  profiles: Profile[];
-  vendors: Vendor[];
-  hideFinalStatus?: boolean;
-  onFiltersChange: (filters: ScanFilters) => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <div className="rounded-md border bg-card p-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto]">
-        <SelectField label={t("colMachine")} value={filters.machine_code} onChange={(event) => onFiltersChange({ ...filters, machine_code: event.target.value })}>
-          <option value="">{t("allMachines")}</option>
-          {machines.map((machine) => (
-            <option key={machine.id} value={machine.machine_code}>
-              {machine.machine_code}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField label={t("colProfile")} value={filters.profile_id} onChange={(event) => onFiltersChange({ ...filters, profile_id: event.target.value })}>
-          <option value="">{t("allProfiles")}</option>
-          {profiles.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.chassis_code?.code_full ?? t("profileFallbackName", { id: profile.id })}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField label={t("colVendor")} value={filters.vendor_char} onChange={(event) => onFiltersChange({ ...filters, vendor_char: event.target.value })}>
-          <option value="">{t("allVendors")}</option>
-          {vendors.map((vendor) => (
-            <option key={vendor.id} value={vendor.vendor_char}>
-              {vendor.vendor_name} ({vendor.vendor_char})
-            </option>
-          ))}
-        </SelectField>
-        {hideFinalStatus ? null : (
-          <SelectField label={t("colFinal")} value={filters.final_status} onChange={(event) => onFiltersChange({ ...filters, final_status: event.target.value })}>
-            <option value="">{t("allStatuses")}</option>
-            <option value="OK">OK</option>
-            <option value="NG">NG</option>
-            <option value="PENDING">{t("pending")}</option>
-          </SelectField>
-        )}
-        <TextInputField type="datetime-local" label={t("fieldFromDate")} value={filters.from} onChange={(event) => onFiltersChange({ ...filters, from: event.target.value })} />
-        <TextInputField type="datetime-local" label={t("fieldToDate")} value={filters.to} onChange={(event) => onFiltersChange({ ...filters, to: event.target.value })} />
-        <div className="flex items-end">
-          <Button type="button" variant="outline" onClick={() => onFiltersChange(emptyFilters)}>
-            <FilterX className="h-4 w-4" aria-hidden="true" />
-            {t("clearFilter")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+function getScanGuideIds(tab: ScansTab) {
+  if (tab === "all-scans") {
+    return ["11-lich-su-quet"] as const;
+  }
+  if (tab === "scheduled-duplicate-check") {
+    return ["13-kiem-tra-trung-dinh-ky"] as const;
+  }
+  return ["12-kiem-tra-ma-trung"] as const;
 }
 
 function getScanSearchableText(getVendorLabel: (vendorChar?: string | null) => string) {
   return (item: ScanRecord) =>
-    `${item.local_scan_id} ${item.full_code_raw} ${item.full_led_code ?? ""} ${item.full_vendor_char} ${getVendorLabel(item.full_vendor_char)} ${item.duplicate_key} ${item.machine?.machine_code ?? ""} ${item.profile?.chassis_code?.code_full ?? ""} ${item.ng_reason ?? ""} ${
+    `${item.local_scan_id} ${item.full_code_raw} ${item.full_led_code ?? ""} ${item.full_vendor_char} ${getVendorLabel(item.full_vendor_char)} ${item.duplicate_key} ${
+      item.machine?.machine_code ?? ""
+    } ${item.machine?.machine_name ?? ""} ${item.machine?.line_name ?? ""} ${item.profile?.chassis_code?.code_full ?? ""} ${item.ng_reason ?? ""} ${
       item.led_items
         ?.map((ledItem) => `${ledItem.led_slot} ${ledItem.led_index} ${getLedCodeForSlot(item, ledItem.led_slot)} ${ledItem.led_scan_raw} ${ledItem.led_lot_no ?? ""} ${ledItem.vendor_char} ${ledItem.led_suffix} ${ledItem.local_status} ${ledItem.ng_reason ?? ""}`)
         .join(" ") ?? ""
@@ -360,7 +352,7 @@ function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: 
         <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">{t("scanLedDetailsEmpty")}</div>
       ) : (
         <div className="overflow-x-auto rounded-md border bg-background">
-          <Table>
+          <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-20 whitespace-nowrap">{t("colLedSlot")}</TableHead>
@@ -402,7 +394,7 @@ function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: 
                     <StatusBadge value={ledItem.local_status} />
                   </TableCell>
                   <TableCell>
-                    <NgReasonText value={ledItem.ng_reason} />
+                    <NgReasonText value={ledItem.ng_reason} definition={ledItem.ng_reason_definition} ledItem />
                   </TableCell>
                 </TableRow>
               ))}
@@ -422,14 +414,32 @@ function getLedCodeForSlot(scan: ScanRecord, slot: number) {
   return scan.profile?.profile_led_codes?.find((item) => item.led_slot === slot)?.led_code?.code_full ?? "-";
 }
 
-function NgReasonText({ value }: { value?: string | null }) {
+function NgReasonText({
+  value,
+  definition,
+  scan,
+  ledItem = false
+}: {
+  value?: string | null;
+  definition?: ScanRecord["ng_reason_definition"];
+  scan?: ScanRecord;
+  ledItem?: boolean;
+}) {
   const { locale } = useI18n();
 
   if (!value) {
     return <span className="text-muted-foreground">-</span>;
   }
 
-  return <span title={value}>{formatIssueReason(value, locale)}</span>;
+  const configuredName = locale === "en"
+    ? definition?.name_en?.trim() || definition?.name_vi?.trim()
+    : definition?.name_vi?.trim() || definition?.name_en?.trim();
+  const label = definition?.is_active && configuredName
+    ? configuredName
+    : ledItem
+      ? formatLedIssueReason(value, locale)
+      : formatIssueReason(value, locale, scan);
+  return <span title={value}>{label}</span>;
 }
 
 function getRefreshModeLabel(settings: ScanDisplaySettings, t: ReturnType<typeof useI18n>["t"]) {

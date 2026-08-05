@@ -64,7 +64,7 @@ export function DataTablePanel<T>({
   singleExpandedRow,
   autoRefreshMs,
   refreshSignal,
-  showTopHorizontalScrollbar,
+  showTopHorizontalScrollbar = true,
   pagination
 }: DataTablePanelProps<T>) {
   const { t } = useI18n();

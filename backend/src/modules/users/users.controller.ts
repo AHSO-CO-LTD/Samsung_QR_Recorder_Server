@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Req } 
 import { ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { Roles } from "../../common/auth/auth.decorators";
 import type { AuthenticatedRequest } from "../../common/auth/authenticated-request.type";
-import { CreateUserDto, UpdateUserDto } from "./dto/user-crud.dto";
+import { CreateUserDto, RecoverDevAccountDto, UpdateUserDto } from "./dto/user-crud.dto";
 import { UsersService } from "./users.service";
 
 @ApiTags("server-ui")
@@ -15,6 +15,20 @@ export class UsersController {
   @ApiOkResponse({ description: "List server UI users without password hashes." })
   listUsers(@Req() request: AuthenticatedRequest) {
     return this.usersService.listUsers(request.user?.role);
+  }
+
+  @Get("dev-recovery")
+  @Roles("ADMIN")
+  @ApiOkResponse({ description: "List DEV accounts for the hidden ADMIN recovery workflow." })
+  getDevRecoveryStatus(@Req() request: AuthenticatedRequest) {
+    return this.usersService.getDevRecoveryStatus(request.user?.role);
+  }
+
+  @Post("dev-recovery")
+  @Roles("ADMIN")
+  @ApiOkResponse({ description: "Reset an existing DEV password or create the first DEV account." })
+  recoverDevAccount(@Body() dto: RecoverDevAccountDto, @Req() request: AuthenticatedRequest) {
+    return this.usersService.recoverDevAccount(dto, request.user?.id, request.user?.role);
   }
 
   @Post()

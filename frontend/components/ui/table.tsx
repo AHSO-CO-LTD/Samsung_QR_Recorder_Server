@@ -36,6 +36,10 @@ export function Table({ className, showTopScrollbar = false, topScrollbarLabel, 
 
     updateScrollMetrics();
 
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
     const resizeObserver = new ResizeObserver(updateScrollMetrics);
     resizeObserver.observe(table);
     resizeObserver.observe(bottomScrollbar);

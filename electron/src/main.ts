@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from "electron";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
@@ -6,8 +6,15 @@ import https from "node:https";
 import http from "node:http";
 import path from "node:path";
 import { activateServerLicense, clearServerLicense, evaluateServerLicense, getServerLicenseRequestInfo, type ServerLicenseStatus } from "./license/license-manager";
+import {
+  normalizeUpdateVersion,
+  resolveCompletedUpdateVersion,
+  type PendingUpdateState
+} from "./updates/update-completion";
 
 const APP_NAME = "QR Recorder Server";
+const APP_USER_MODEL_ID = "vn.ahso.samsung.qrrecorder.server";
+const PENDING_UPDATE_FILE_NAME = "pending-update.json";
 const DEFAULT_FRONTEND_PORT = 3969;
 const DEFAULT_API_PORT = 3979;
 const SESSION_STORAGE_KEY = "server-session-token";
@@ -103,6 +110,7 @@ let terminalWindow: BrowserWindow | null = null;
 let desktopDisplaySettings: DesktopDisplaySettings = DEFAULT_DISPLAY_SETTINGS;
 let pendingMainWindowRestoreState: MainWindowRestoreState | null = null;
 let pendingDisplaySettingsConfirmation: PendingDisplaySettingsConfirmation | null = null;
+let updateCompletionNotification: Notification | null = null;
 let mainWindowHasFrame = true;
 let isQuitting = false;
 let canCloseStartupWindow = false;
@@ -133,6 +141,16 @@ function formatUnknownError(error: unknown) {
   }
 
   return String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizePdfFileName(value: string) {
+  const sanitized = path.basename(value.trim()).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-");
+  const fileName = sanitized || "qr-recorder-user-manual.pdf";
+  return fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
 }
 
 function getProjectRoot() {
@@ -1025,11 +1043,6 @@ function getDesktopWindowState() {
   };
 }
 
-function normalizeVersion(value: string) {
-  const match = value.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
-  return match ? `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}` : null;
-}
-
 function readPackageVersion(packageJsonPath: string) {
   try {
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: string };
@@ -1050,7 +1063,7 @@ function getDesktopAppVersion() {
     app.getVersion()
   ];
 
-  return candidates.find((value) => value && normalizeVersion(value)) ?? "0.0.0";
+  return candidates.find((value) => value && normalizeUpdateVersion(value)) ?? "0.0.0";
 }
 
 function compareVersions(left: string, right: string) {
@@ -1131,7 +1144,7 @@ function mapRelease(release: GithubRelease, currentVersion: string): AppUpdateRe
     return null;
   }
 
-  const version = normalizeVersion(release.tag_name);
+  const version = normalizeUpdateVersion(release.tag_name);
   if (!version || compareVersions(version, currentVersion) <= 0) {
     return null;
   }
@@ -1155,7 +1168,7 @@ function mapRelease(release: GithubRelease, currentVersion: string): AppUpdateRe
 
 async function getAvailableUpdateReleases() {
   const repository = getUpdateRepository();
-  const currentVersion = normalizeVersion(getDesktopAppVersion()) ?? "0.0.0";
+  const currentVersion = normalizeUpdateVersion(getDesktopAppVersion()) ?? "0.0.0";
   if (!repository) {
     return {
       currentVersion,
@@ -1191,7 +1204,7 @@ async function checkForUpdates() {
     appendServiceLog("SYSTEM", `Update check failed: ${formatUnknownError(error)}`);
     return {
       success: false,
-      currentVersion: normalizeVersion(getDesktopAppVersion()) ?? getDesktopAppVersion(),
+      currentVersion: normalizeUpdateVersion(getDesktopAppVersion()) ?? getDesktopAppVersion(),
       repository: getUpdateRepository(),
       packaged: app.isPackaged,
       releases: [] as AppUpdateRelease[],
@@ -1267,6 +1280,102 @@ function createUpdateEnvBackup(installDir: string) {
   };
 }
 
+function getPendingUpdatePath() {
+  return path.join(app.getPath("userData"), "updates", PENDING_UPDATE_FILE_NAME);
+}
+
+function writePendingUpdateState(release: AppUpdateRelease) {
+  const pendingUpdatePath = getPendingUpdatePath();
+  const state: PendingUpdateState = {
+    targetVersion: release.version,
+    targetTag: release.tagName,
+    previousVersion: normalizeUpdateVersion(getDesktopAppVersion()) ?? getDesktopAppVersion(),
+    requestedAt: new Date().toISOString()
+  };
+
+  fs.mkdirSync(path.dirname(pendingUpdatePath), { recursive: true });
+  fs.writeFileSync(pendingUpdatePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  appendServiceLog("SYSTEM", `Pending update marker saved for ${state.targetTag}.`);
+}
+
+function readPendingUpdateState() {
+  const pendingUpdatePath = getPendingUpdatePath();
+  if (!fs.existsSync(pendingUpdatePath)) {
+    return null;
+  }
+
+  try {
+    const value = JSON.parse(fs.readFileSync(pendingUpdatePath, "utf8")) as Partial<PendingUpdateState>;
+    if (
+      typeof value.targetVersion !== "string" ||
+      typeof value.targetTag !== "string" ||
+      typeof value.previousVersion !== "string" ||
+      typeof value.requestedAt !== "string"
+    ) {
+      throw new Error("Pending update marker is incomplete.");
+    }
+
+    return value as PendingUpdateState;
+  } catch (error) {
+    appendServiceLog("SYSTEM", `Unable to read pending update marker: ${formatUnknownError(error)}`);
+    return null;
+  }
+}
+
+function clearPendingUpdateState() {
+  try {
+    fs.rmSync(getPendingUpdatePath(), { force: true });
+  } catch (error) {
+    appendServiceLog("SYSTEM", `Unable to clear pending update marker: ${formatUnknownError(error)}`);
+  }
+}
+
+function showCompletedUpdateNotification() {
+  const pendingUpdate = readPendingUpdateState();
+  if (!pendingUpdate) {
+    return false;
+  }
+
+  const completedVersion = resolveCompletedUpdateVersion(pendingUpdate, getDesktopAppVersion());
+  if (!completedVersion) {
+    appendServiceLog(
+      "SYSTEM",
+      `Pending update ${pendingUpdate.targetTag} is not complete. Running version=${getDesktopAppVersion()}.`
+    );
+    return false;
+  }
+
+  if (!Notification.isSupported()) {
+    appendServiceLog("SYSTEM", `Update ${pendingUpdate.targetTag} completed, but native notifications are unavailable.`);
+    clearPendingUpdateState();
+    return false;
+  }
+
+  updateCompletionNotification = new Notification({
+    title: APP_NAME,
+    body: `Đã cập nhật thành công lên phiên bản ${completedVersion}.`,
+    icon: getAppIconPath(),
+    silent: false
+  });
+  updateCompletionNotification.on("click", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  });
+  updateCompletionNotification.on("close", () => {
+    updateCompletionNotification = null;
+  });
+  updateCompletionNotification.show();
+  appendServiceLog("SYSTEM", `Update completion notification shown for ${pendingUpdate.targetTag}.`);
+  clearPendingUpdateState();
+  return true;
+}
+
 async function installUpdate(tagName: string) {
   if (!app.isPackaged) {
     throw new Error("Update install is only available in packaged desktop builds.");
@@ -1290,6 +1399,7 @@ async function installUpdate(tagName: string) {
 
   const installDir = path.dirname(process.execPath);
   const envBackup = createUpdateEnvBackup(installDir);
+  writePendingUpdateState(release);
   const installerArgs = ["/S", "/UPDATE"];
   if (envBackup.runtimeEnv) {
     installerArgs.push(`/UPDATE_ENV=${envBackup.runtimeEnv}`);
@@ -1404,6 +1514,41 @@ function registerAppIpc() {
   );
   ipcMain.handle("window:confirm-display-settings", () => confirmDesktopDisplaySettings());
   ipcMain.handle("window:rollback-display-settings", () => rollbackPendingDisplaySettings());
+  ipcMain.handle("guides:export-pdf", async (event, options: unknown) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const defaultFileName = normalizePdfFileName(
+      isRecord(options) && typeof options.defaultFileName === "string" ? options.defaultFileName : "qr-recorder-user-manual.pdf"
+    );
+    const saveResult = ownerWindow
+      ? await dialog.showSaveDialog(ownerWindow, {
+          title: "Xuất hướng dẫn sử dụng PDF",
+          defaultPath: path.join(app.getPath("documents"), defaultFileName),
+          filters: [{ name: "PDF", extensions: ["pdf"] }]
+        })
+      : await dialog.showSaveDialog({
+          title: "Xuất hướng dẫn sử dụng PDF",
+          defaultPath: path.join(app.getPath("documents"), defaultFileName),
+          filters: [{ name: "PDF", extensions: ["pdf"] }]
+        });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const pdf = await event.sender.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      pageSize: "A4"
+    });
+    await fs.promises.writeFile(saveResult.filePath, pdf);
+    appendServiceLog("SYSTEM", `Guide manual PDF exported: ${saveResult.filePath}`);
+
+    return {
+      success: true,
+      canceled: false,
+      filePath: saveResult.filePath
+    };
+  });
   ipcMain.handle("updates:check", () => checkForUpdates());
   ipcMain.handle("updates:install", (_event, tagName: unknown) => installUpdate(String(tagName ?? "")));
   ipcMain.handle("license:get-status", async () => {
@@ -1453,9 +1598,19 @@ function requestMainWindowCloseConfirmation() {
   mainWindow.webContents.send("app:close-requested");
 }
 
-function registerHiddenTerminalShortcut(targetWindow: BrowserWindow) {
+function registerHiddenShortcuts(targetWindow: BrowserWindow) {
   targetWindow.webContents.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown" || input.key !== "F12") {
+    if (input.type !== "keyDown") {
+      return;
+    }
+
+    if (input.key === "F11" && input.control && !input.isAutoRepeat) {
+      event.preventDefault();
+      targetWindow.webContents.send("dev-recovery-shortcut:pressed");
+      return;
+    }
+
+    if (input.key !== "F12") {
       return;
     }
 
@@ -1567,7 +1722,7 @@ function createMainWindow() {
     }
   });
 
-  registerHiddenTerminalShortcut(mainWindow);
+  registerHiddenShortcuts(mainWindow);
 
   mainWindow.on("close", (event) => {
     if (isQuitting) {
@@ -1587,8 +1742,12 @@ function createMainWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId(APP_USER_MODEL_ID);
+  }
   registerAppIpc();
   loadRootEnv();
+  showCompletedUpdateNotification();
   desktopDisplaySettings = loadDesktopDisplaySettings();
   createTerminalWindow();
   if (SHOULD_START_SERVICES) {

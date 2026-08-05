@@ -10,18 +10,34 @@ import { NumberInputField, SelectField } from "@/features/shared/form-fields";
 import { useI18n } from "@/lib/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
 
-export const scanColumnKeys = ["time", "machine", "chassis", "vendor", "local_id", "full", "duplicate", "local", "server", "final", "reason"] as const;
+export const scanColumnKeys = [
+  "time",
+  "machine",
+  "machine_name",
+  "line",
+  "chassis",
+  "vendor",
+  "local_id",
+  "full",
+  "duplicate",
+  "local",
+  "server",
+  "final",
+  "reason"
+] as const;
 
 export type ScanColumnKey = (typeof scanColumnKeys)[number];
 export type ScanRefreshMode = "realtime" | "automatic" | "manual";
 
 export type ScanDisplaySettings = {
+  version: number;
   refreshMode: ScanRefreshMode;
   autoRefreshSeconds: number;
   visibleColumns: ScanColumnKey[];
 };
 
 export const defaultScanDisplaySettings: ScanDisplaySettings = {
+  version: 2,
   refreshMode: "realtime",
   autoRefreshSeconds: 5,
   visibleColumns: [...scanColumnKeys]
@@ -31,7 +47,9 @@ const STORAGE_KEY = "all-scans-display-settings";
 
 const columnLabelKeys: Record<ScanColumnKey, MessageKey> = {
   time: "colScanTime",
-  machine: "colMachine",
+  machine: "colMachineCode",
+  machine_name: "colMachineName",
+  line: "colLine",
   chassis: "colChassis",
   vendor: "colVendor",
   local_id: "colLocalId",
@@ -76,6 +94,7 @@ export function ScanDisplaySettingsDialog({
     }
 
     const nextSettings: ScanDisplaySettings = {
+      version: defaultScanDisplaySettings.version,
       refreshMode: draft.refreshMode,
       autoRefreshSeconds: clampAutoRefreshSeconds(draft.autoRefreshSeconds),
       visibleColumns: scanColumnKeys.filter((key) => draft.visibleColumns.includes(key))
@@ -156,11 +175,15 @@ export function readScanDisplaySettings(): ScanDisplaySettings {
       parsedValue.refreshMode === "automatic" || parsedValue.refreshMode === "manual" || parsedValue.refreshMode === "realtime"
         ? parsedValue.refreshMode
         : defaultScanDisplaySettings.refreshMode;
-    const visibleColumns = Array.isArray(parsedValue.visibleColumns)
-      ? scanColumnKeys.filter((key) => parsedValue.visibleColumns?.includes(key))
-      : defaultScanDisplaySettings.visibleColumns;
+    const storedVisibleColumns = Array.isArray(parsedValue.visibleColumns) ? parsedValue.visibleColumns : defaultScanDisplaySettings.visibleColumns;
+    const migratedVisibleColumns =
+      Number(parsedValue.version ?? 1) < defaultScanDisplaySettings.version
+        ? [...storedVisibleColumns, "machine_name" as const, "line" as const]
+        : storedVisibleColumns;
+    const visibleColumns = scanColumnKeys.filter((key) => migratedVisibleColumns.includes(key));
 
     return {
+      version: defaultScanDisplaySettings.version,
       refreshMode,
       autoRefreshSeconds: clampAutoRefreshSeconds(Number(parsedValue.autoRefreshSeconds)),
       visibleColumns: visibleColumns.length > 0 ? visibleColumns : defaultScanDisplaySettings.visibleColumns

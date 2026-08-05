@@ -10,7 +10,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n-provider";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
-import type { MachineRegistrationRequest, UserRole } from "@/features/shared/types";
+import type { MachineRegistrationRequest } from "@/features/shared/types";
 
 type LicenseExport = {
   file_name: string;
@@ -27,9 +27,6 @@ const emptyApprovalDraft: ApprovalDraft = {
   machine_name: ""
 };
 
-const licenseRoles: UserRole[] = ["ADMIN", "DEV"];
-const approveRoles: UserRole[] = ["ADMIN", "ENGINEER", "DEV"];
-
 export function MachineRegistrationRequestsPanel({ onChanged }: { onChanged: () => void }) {
   const { user } = useAuth();
   const { t } = useI18n();
@@ -42,9 +39,10 @@ export function MachineRegistrationRequestsPanel({ onChanged }: { onChanged: () 
   const [rejectTarget, setRejectTarget] = useState<MachineRegistrationRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const canManageLicense = Boolean(user?.role && licenseRoles.includes(user.role));
-  const canApprove = Boolean(user?.role && approveRoles.includes(user.role));
-  const canViewIdentity = user?.role === "DEV";
+  const canManageRegistration = user?.role === "DEV";
+  const canManageLicense = canManageRegistration;
+  const canApprove = canManageRegistration;
+  const canViewIdentity = canManageRegistration;
 
   const columns = useMemo<Column<MachineRegistrationRequest>[]>(
     () => [

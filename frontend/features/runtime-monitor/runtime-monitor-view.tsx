@@ -1,80 +1,96 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
-import { AppLogo } from "@/components/layout/app-logo";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 import { apiGet } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { toAppDateInput } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
-import { cn } from "@/lib/utils";
 import {
   MachineRuntimeCard,
   buildMachineRows,
   buildRuntimeSocketUrl,
   buildSessionServerTrendData,
-  type MachineRuntimeCardDisplayOptions,
-  type RuntimeChartTimeAxis
+  type RuntimeResultCounts
 } from "@/features/shared/machine-runtime-card";
+import { RuntimeDisplaySettingsMenu } from "@/features/shared/runtime-display-settings-menu";
+import {
+  buildRuntimeChartTimeAxis,
+  useRuntimeDisplayPreferences
+} from "@/features/shared/runtime-display-preferences";
+import {
+  RUNTIME_RESULT_SCOPE_STORAGE_KEY,
+  RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY,
+  RuntimeResultScopeControl,
+  buildScanTimeRangeFromScope,
+  indexRuntimeSummary,
+  isRuntimeResultScope,
+  resolveRuntimeResultCounts,
+  type RuntimeResultScope,
+  type RuntimeSummaryRow
+} from "@/features/shared/runtime-result-scope-control";
 import type { Machine, MachineRuntimeSession } from "@/features/shared/types";
-import type { MessageKey } from "@/lib/i18n";
+import { DevVirtualMachineButton } from "@/features/shared/dev-virtual-machine-button";
+import { useVirtualMachineRuntimes } from "@/features/shared/use-virtual-machine-runtimes";
+import { getVirtualRuntimeCounts } from "@/features/shared/virtual-machine-runtime";
+import { NgSoundControls } from "@/features/sound/ng-sound-controls";
+import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
 
 const RUNTIME_REFRESH_MS = 5000;
 const TIME_AXIS_REFRESH_MS = 30000;
-const COLUMN_STORAGE_KEY = "runtime-monitor-columns-per-row";
-const DISPLAY_STORAGE_KEY = "runtime-monitor-display-options";
-
-const defaultDisplayOptions: MachineRuntimeCardDisplayOptions = {
-  machineInfo: true,
-  currentProduct: true,
-  duration: true,
-  commonIssue: true,
-  serverChart: true
-};
-
-const displayOptionKeys = Object.keys(defaultDisplayOptions) as Array<keyof MachineRuntimeCardDisplayOptions>;
-const displayOptionLabelKeys: Record<keyof MachineRuntimeCardDisplayOptions, MessageKey> = {
-  machineInfo: "showMachineInfo",
-  currentProduct: "showCurrentProduct",
-  duration: "showRuntimeDuration",
-  commonIssue: "showCommonIssue",
-  serverChart: "showServerChart"
-};
 
 export function RuntimeMonitorView() {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [sessions, setSessions] = useState<MachineRuntimeSession[]>([]);
-  const [columnsPerRow, setColumnsPerRow] = useState(1);
-  const [displayOptions, setDisplayOptions] = useState<MachineRuntimeCardDisplayOptions>(defaultDisplayOptions);
+  const [resultScope, setResultScope] = useState<RuntimeResultScope>("session");
+  const [sinceDate, setSinceDate] = useState("");
+  const [resultCountsByMachine, setResultCountsByMachine] = useState<Record<number, RuntimeResultCounts>>({});
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const [isNavbarHidden, setIsNavbarHidden] = useState(false);
   const [timeAxisNowMs, setTimeAxisNowMs] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadSequence = useRef(0);
+  const { virtualMachines, createVirtualMachine } = useVirtualMachineRuntimes(user?.id);
+  const {
+    columnsPerRow,
+    displayOptions,
+    updateColumnsPerRow,
+    updateDisplayOption,
+    resetDisplayOptions
+  } = useRuntimeDisplayPreferences();
 
   const load = useCallback(
     async (showToast = false, background = false) => {
+      const requestId = ++loadSequence.current;
       if (!background) {
         setIsLoading(true);
         setError(null);
       }
+      if (resultScope !== "session") {
+        setScopeError(null);
+      }
 
       try {
-        const [machineResult, sessionResult] = await Promise.allSettled([
+        const summaryPath =
+          resultScope === "session"
+            ? null
+            : `/scans/runtime-summary?scope=${resultScope}${
+                resultScope === "since" ? `&from=${encodeURIComponent(sinceDate)}` : ""
+              }`;
+        const [machineResult, sessionResult, summaryResult] = await Promise.allSettled([
           apiGet<Machine[]>("/machines"),
-          apiGet<MachineRuntimeSession[]>("/runtime/sessions?take=200&include_scans=true")
+          apiGet<MachineRuntimeSession[]>("/runtime/sessions?take=200&include_scans=true"),
+          summaryPath ? apiGet<RuntimeSummaryRow[]>(summaryPath) : Promise.resolve(null)
         ]);
 
+        if (requestId !== loadSequence.current) {
+          return;
+        }
         if (machineResult.status === "rejected") {
           throw machineResult.reason;
         }
@@ -85,6 +101,21 @@ export function RuntimeMonitorView() {
         setSessions(nextSessions);
         setTimeAxisNowMs(Date.now());
         setError(null);
+
+        if (resultScope === "session") {
+          setResultCountsByMachine({});
+          setScopeError(null);
+        } else if (summaryResult.status === "fulfilled" && summaryResult.value) {
+          setResultCountsByMachine(indexRuntimeSummary(summaryResult.value.data ?? []));
+          setScopeError(null);
+        } else if (summaryResult.status === "rejected") {
+          const message = summaryResult.reason instanceof Error ? summaryResult.reason.message : t("runtimeSummaryLoadFailed");
+          setResultCountsByMachine({});
+          setScopeError(message);
+          if (showToast) {
+            toast.error(message);
+          }
+        }
 
         if (sessionResult.status === "rejected" && showToast) {
           toast.error(sessionResult.reason instanceof Error ? sessionResult.reason.message : t("error"));
@@ -98,21 +129,21 @@ export function RuntimeMonitorView() {
           toast.error(message);
         }
       } finally {
-        if (!background) {
+        if (!background && requestId === loadSequence.current) {
           setIsLoading(false);
         }
       }
     },
-    [t]
+    [resultScope, sinceDate, t]
   );
 
   useEffect(() => {
-    const savedValue = Number(window.localStorage.getItem(COLUMN_STORAGE_KEY));
-    if (Number.isFinite(savedValue)) {
-      setColumnsPerRow(clampColumnsPerRow(savedValue));
+    const savedScope = window.localStorage.getItem(RUNTIME_RESULT_SCOPE_STORAGE_KEY);
+    if (savedScope && isRuntimeResultScope(savedScope)) {
+      setResultScope(savedScope);
     }
-
-    setDisplayOptions(readSavedDisplayOptions());
+    setSinceDate(window.localStorage.getItem(RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY) || toAppDateInput(Date.now()));
+    setPreferencesReady(true);
   }, []);
 
   useEffect(() => {
@@ -124,6 +155,10 @@ export function RuntimeMonitorView() {
   }, [isNavbarHidden]);
 
   useEffect(() => {
+    if (!preferencesReady) {
+      return;
+    }
+
     void load();
     const interval = window.setInterval(() => {
       void load(false, true);
@@ -132,7 +167,7 @@ export function RuntimeMonitorView() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [load]);
+  }, [load, preferencesReady]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -153,7 +188,8 @@ export function RuntimeMonitorView() {
     const refreshRuntime = () => {
       void load(false, true);
     };
-    const refreshLatestScan = () => {
+    const refreshLatestScan = (payload: unknown) => {
+      handleNgSoundScanEvent(payload, t("ngSoundPlaybackFailed"));
       if (scanRefreshTimer) {
         window.clearTimeout(scanRefreshTimer);
       }
@@ -171,41 +207,51 @@ export function RuntimeMonitorView() {
       }
       socket.disconnect();
     };
-  }, [load]);
+  }, [load, t]);
 
   const rows = useMemo(() => {
-    return buildMachineRows(machines, sessions);
-  }, [machines, sessions]);
+    return buildMachineRows(
+      [...machines, ...virtualMachines.map((item) => item.machine)],
+      [...sessions, ...virtualMachines.map((item) => item.session)]
+    );
+  }, [machines, sessions, virtualMachines]);
+
+  const virtualRuntimeByMachineCode = useMemo(
+    () => new Map(virtualMachines.map((item) => [item.machine.machine_code, item] as const)),
+    [virtualMachines]
+  );
 
   const gridStyle = { "--machine-columns": columnsPerRow } as CSSProperties;
 
-  const updateColumnsPerRow = (value: number) => {
-    const nextValue = clampColumnsPerRow(value);
-    setColumnsPerRow(nextValue);
-    window.localStorage.setItem(COLUMN_STORAGE_KEY, String(nextValue));
+  const updateResultScope = (scope: RuntimeResultScope) => {
+    if (scope === "since" && !sinceDate) {
+      const appToday = toAppDateInput(Date.now());
+      setSinceDate(appToday);
+      window.localStorage.setItem(RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY, appToday);
+    }
+    setResultScope(scope);
+    window.localStorage.setItem(RUNTIME_RESULT_SCOPE_STORAGE_KEY, scope);
   };
 
-  const updateDisplayOption = (key: keyof MachineRuntimeCardDisplayOptions, checked: boolean) => {
-    const nextOptions = {
-      ...displayOptions,
-      [key]: checked
-    };
-    setDisplayOptions(nextOptions);
-    window.localStorage.setItem(DISPLAY_STORAGE_KEY, JSON.stringify(nextOptions));
-  };
-
-  const resetDisplayOptions = () => {
-    setDisplayOptions(defaultDisplayOptions);
-    window.localStorage.setItem(DISPLAY_STORAGE_KEY, JSON.stringify(defaultDisplayOptions));
+  const updateSinceDate = (value: string) => {
+    setSinceDate(value);
+    window.localStorage.setItem(RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY, value);
   };
 
   return (
     <section className="min-w-0 space-y-1" aria-label={t("runtimeMonitor")}>
+      <DevVirtualMachineButton
+        onCreate={createVirtualMachine}
+        className="fixed right-14 z-[70] min-h-10 shadow-md"
+        style={{ top: "calc(var(--app-header-height, 0px) + 0.5rem)" }}
+      />
+
       <RuntimeDisplaySettingsMenu
         columnsPerRow={columnsPerRow}
         isLoading={isLoading}
         isNavbarHidden={isNavbarHidden}
         options={displayOptions}
+        placement="floating"
         onColumnsPerRowChange={updateColumnsPerRow}
         onOptionChange={updateDisplayOption}
         onReload={() => void load(true)}
@@ -213,175 +259,54 @@ export function RuntimeMonitorView() {
         onToggleNavbar={() => setIsNavbarHidden((current) => !current)}
       />
 
+      <RuntimeResultScopeControl
+        scope={resultScope}
+        sinceDate={sinceDate}
+        maxDate={toAppDateInput(Date.now())}
+        isLoading={isLoading}
+        error={scopeError}
+        onScopeChange={updateResultScope}
+        onSinceDateChange={updateSinceDate}
+        trailingContent={<NgSoundControls />}
+      />
+
       {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
       {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
       {!isLoading && !error && rows.length === 0 ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("empty")}</div> : null}
 
-      {!isLoading && !error && rows.length > 0 ? (
+      {rows.length > 0 ? (
         <div className="grid min-w-0 grid-cols-1 gap-3 lg:[grid-template-columns:repeat(var(--machine-columns),minmax(0,1fr))]" style={gridStyle}>
-          {rows.map((row) => (
-            <MachineRuntimeCard
-              key={row.machine.id}
-              row={row}
-              trendData={buildSessionServerTrendData(row.session)}
-              timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
-              displayOptions={displayOptions}
-              showCommonLocalNgReason
-            />
-          ))}
+          {rows.map((row) => {
+            const virtualRuntime = virtualRuntimeByMachineCode.get(row.machine.machine_code);
+            const timeRange = buildScanTimeRangeFromScope(resultScope, sinceDate, row.session?.started_at);
+            const ngParams = new URLSearchParams();
+            if (row.machine.line_name) {
+              ngParams.set("line_name", row.machine.line_name);
+            }
+            ngParams.set("final_status", "NG");
+            if (timeRange.from) ngParams.set("from", timeRange.from);
+            if (timeRange.to) ngParams.set("to", timeRange.to);
+            const ngHref = `/scans?${ngParams.toString()}`;
+
+            return (
+              <MachineRuntimeCard
+                key={row.machine.id}
+                row={row}
+                trendData={virtualRuntime?.trendData ?? buildSessionServerTrendData(row.session)}
+                resultCounts={
+                  virtualRuntime
+                    ? getVirtualRuntimeCounts(virtualRuntime.session)
+                    : resolveRuntimeResultCounts(row.machine.id, row.session, resultScope, resultCountsByMachine)
+                }
+                timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
+                displayOptions={displayOptions}
+                showCommonLocalNgReason
+                ngHref={ngHref}
+              />
+            );
+          })}
         </div>
       ) : null}
     </section>
   );
-}
-
-function RuntimeDisplaySettingsMenu({
-  columnsPerRow,
-  isLoading,
-  isNavbarHidden,
-  options,
-  onColumnsPerRowChange,
-  onOptionChange,
-  onReload,
-  onReset,
-  onToggleNavbar
-}: {
-  columnsPerRow: number;
-  isLoading: boolean;
-  isNavbarHidden: boolean;
-  options: MachineRuntimeCardDisplayOptions;
-  onColumnsPerRowChange: (value: number) => void;
-  onOptionChange: (key: keyof MachineRuntimeCardDisplayOptions, checked: boolean) => void;
-  onReload: () => void;
-  onReset: () => void;
-  onToggleNavbar: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="fixed right-2 z-[70] h-10 w-10 border bg-background/95 p-0 shadow-md backdrop-blur"
-          style={{ top: "calc(var(--app-header-height, 0px) + 0.5rem)" }}
-          aria-label={t("runtimeDisplaySettings")}
-          title={t("runtimeDisplaySettings")}
-        >
-          <AppLogo className="h-8 w-8" imageClassName="h-6 w-6" />
-          <span className="sr-only">{t("runtimeDisplaySettings")}</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel>{t("runtimeDisplaySettings")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <div className="px-2 py-1.5">
-          <div className="mb-2 text-xs text-muted-foreground">{t("machinesPerRow")}</div>
-          <div className="grid grid-cols-3 gap-1">
-            {[1, 2, 3].map((value) => (
-              <Button
-                key={value}
-                type="button"
-                size="sm"
-                variant={columnsPerRow === value ? "default" : "outline"}
-                className="h-7 px-2"
-                aria-pressed={columnsPerRow === value}
-                onClick={(event) => {
-                  event.preventDefault();
-                  onColumnsPerRowChange(value);
-                }}
-              >
-                {value}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <DropdownMenuSeparator />
-        {displayOptionKeys.map((key) => (
-          <DropdownMenuCheckboxItem
-            key={key}
-            checked={options[key]}
-            onCheckedChange={(checked) => onOptionChange(key, Boolean(checked))}
-            onSelect={(event) => event.preventDefault()}
-          >
-            {t(displayOptionLabelKeys[key])}
-          </DropdownMenuCheckboxItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={(event) => {
-          event.preventDefault();
-          onReload();
-        }}>
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} aria-hidden="true" />
-          {t("retry")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={(event) => {
-          event.preventDefault();
-          onToggleNavbar();
-        }}>
-          {isNavbarHidden ? t("showNavbar") : t("hideNavbar")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onReset}>{t("showAllRuntimeInfo")}</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function readSavedDisplayOptions() {
-  const rawValue = window.localStorage.getItem(DISPLAY_STORAGE_KEY);
-  if (!rawValue) {
-    return defaultDisplayOptions;
-  }
-
-  try {
-    const parsedValue = JSON.parse(rawValue);
-    if (!parsedValue || typeof parsedValue !== "object") {
-      return defaultDisplayOptions;
-    }
-
-    return displayOptionKeys.reduce<MachineRuntimeCardDisplayOptions>(
-      (currentOptions, key) => ({
-        ...currentOptions,
-        [key]: typeof parsedValue[key] === "boolean" ? parsedValue[key] : defaultDisplayOptions[key]
-      }),
-      defaultDisplayOptions
-    );
-  } catch {
-    return defaultDisplayOptions;
-  }
-}
-
-function clampColumnsPerRow(value: number) {
-  return Math.min(3, Math.max(1, Math.round(value)));
-}
-
-function buildRuntimeChartTimeAxis(columnsPerRow: number, nowMs: number): RuntimeChartTimeAxis {
-  const columns = clampColumnsPerRow(columnsPerRow);
-
-  if (columns === 1) {
-    return {
-      bucketMinutes: 30,
-      maxBuckets: 25,
-      maxTicks: 9,
-      nowMs
-    };
-  }
-
-  if (columns === 2) {
-    return {
-      bucketMinutes: 30,
-      maxBuckets: 25,
-      maxTicks: 7,
-      nowMs
-    };
-  }
-
-  return {
-    bucketMinutes: 60,
-    maxBuckets: 13,
-    maxTicks: 5,
-    nowMs
-  };
 }

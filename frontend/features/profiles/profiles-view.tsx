@@ -480,8 +480,8 @@ function ProfileDefaultSettingsBar({
   };
 
   return (
-    <form className="flex min-w-0 flex-wrap items-end gap-2 xl:flex-nowrap xl:justify-end" onSubmit={onSubmit}>
-      <ProfileDefaultField label={t("colFactory")} className="w-20">
+    <form className="flex min-w-0 flex-wrap items-end gap-2 xl:justify-end" onSubmit={onSubmit}>
+      <ProfileDefaultField label={t("colFactory")} className="w-24">
         <Input
           value={settings.factory_code_default}
           disabled={disabled}
@@ -489,7 +489,7 @@ function ProfileDefaultSettingsBar({
           onChange={(event) => onChange({ ...settings, factory_code_default: event.target.value })}
         />
       </ProfileDefaultField>
-      <ProfileDefaultField label={t("colFullLength")} className="w-20">
+      <ProfileDefaultField label={t("colFullLength")} className="w-36">
         <Input
           type="number"
           min={1}
@@ -499,7 +499,7 @@ function ProfileDefaultSettingsBar({
           onChange={(event) => updateNumber("full_code_length_default", event.target.value)}
         />
       </ProfileDefaultField>
-      <ProfileDefaultField label={t("colFullVendorPosition")} className="w-24">
+      <ProfileDefaultField label={t("colFullVendorPosition")} className="w-56">
         <Input
           type="number"
           min={1}
@@ -509,7 +509,7 @@ function ProfileDefaultSettingsBar({
           onChange={(event) => updateNumber("full_vendor_position_default", event.target.value)}
         />
       </ProfileDefaultField>
-      <ProfileDefaultField label={t("colLedLength")} className="w-20">
+      <ProfileDefaultField label={t("colLedLength")} className="w-28">
         <Input
           type="number"
           min={1}
@@ -519,7 +519,7 @@ function ProfileDefaultSettingsBar({
           onChange={(event) => updateNumber("led_scan_length_default", event.target.value)}
         />
       </ProfileDefaultField>
-      <ProfileDefaultField label={t("colLedVendorPosition")} className="w-24">
+      <ProfileDefaultField label={t("colLedVendorPosition")} className="w-48">
         <Input
           type="number"
           min={1}
@@ -539,8 +539,8 @@ function ProfileDefaultSettingsBar({
 
 function ProfileDefaultField({ children, className, label }: { children: React.ReactNode; className: string; label: string }) {
   return (
-    <label className={cn("min-w-0 space-y-1 text-[11px] font-medium leading-none text-muted-foreground", className)}>
-      <span className="block truncate">{label}</span>
+    <label className={cn("min-w-0 shrink-0 space-y-1 text-[11px] font-medium text-muted-foreground", className)}>
+      <span className="block whitespace-normal leading-4">{label}</span>
       {children}
     </label>
   );

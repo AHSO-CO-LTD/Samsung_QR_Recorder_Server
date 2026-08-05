@@ -2,6 +2,8 @@
 
 Ứng dụng desktop server cho dự án kiểm tra mã độc nhất TV.
 
+Phiên bản hiện tại: `1.1.8`.
+
 ## Cấu trúc
 
 ```txt
@@ -73,4 +75,32 @@ SQL khởi tạo database local Python PostgreSQL:
 
 ```txt
 document/11-sql-khoi-tao-db-may-local-python-postgres.md
+```
+
+Hệ thống hướng dẫn trong app và xuất PDF:
+
+```txt
+document/12-he-thong-huong-dan-va-xuat-pdf.md
+```
+
+## Build và phát hành Windows
+
+Kiểm tra toàn bộ source:
+
+```bash
+npm run check
+```
+
+Build installer Windows tại máy local:
+
+```bash
+npm run dist:win
+```
+
+GitHub Actions tự build và phát hành installer khi push tag `v*`, ví dụ:
+
+```bash
+git tag v1.1.8
+git push origin setup
+git push origin v1.1.8
 ```

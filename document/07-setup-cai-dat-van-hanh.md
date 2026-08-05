@@ -130,7 +130,7 @@ npm run build -w frontend
 npm run build -w electron
 ```
 
-## 7. Installer
+## 7. Installer và GitHub Release
 
 Electron builder config nằm ở:
 
@@ -138,16 +138,42 @@ Electron builder config nằm ở:
 electron/electron-builder.yml
 ```
 
-Định hướng production:
+Build installer Windows tại máy local:
 
-- Build backend NestJS ra `backend/dist`.
-- Build Next.js ra standalone hoặc static runtime phù hợp.
-- Electron start backend local.
-- Electron load frontend local.
-- Installer cài app vào máy server.
-- Cần có first-run setup để cấu hình database và port.
+```bash
+npm run dist:win
+```
 
-Hiện tại scaffold đã có nền Electron và config installer, nhưng lifecycle production cần hoàn thiện thêm ở giai đoạn sau.
+Pipeline này:
+
+1. Validate/generate Prisma Client.
+2. Build `shared`, `backend`, `frontend` và `electron`.
+3. Chuẩn bị runtime production trong `release-runtime/`.
+4. Đóng gói NSIS installer vào `release/`.
+
+Workflow GitHub nằm tại:
+
+```txt
+.github/workflows/windows-setup.yml
+```
+
+Khi push tag `v*`, workflow sẽ:
+
+1. Đồng bộ version release.
+2. Build installer trên `windows-latest`.
+3. Tạo GitHub Release nếu chưa có.
+4. Upload file `.exe` và `.exe.blockmap`.
+
+Quy trình release:
+
+```bash
+npm run check
+git tag vX.Y.Z
+git push origin setup
+git push origin vX.Y.Z
+```
+
+Không tạo tag trước khi `npm run check` pass và version trong các workspace đã đồng bộ.
 
 ## 8. Vận hành trong nhà máy
 

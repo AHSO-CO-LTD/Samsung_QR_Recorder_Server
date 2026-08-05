@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { RuntimeConnectionRegistry } from "../../common/runtime/runtime-connection-registry.service";
+import { hasNewRuntimeResult, isRuntimePauseDue, RUNTIME_PAUSE_TIMEOUT_MS } from "../../common/runtime/runtime-state";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -42,13 +44,14 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly runtimeConnections: RuntimeConnectionRegistry
   ) {}
 
   onModuleInit() {
-    void this.markStaleHeartbeatMachinesOffline().catch((error) => this.logger.warn(`Initial heartbeat stale sweep failed: ${this.formatError(error)}`));
+    void this.sweepMachineRuntimeStates().catch((error) => this.logger.warn(`Initial machine runtime sweep failed: ${this.formatError(error)}`));
     this.heartbeatSweepTimer = setInterval(() => {
-      void this.markStaleHeartbeatMachinesOffline().catch((error) => this.logger.warn(`Heartbeat stale sweep failed: ${this.formatError(error)}`));
+      void this.sweepMachineRuntimeStates().catch((error) => this.logger.warn(`Machine runtime sweep failed: ${this.formatError(error)}`));
     }, HEARTBEAT_STALE_SWEEP_INTERVAL_MS);
   }
 
@@ -242,10 +245,124 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  private async sweepMachineRuntimeStates(now = new Date()) {
+    await this.markStaleHeartbeatMachinesOffline(now);
+    await this.markInactiveRuntimeSessionsPaused(now);
+  }
+
+  async markInactiveRuntimeSessionsPaused(now = new Date()) {
+    const cutoff = new Date(now.getTime() - RUNTIME_PAUSE_TIMEOUT_MS);
+    const candidates = await this.prisma.machineRuntimeSession.findMany({
+      where: {
+        status: "RUNNING",
+        ended_at: null,
+        OR: [
+          {
+            last_result_at: {
+              lte: cutoff
+            }
+          },
+          {
+            last_result_at: null,
+            started_at: {
+              lte: cutoff
+            }
+          }
+        ]
+      },
+      select: {
+        id: true,
+        machine_id: true,
+        machine_code: true,
+        current_product_id: true,
+        source: true,
+        status: true,
+        started_at: true,
+        last_result_at: true,
+        machine: {
+          select: {
+            sync_state: {
+              select: {
+                connection_status: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const pausableSessions = candidates.filter((session) => {
+      const connectionAlive =
+        session.source === "WEBSOCKET"
+          ? this.runtimeConnections.hasConnection(session.machine_id)
+          : session.machine.sync_state?.connection_status === "ONLINE";
+
+      return isRuntimePauseDue({
+        status: session.status,
+        startedAt: session.started_at,
+        lastResultAt: session.last_result_at,
+        connectionAlive,
+        now
+      });
+    });
+
+    let updated = 0;
+    for (const session of pausableSessions) {
+      const updateResult = await this.prisma.machineRuntimeSession.updateMany({
+        where: {
+          id: session.id,
+          status: "RUNNING",
+          ended_at: null,
+          OR: [
+            {
+              last_result_at: {
+                lte: cutoff
+              }
+            },
+            {
+              last_result_at: null,
+              started_at: {
+                lte: cutoff
+              }
+            }
+          ]
+        },
+        data: {
+          status: "PAUSED"
+        }
+      });
+
+      if (updateResult.count === 0) {
+        continue;
+      }
+
+      updated += updateResult.count;
+      await this.prisma.machineRuntimeEvent.create({
+        data: {
+          session_id: session.id,
+          product_id: session.current_product_id,
+          machine_id: session.machine_id,
+          machine_code: session.machine_code,
+          event_type: "PAUSED",
+          payload_json: {
+            reason: "NO_NEW_RESULT",
+            timeout_seconds: RUNTIME_PAUSE_TIMEOUT_MS / 1000,
+            paused_at: now.toISOString()
+          }
+        }
+      });
+    }
+
+    return {
+      updated,
+      cutoff
+    };
+  }
+
   async markStaleHeartbeatMachinesOffline(now = new Date()) {
     const timeoutSeconds = await this.resolveHeartbeatDisconnectSeconds();
     const cutoff = new Date(now.getTime() - timeoutSeconds * 1000);
-    const staleStates = await this.prisma.machineSyncState.findMany({
+    const staleCandidates = await this.prisma.machineSyncState.findMany({
       where: {
         connection_status: "ONLINE",
         OR: [{ last_seen_at: null }, { last_seen_at: { lt: cutoff } }],
@@ -263,6 +380,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         last_ip_address: true
       }
     });
+    const staleStates = staleCandidates.filter((state) => !this.runtimeConnections.hasConnection(state.machine_id));
 
     if (staleStates.length === 0) {
       return {
@@ -281,7 +399,9 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
           machine_id: {
             in: machineIds
           },
-          status: "RUNNING"
+          status: {
+            in: ["RUNNING", "PAUSED"]
+          }
         },
         select: {
           id: true,
@@ -327,7 +447,9 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
           id: {
             in: runningSessions.map((session) => session.id)
           },
-          status: "RUNNING"
+          status: {
+            in: ["RUNNING", "PAUSED"]
+          }
         },
         data: {
           status: "DISCONNECTED",
@@ -1192,16 +1314,37 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     now: Date,
     previousConnectionStatus: string | null
   ) {
+    if (await this.shouldPreferWebSocketRuntime(machine.id)) {
+      return this.prisma.machineRuntimeSession.findFirst({
+        where: {
+          machine_id: machine.id
+        },
+        orderBy: [{ started_at: "desc" }, { id: "desc" }],
+        include: {
+          current_product: true
+        }
+      });
+    }
+
     const runningSession = await this.prisma.machineRuntimeSession.findFirst({
       where: {
         machine_id: machine.id,
-        status: "RUNNING",
+        source: "HEARTBEAT",
+        status: {
+          in: ["RUNNING", "PAUSED"]
+        },
         ended_at: null
       },
       orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
       select: {
         id: true,
-        current_product_id: true
+        current_product_id: true,
+        status: true,
+        total_count: true,
+        ok_count: true,
+        ng_count: true,
+        last_code: true,
+        last_local_scan_id: true
       }
     });
 
@@ -1210,13 +1353,21 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       return this.createHeartbeatRuntimeSession(machine, dto, ipAddress, now, previousConnectionStatus);
     }
 
+    const hasNewResult = hasNewRuntimeResult(runningSession, {
+      total_count: dto.local_total_record,
+      ok_count: dto.local_ok_record,
+      ng_count: dto.local_ng_record
+    });
+    const wasPaused = runningSession.status === "PAUSED";
+
     await this.prisma.machineRuntimeSession.update({
       where: { id: runningSession.id },
       data: {
-        status: "RUNNING",
+        status: hasNewResult ? "RUNNING" : runningSession.status,
         total_count: dto.local_total_record ?? undefined,
         ok_count: dto.local_ok_record ?? undefined,
         ng_count: dto.local_ng_record ?? undefined,
+        last_result_at: hasNewResult ? now : undefined,
         disconnected_at: null,
         last_seen_at: now
       }
@@ -1229,6 +1380,23 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
           total_count: dto.local_total_record ?? undefined,
           ok_count: dto.local_ok_record ?? undefined,
           ng_count: dto.local_ng_record ?? undefined
+        }
+      });
+    }
+
+    if (wasPaused && hasNewResult) {
+      await this.prisma.machineRuntimeEvent.create({
+        data: {
+          session_id: runningSession.id,
+          product_id: runningSession.current_product_id,
+          machine_id: machine.id,
+          machine_code: machine.machine_code,
+          event_type: "RESUMED",
+          ip_address: ipAddress,
+          payload_json: {
+            reason: "HEARTBEAT_COUNTER_CHANGED",
+            resumed_at: now.toISOString()
+          }
         }
       });
     }
@@ -1254,6 +1422,7 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         machine_id: machine.id,
         machine_code: machine.machine_code,
         status: "RUNNING",
+        source: "HEARTBEAT",
         total_count: dto.local_total_record ?? 0,
         ok_count: dto.local_ok_record ?? 0,
         ng_count: dto.local_ng_record ?? 0,
@@ -1319,8 +1488,9 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         machine_id: machineId,
         ended_at: null,
         status: {
-          in: ["DISCONNECTED", "ERROR"]
-        }
+          in: ["PAUSED", "DISCONNECTED", "ERROR"]
+        },
+        source: "HEARTBEAT"
       },
       select: {
         id: true
@@ -1354,6 +1524,24 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
         last_seen_at: now
       }
     });
+  }
+
+  private async shouldPreferWebSocketRuntime(machineId: number) {
+    if (this.runtimeConnections.hasConnection(machineId)) {
+      return true;
+    }
+
+    const latestSession = await this.prisma.machineRuntimeSession.findFirst({
+      where: {
+        machine_id: machineId
+      },
+      orderBy: [{ started_at: "desc" }, { id: "desc" }],
+      select: {
+        source: true
+      }
+    });
+
+    return latestSession?.source === "WEBSOCKET";
   }
 
   private async ensureMachineById(id: number) {

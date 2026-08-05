@@ -13,3 +13,25 @@ export function getVietnamDayRange(value: Date = new Date()) {
     end: new Date(startMs + DAY_MS)
   };
 }
+
+export function parseVietnamDateStart(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    calendarDate.getUTCFullYear() !== year ||
+    calendarDate.getUTCMonth() !== month - 1 ||
+    calendarDate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return new Date(calendarDate.getTime() - VIETNAM_UTC_OFFSET_MS);
+}

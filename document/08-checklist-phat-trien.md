@@ -67,6 +67,9 @@
 - [x] Có error state.
 - [x] Có empty state.
 - [x] Có Sonner notification.
+- [x] Có catalog hướng dẫn `/guides`.
+- [x] Có hướng dẫn theo từng bước với nội dung trước ảnh.
+- [x] Có xuất toàn bộ hướng dẫn thành PDF.
 - [ ] Thay JSON viewer bằng bảng dữ liệu chuyên dụng.
 - [ ] Thêm form tạo/sửa profile.
 - [ ] Thêm form tạo/sửa machine.
@@ -97,7 +100,17 @@
 - [ ] Submit scan duplicate pass.
 - [ ] Submit scan local NG pass.
 - [ ] Electron mở UI được.
-- [ ] Installer build được.
+- [x] Installer build được.
+
+## 7. Checklist hệ thống hướng dẫn
+
+- [x] Mỗi guide có `guide.json`.
+- [x] Mỗi bước có JSON chứa `title` và `content`.
+- [x] Ảnh và metadata dùng cùng tên số thứ tự.
+- [x] Manifest được tạo tự động trước dev/build frontend.
+- [x] Catalog và PDF dùng chung nguồn manifest.
+- [x] Modal, Electron PDF và browser PDF đều hiển thị nội dung trước ảnh.
+- [ ] Kiểm tra thủ công ảnh và nội dung của guide mới trước mỗi release.
 
 ## 8. Ghi chú audit dependency hiện tại
 

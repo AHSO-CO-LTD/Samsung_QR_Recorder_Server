@@ -10,7 +10,7 @@ export class RuntimeController {
   @Get("sessions")
   @ApiQuery({ name: "take", required: false, example: 100 })
   @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
-  @ApiQuery({ name: "status", required: false, enum: ["RUNNING", "STOPPED", "DISCONNECTED", "ERROR"] })
+  @ApiQuery({ name: "status", required: false, enum: ["RUNNING", "PAUSED", "STOPPED", "DISCONNECTED", "ERROR"] })
   @ApiQuery({ name: "include_scans", required: false, example: false })
   @ApiOkResponse({ description: "List machine runtime sessions captured by WebSocket." })
   listSessions(@Query("take") take?: string, @Query("machine_code") machineCode?: string, @Query("status") status?: string, @Query("include_scans") includeScans?: string) {

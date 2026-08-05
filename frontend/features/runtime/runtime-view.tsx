@@ -53,7 +53,9 @@ export function RuntimeView() {
   const columns = useMemo<Column<MachineRuntimeSession>[]>(
     () => [
       { key: "session", header: t("colSession"), render: (item) => <MonoText value={item.session_code} /> },
-      { key: "machine", header: t("colMachine"), render: (item) => <MonoText value={item.machine_code} /> },
+      { key: "machine", header: t("colMachineCode"), render: (item) => <MonoText value={item.machine_code} /> },
+      { key: "machine_name", header: t("colMachineName"), className: "min-w-[10rem]", render: (item) => item.machine?.machine_name ?? "-" },
+      { key: "line", header: t("colLine"), className: "min-w-[8rem]", render: (item) => item.machine?.line_name ?? "-" },
       { key: "status", header: t("colStatus"), render: (item) => <StatusBadge value={item.status} /> },
       { key: "product", header: t("colCurrentProduct"), render: (item) => <MonoText value={resolveCurrentProductCode(item)} /> },
       { key: "duration", header: t("colDuration"), render: (item) => formatDuration(item.started_at, item.ended_at ?? item.last_seen_at) },
@@ -86,7 +88,9 @@ export function RuntimeView() {
         getRowKey={(item) => item.id}
         emptyText={t("noRuntimeSessions")}
         searchableText={(item) =>
-          `${item.session_code} ${item.machine_code} ${item.status} ${resolveCurrentProductCode(item) ?? ""} ${item.last_result ?? ""} ${item.last_code ?? ""}`
+          `${item.session_code} ${item.machine_code} ${item.machine?.machine_name ?? ""} ${item.machine?.line_name ?? ""} ${item.status} ${
+            resolveCurrentProductCode(item) ?? ""
+          } ${item.last_result ?? ""} ${item.last_code ?? ""}`
         }
       />
 
@@ -162,7 +166,7 @@ function ProductTable({ items }: { items: MachineRuntimeProduct[] }) {
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table>
+      <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
         <TableHeader>
           <TableRow>
             <TableHead>{t("colProduct")}</TableHead>
@@ -198,7 +202,7 @@ function EventTable({ items }: { items: MachineRuntimeEvent[] }) {
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table>
+      <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
         <TableHeader>
           <TableRow>
             <TableHead>{t("colTime")}</TableHead>
@@ -232,7 +236,7 @@ function ScanTable({ items }: { items: ScanRecord[] }) {
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table>
+      <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
         <TableHeader>
           <TableRow>
             <TableHead>{t("colScanTime")}</TableHead>
@@ -264,7 +268,7 @@ function AdjustmentTable({ items }: { items: MachineRuntimeAdjustmentLog[] }) {
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table>
+      <Table showTopScrollbar topScrollbarLabel={t("tableTopScrollbar")}>
         <TableHeader>
           <TableRow>
             <TableHead>{t("colTime")}</TableHead>

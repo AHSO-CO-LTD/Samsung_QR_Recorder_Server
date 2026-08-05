@@ -4,6 +4,7 @@ export type Machine = {
   id: number;
   machine_code: string;
   machine_name: string;
+  is_virtual?: boolean;
   serial?: string | null;
   uid?: string | null;
   license_key_raw?: string | null;
@@ -130,6 +131,7 @@ export type ScanRecord = {
   server_status: string;
   final_status: string;
   ng_reason?: string | null;
+  ng_reason_definition?: ScanErrorDefinition | null;
   scan_at: string;
   machine?: Machine;
   profile?: Profile;
@@ -143,7 +145,20 @@ export type ScanRecord = {
     led_suffix: string;
     local_status: string;
     ng_reason?: string | null;
+    ng_reason_definition?: ScanErrorDefinition | null;
   }>;
+};
+
+export type ScanErrorDefinition = {
+  id: number;
+  code: string;
+  name_vi?: string | null;
+  name_en?: string | null;
+  group_name?: string | null;
+  severity: "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+  default_message?: string | null;
+  local_action?: string | null;
+  is_active: boolean;
 };
 
 export type DuplicateKey = {
@@ -325,7 +340,8 @@ export type MachineRuntimeSession = {
   session_code: string;
   machine_id: number;
   machine_code: string;
-  status: "RUNNING" | "STOPPED" | "DISCONNECTED" | "ERROR";
+  status: "RUNNING" | "PAUSED" | "STOPPED" | "DISCONNECTED" | "ERROR";
+  source?: "WEBSOCKET" | "HEARTBEAT";
   current_product_id?: number | null;
   total_count: number;
   ok_count: number;
@@ -333,6 +349,7 @@ export type MachineRuntimeSession = {
   last_result?: string | null;
   last_code?: string | null;
   last_local_scan_id?: string | null;
+  last_result_at?: string | null;
   reconnect_count: number;
   started_at: string;
   ended_at?: string | null;

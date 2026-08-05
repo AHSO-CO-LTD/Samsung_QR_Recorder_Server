@@ -1,0 +1,4 @@
+{
+  "title": "Điều chỉnh quy tắc vận hành",
+  "content": "Trong tab Server, chỉ người được phân quyền mới thay đổi mã nhà máy, cửa sổ trùng, độ dài mã, vị trí vendor và thời gian heartbeat rồi nhấn Lưu."
+}

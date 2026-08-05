@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { WifiOff } from "lucide-react";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { Cell, Pie, PieChart } from "recharts";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { API_BASE_URL } from "@/lib/api";
@@ -11,6 +13,9 @@ import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
 import { MonoText } from "@/features/shared/data-view";
 import { LatestScanStatusStrip } from "@/features/shared/latest-scan-status-strip";
+import { ResponsiveRuntimeCount } from "@/features/shared/responsive-runtime-count";
+import { formatRuntimeCount, formatRuntimeCountFull } from "@/features/shared/runtime-count";
+import { formatIssueReason, resolveScanIssueReason } from "@/features/shared/scan-issue-reason";
 import type { Machine, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
 import type { Locale } from "@/lib/i18n";
 
@@ -18,17 +23,13 @@ export const SERVER_TREND_HOURS = 12;
 export const SERVER_TREND_BUCKET_MINUTES = 30;
 
 const okNgChartConfig = {
-  total: {
-    label: "Total",
-    color: "hsl(var(--primary))"
-  },
   ok: {
     label: "OK",
-    color: "hsl(var(--chart-ok))"
+    color: "var(--chart-ok)"
   },
   ng: {
     label: "NG",
-    color: "hsl(var(--chart-ng))"
+    color: "var(--chart-ng)"
   }
 } satisfies ChartConfig;
 
@@ -76,29 +77,50 @@ const defaultDisplayOptions: MachineRuntimeCardDisplayOptions = {
 
 export type TrendByMachine = Record<string, ScanTrendPoint[]>;
 
+export type RuntimeResultCounts = {
+  ok: number;
+  ng: number;
+  total: number;
+};
+
 type MachineRuntimeCardProps = {
   row: MachineRuntimeRow;
   trendData?: ScanTrendPoint[];
+  resultCounts?: RuntimeResultCounts;
   timeAxis?: RuntimeChartTimeAxis;
   displayOptions?: Partial<MachineRuntimeCardDisplayOptions>;
   showCommonLocalNgReason?: boolean;
   showServerChart?: boolean;
+  ngHref?: string;
 };
 
 export function MachineRuntimeCard({
   row,
   trendData = emptyTrendData,
+  resultCounts,
   timeAxis,
   displayOptions,
   showCommonLocalNgReason = false,
-  showServerChart = true
+  showServerChart = true,
+  ngHref
 }: MachineRuntimeCardProps) {
   const { t, locale } = useI18n();
-  const { machine, session, isConnected, isRunning } = row;
+  const { machine, session, isConnected } = row;
   const currentProduct = resolveCurrentProductCode(session);
   const serverChartData = showServerChart ? buildIncrementalCumulativeChartData(trendData, timeAxis) : [];
   const serverCounts = resolveOkNgCountsFromChart(serverChartData, { ok: 0, ng: 0, total: 0 });
   const serverTotal = showServerChart ? resolveCumulativeTotal(serverChartData, 0) : 0;
+  const displayedCounts = resultCounts
+    ? {
+        ok: toSafeCount(resultCounts.ok),
+        ng: toSafeCount(resultCounts.ng),
+        total: toSafeCount(resultCounts.total)
+      }
+    : {
+        ok: serverCounts.ok,
+        ng: serverCounts.ng,
+        total: serverTotal
+      };
   const activeDisplayOptions = { ...defaultDisplayOptions, ...displayOptions };
   const shouldShowCommonIssue = showCommonLocalNgReason && activeDisplayOptions.commonIssue;
   const shouldShowServerChart = showServerChart && activeDisplayOptions.serverChart;
@@ -113,8 +135,18 @@ export function MachineRuntimeCard({
     normalizeScanValue(latestScan?.local_scan_id) ??
     normalizeScanValue(session?.last_local_scan_id);
   const latestScanResult = normalizeScanValue(latestScan?.final_status) ?? normalizeScanValue(session?.last_result);
+  const latestScanAt = latestScan?.scan_at ?? session?.last_result_at ?? null;
+  const runtimeStatus = resolveMachineRuntimeDisplayStatus(session, isConnected);
+  const shouldShowDisconnectedState = !isConnected && runtimeStatus !== "STOPPED";
   const headerItems = [
-    activeDisplayOptions.machineInfo ? <MachineIdentity key="machine" name={machine.machine_name || machine.machine_code} code={machine.machine_code} /> : null,
+    activeDisplayOptions.machineInfo ? (
+      <MachineIdentity
+        key="machine"
+        name={machine.machine_name || machine.machine_code}
+        line={machine.line_name || "-"}
+        isVirtual={Boolean(machine.is_virtual)}
+      />
+    ) : null,
     activeDisplayOptions.currentProduct ? <HeaderMetric key="product" label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} /> : null,
     activeDisplayOptions.duration ? <HeaderMetric key="duration" label={t("colDuration")} value={<RuntimeDuration session={session} />} /> : null,
     shouldShowCommonIssue ? (
@@ -136,19 +168,29 @@ export function MachineRuntimeCard({
   ].filter(Boolean);
 
   return (
-    <Card className={cn("relative overflow-hidden", isConnected && isRunning && "border-emerald-500/70", !isConnected && "border-muted bg-muted/40 text-muted-foreground")}>
-      {!isConnected ? (
+    <Card
+      className={cn(
+        "relative overflow-hidden",
+        runtimeStatus === "RUNNING" && "border-runtime-ok",
+        runtimeStatus === "PAUSED" && "border-runtime-warning",
+        runtimeStatus === "STOPPED" && "border-muted-foreground/60",
+        runtimeStatus === "DISCONNECTED" && "border-runtime-ng",
+        runtimeStatus === "ERROR" && "border-runtime-ng",
+        shouldShowDisconnectedState && "bg-muted/40 text-muted-foreground"
+      )}
+    >
+      {shouldShowDisconnectedState ? (
         <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
           <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
           {t("machineNotConnected")}
         </div>
       ) : null}
 
-      <div className={cn(!isConnected && "pt-6 grayscale")}>
+      <div className={cn(shouldShowDisconnectedState && "pt-6")}>
         {headerItems.length > 0 ? (
-        <CardHeader>
+        <CardHeader className="pb-2 sm:pb-2">
           <div
-            className="grid min-w-0 gap-3 border-b pb-3 text-sm"
+            className="grid min-w-0 gap-3 text-sm"
             style={{ gridTemplateColumns: buildHeaderGridTemplate(headerItems.length) }}
           >
             {headerItems}
@@ -156,15 +198,20 @@ export function MachineRuntimeCard({
         </CardHeader>
         ) : null}
 
-        {shouldShowServerChart ? (
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <MetricTrendBlock title={t("serverFinalOkNgGraph")} total={serverTotal} data={serverChartData} maxTicks={timeAxis?.maxTicks} />
-            <OkNgSummary ok={serverCounts.ok} ng={serverCounts.ng} />
-          </div>
+        <CardContent className="px-3 py-2 sm:px-4 sm:py-2">
+          {shouldShowServerChart ? (
+            <MachineRuntimeOverview
+              ok={displayedCounts.ok}
+              ng={displayedCounts.ng}
+              total={displayedCounts.total}
+              status={runtimeStatus}
+              ngHref={ngHref}
+            />
+          ) : (
+            <RuntimeStatusRow status={runtimeStatus} />
+          )}
         </CardContent>
-        ) : null}
-        <LatestScanStatusStrip code={latestScanCode} result={latestScanResult} />
+        <LatestScanStatusStrip code={latestScanCode} result={latestScanResult} scannedAt={latestScanAt} />
       </div>
     </Card>
   );
@@ -183,11 +230,23 @@ function buildHeaderGridTemplate(itemCount: number) {
   return "minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.15fr)";
 }
 
-function MachineIdentity({ name, code }: { name: string; code: string }) {
+function MachineIdentity({ name, line, isVirtual }: { name: string; line: string; isVirtual: boolean }) {
+  const { t } = useI18n();
+  const lineText = `Line: ${line}`;
+
   return (
     <div className="min-w-0">
-      <CardTitle className="truncate text-base">{name}</CardTitle>
-      <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{code}</div>
+      <div className="flex min-w-0 items-center gap-2">
+        <CardTitle className="truncate text-base">{name}</CardTitle>
+        {isVirtual ? (
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {t("virtualMachine")}
+          </Badge>
+        ) : null}
+      </div>
+      <div className="mt-1 truncate text-xs text-muted-foreground" title={lineText}>
+        <span className="font-medium">Line:</span> {line}
+      </div>
     </div>
   );
 }
@@ -228,99 +287,182 @@ function RuntimeDuration({ session }: { session?: MachineRuntimeSession }) {
   return <span className="tabular-nums">{formatDuration(session.started_at, getDurationEnd(session, nowMs))}</span>;
 }
 
-function MetricTrendBlock({
-  title,
+function MachineRuntimeOverview({
+  ok,
+  ng,
   total,
-  data,
-  emptyLabel,
-  maxTicks
+  status,
+  ngHref
 }: {
-  title: string;
+  ok: number;
+  ng: number;
   total: number;
-  data: ScanTrendPoint[];
-  emptyLabel?: string;
-  maxTicks?: number;
+  status: MachineRuntimeStatus;
+  ngHref?: string;
 }) {
   const { t } = useI18n();
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{title}</span>
-        <span>{t("colTotal")}: {total}</span>
+    <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(15rem,0.9fr)] md:items-stretch">
+      <div className="flex min-w-0 items-center border-b pb-3 md:border-b-0 md:border-r md:pb-0 md:pr-3">
+        <OkNgDonut ok={ok} ng={ng} total={total} />
       </div>
-      {data.length > 0 ? (
-        <MachineScanTrendChart data={data} maxTicks={maxTicks} />
-      ) : (
-        <div className="flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">{emptyLabel}</div>
+      <div className="grid min-h-52 grid-rows-4 gap-2">
+        <RuntimeMetricRow label="OK" value={ok} tone="ok" />
+        <RuntimeMetricRow label="NG" value={ng} tone="ng" href={ngHref} />
+        <RuntimeMetricRow label={t("colTotal")} value={total} tone="total" />
+        <RuntimeStatusRow status={status} />
+      </div>
+    </div>
+  );
+}
+
+function OkNgDonut({ ok, ng, total }: { ok: number; ng: number; total: number }) {
+  const { t, locale } = useI18n();
+  const data = [
+    { key: "ok", name: "OK", value: ok, color: "var(--color-ok)" },
+    { key: "ng", name: "NG", value: ng, color: "var(--color-ng)" }
+  ];
+  const hasData = total > 0;
+  const compactTotal = formatRuntimeCount(total, locale);
+  const fullTotal = formatRuntimeCountFull(total, locale);
+
+  return (
+    <div
+      className="relative mx-auto h-52 w-full max-w-80"
+      title={`${t("colTotal")}: ${fullTotal}`}
+      aria-label={`${t("colTotal")}: ${fullTotal}`}
+    >
+      <ChartContainer config={okNgChartConfig} className="h-full w-full">
+        <PieChart accessibilityLayer>
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Pie
+            data={hasData ? data : [{ key: "empty", name: t("empty"), value: 1, color: "hsl(var(--muted))" }]}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={65}
+            outerRadius={92}
+            strokeWidth={2}
+            isAnimationActive={false}
+          >
+            {(hasData ? data : [{ key: "empty", color: "hsl(var(--muted))" }]).map((item) => (
+              <Cell key={item.key} fill={item.color} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ChartContainer>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="font-mono text-3xl font-semibold tabular-nums">{compactTotal}</span>
+        <span className="text-[11px] text-muted-foreground">{t("colTotal")}</span>
+      </div>
+    </div>
+  );
+}
+
+function RuntimeMetricRow({
+  label,
+  value,
+  tone,
+  href
+}: {
+  label: string;
+  value: number;
+  tone: "ok" | "ng" | "total";
+  href?: string;
+}) {
+  const content = (
+    <div
+      className={cn(
+        "grid h-full grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm transition-colors",
+        tone === "ok" && "border-runtime-ok bg-runtime-ok/10",
+        tone === "ng" && "border-runtime-ng bg-runtime-ng/10",
+        tone === "total" && "border-primary bg-primary/10",
+        href && tone === "ng" && "hover:border-runtime-ng/80 hover:bg-runtime-ng/20"
       )}
+    >
+      <div
+        className={cn(
+          "px-3 py-2 font-semibold",
+          tone === "ok" && "bg-runtime-ok text-[var(--runtime-black)]",
+          tone === "ng" && "bg-runtime-ng text-[var(--runtime-white)]",
+          tone === "total" && "bg-primary text-primary-foreground"
+        )}
+      >
+        {label}
+      </div>
+      <ResponsiveRuntimeCount value={value} />
     </div>
   );
-}
 
-function MachineScanTrendChart({ data, maxTicks }: { data: ScanTrendPoint[]; maxTicks?: number }) {
-  const ticks = maxTicks ? selectChartTicks(data, maxTicks) : undefined;
-
-  return (
-    <ChartContainer config={okNgChartConfig} className="h-28 w-full">
-      <LineChart data={data} margin={{ left: 4, right: 24, top: 8, bottom: 0 }}>
-        <CartesianGrid vertical={false} />
-        <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={20} tickMargin={8} ticks={ticks} interval={ticks ? 0 : "preserveEnd"} />
-        <YAxis tickLine={false} axisLine={false} width={32} allowDecimals={false} domain={[0, (dataMax: number) => Math.max(1, dataMax)]} />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <Line dataKey="total" type="monotone" stroke="var(--color-total)" strokeWidth={2.25} dot={false} activeDot={{ r: 3 }} animationDuration={250} />
-        <Line dataKey="ok" type="monotone" stroke="var(--color-ok)" strokeWidth={2} dot={false} activeDot={{ r: 3 }} animationDuration={250} />
-        <Line dataKey="ng" type="monotone" stroke="var(--color-ng)" strokeWidth={2} dot={false} activeDot={{ r: 3 }} animationDuration={250} />
-      </LineChart>
-    </ChartContainer>
-  );
-}
-
-function selectChartTicks(data: ScanTrendPoint[], maxTicks: number) {
-  const labels = data.map((point) => point.date);
-  const uniqueLabels = Array.from(new Set(labels));
-  const safeMaxTicks = Math.max(2, Math.floor(maxTicks));
-
-  if (uniqueLabels.length <= safeMaxTicks) {
-    return uniqueLabels;
+  if (href && tone === "ng") {
+    return (
+      <Link href={href} title="Xem lịch sử quét NG" className="block min-h-0 min-w-0 transition-transform active:scale-[0.99]">
+        {content}
+      </Link>
+    );
   }
 
-  const selected = new Set<string>();
-  const lastIndex = uniqueLabels.length - 1;
-  for (let index = 0; index < safeMaxTicks; index += 1) {
-    selected.add(uniqueLabels[Math.round((index * lastIndex) / (safeMaxTicks - 1))]);
-  }
-
-  return uniqueLabels.filter((label) => selected.has(label));
+  return content;
 }
 
-function OkNgSummary({ ok, ng }: { ok: number; ng: number }) {
+function RuntimeStatusRow({ status }: { status: MachineRuntimeStatus }) {
+  const { t } = useI18n();
+  const label =
+    status === "RUNNING"
+      ? t("statusRunning")
+      : status === "PAUSED"
+        ? t("statusPaused")
+        : status === "STOPPED"
+          ? t("statusStopped")
+          : status === "ERROR"
+            ? t("statusError")
+            : t("statusDisconnected");
+
+  const isRunning = status === "RUNNING";
+  const isPaused = status === "PAUSED";
+  const isStopped = status === "STOPPED";
+  const isFault = status === "DISCONNECTED" || status === "ERROR";
+
   return (
-    <div className="space-y-2">
-      <OkNgBar ok={ok} ng={ng} />
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-emerald-700 dark:text-emerald-300">OK {ok}</div>
-        <div className="rounded-md border border-destructive/25 bg-destructive/10 px-2 py-1 text-destructive">NG {ng}</div>
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm",
+        isRunning && "border-runtime-ok",
+        isPaused && "border-runtime-warning",
+        isStopped && "border-muted-foreground/60",
+        isFault && "border-runtime-ng"
+      )}
+    >
+      <div
+        className={cn(
+          "px-3 py-2 font-medium",
+          isRunning && "bg-runtime-ok/15",
+          isPaused && "bg-runtime-warning/20",
+          isStopped && "bg-muted",
+          isFault && "bg-runtime-ng/15"
+        )}
+      >
+        {t("machineRuntimeStatus")}
+      </div>
+      <div
+        className={cn(
+          "border-l px-3 py-2 text-right font-semibold",
+          isRunning && "border-black/15 bg-runtime-ok text-[var(--runtime-black)]",
+          isPaused && "border-black/15 bg-runtime-warning text-[var(--runtime-black)]",
+          isStopped && "border-border bg-muted-foreground text-background",
+          isFault && "border-black/15 bg-runtime-ng text-[var(--runtime-black)]"
+        )}
+      >
+        {label}
       </div>
     </div>
   );
 }
 
-function OkNgBar({ ok, ng }: { ok: number; ng: number }) {
-  const total = ok + ng;
-  const okPercent = total > 0 ? Math.max(0, Math.min(100, (ok / total) * 100)) : 0;
-  const ngPercent = total > 0 ? 100 - okPercent : 0;
+type MachineRuntimeStatus = MachineRuntimeSession["status"];
 
-  return (
-    <div className="h-3 w-full overflow-hidden rounded-sm border bg-muted" aria-label={`OK ${ok}, NG ${ng}`}>
-      {total > 0 ? (
-        <div className="flex h-full w-full">
-          <div className="h-full bg-emerald-500" style={{ width: `${okPercent}%` }} />
-          <div className="h-full bg-destructive" style={{ width: `${ngPercent}%` }} />
-        </div>
-      ) : null}
-    </div>
-  );
+export function resolveMachineRuntimeDisplayStatus(session: MachineRuntimeSession | undefined, isConnected: boolean): MachineRuntimeStatus {
+  return session?.status ?? (isConnected ? "STOPPED" : "DISCONNECTED");
 }
 
 export function buildMachineRows(machines: Machine[], sessions: MachineRuntimeSession[]) {
@@ -330,9 +472,11 @@ export function buildMachineRows(machines: Machine[], sessions: MachineRuntimeSe
     .map((machine): MachineRuntimeRow => {
       const session = sessionByMachine.get(machine.machine_code);
       const isRunning = session?.status === "RUNNING";
+      const isPaused = session?.status === "PAUSED";
       const isOnline = machine.sync_state?.connection_status === "ONLINE";
-      const isConnected = machine.is_active && (isRunning || isOnline);
-      const sortScore = isRunning ? 0 : isOnline ? 1 : machine.is_active ? 2 : 3;
+      const isDisconnectedSession = session?.status === "DISCONNECTED";
+      const isConnected = machine.is_active && !isDisconnectedSession && (isRunning || isPaused || isOnline);
+      const sortScore = isRunning ? 0 : isPaused ? 1 : isOnline ? 2 : machine.is_active ? 3 : 4;
       return { machine, session, isConnected, isRunning, sortScore };
     })
     .sort((left, right) => left.sortScore - right.sortScore || left.machine.machine_code.localeCompare(right.machine.machine_code));
@@ -365,7 +509,7 @@ export function resolveCommonLocalNgReason(session?: MachineRuntimeSession | nul
       continue;
     }
 
-    const reason = normalizeNgReason(record.ng_reason) ?? "LOCAL_NG";
+    const reason = resolveScanIssueReason(normalizeNgReason(record.ng_reason) ?? "LOCAL_NG", record);
     counts.set(reason, (counts.get(reason) ?? 0) + 1);
   }
 
@@ -386,125 +530,6 @@ export function resolveCommonLocalNgReason(session?: MachineRuntimeSession | nul
       }
     : null;
 }
-
-export function formatIssueReason(reason: string, locale: Locale) {
-  const category = getIssueReasonCategory(reason);
-  const labels: Record<IssueReasonCategory, Record<Locale, string>> = {
-    duplicate: {
-      vi: "Lỗi scan trùng lặp",
-      en: "Duplicate scan error"
-    },
-    led: {
-      vi: "Lỗi scan LED",
-      en: "LED scan error"
-    },
-    qr: {
-      vi: "Lỗi scan QR",
-      en: "QR scan error"
-    },
-    config: {
-      vi: "Lỗi scan cấu hình",
-      en: "Scan configuration error"
-    },
-    machine: {
-      vi: "Lỗi scan máy",
-      en: "Machine scan error"
-    },
-    connection: {
-      vi: "Lỗi scan kết nối",
-      en: "Scan connection error"
-    },
-    sync: {
-      vi: "Lỗi scan đồng bộ",
-      en: "Scan sync error"
-    },
-    data: {
-      vi: "Lỗi dữ liệu scan",
-      en: "Scan data error"
-    },
-    local: {
-      vi: "Lỗi scan local",
-      en: "Local scan error"
-    },
-    server: {
-      vi: "Lỗi scan server",
-      en: "Server scan error"
-    },
-    unknown: {
-      vi: "Lỗi scan khác",
-      en: "Other scan error"
-    }
-  };
-
-  return labels[category][locale];
-}
-
-function getIssueReasonCategory(reason: string): IssueReasonCategory {
-  const normalized = reason.trim().toUpperCase();
-  const exactCategoryByReason: Record<string, IssueReasonCategory> = {
-    SERVER_DUPLICATE: "duplicate",
-    LOCAL_DUPLICATE: "duplicate",
-    LED_SUFFIX_NOT_MATCH: "led",
-    LED_VENDOR_NOT_MATCH: "led",
-    LED_CODE_NOT_FOUND: "led",
-    FULL_LED_CODE_INVALID: "led",
-    FULL_CODE_INVALID: "qr",
-    FULL_CODE_INVALID_LENGTH: "qr",
-    FULL_VENDOR_NOT_MATCH: "qr",
-    FULL_FACTORY_NOT_MATCH: "qr",
-    CHASSIS_NOT_MATCH: "qr",
-    PROFILE_NOT_FOUND: "config",
-    PROFILE_VERSION_OUTDATED: "config",
-    CHASSIS_CODE_NOT_FOUND: "config",
-    PROFILE_LED_CODES_REQUIRED: "config",
-    PROFILE_LED_CODES_LIMIT_EXCEEDED: "config",
-    PROFILE_LED_SLOT_INVALID: "config",
-    PROFILE_LED_CODE_DUPLICATED: "config",
-    PROFILE_LED_SLOT_DUPLICATED: "config",
-    MACHINE_NOT_FOUND: "machine",
-    SERVER_DISCONNECTED: "connection",
-    SYNC_BATCH_HAS_NG: "sync",
-    PAYLOAD_INVALID: "data",
-    LOCAL_NG: "local"
-  };
-
-  if (exactCategoryByReason[normalized]) {
-    return exactCategoryByReason[normalized];
-  }
-  if (normalized.includes("DUPLICATE") || normalized.includes("TRUNG")) {
-    return "duplicate";
-  }
-  if (normalized.includes("LED")) {
-    return "led";
-  }
-  if (normalized.includes("QR") || normalized.includes("FULL") || normalized.includes("CHASSIS") || normalized.includes("CODE")) {
-    return "qr";
-  }
-  if (normalized.includes("PROFILE") || normalized.includes("CONFIG") || normalized.includes("SETTING")) {
-    return "config";
-  }
-  if (normalized.includes("MACHINE")) {
-    return "machine";
-  }
-  if (normalized.includes("DISCONNECT") || normalized.includes("OFFLINE") || normalized.includes("TIMEOUT")) {
-    return "connection";
-  }
-  if (normalized.includes("SYNC")) {
-    return "sync";
-  }
-  if (normalized.includes("PAYLOAD") || normalized.includes("DATA")) {
-    return "data";
-  }
-  if (normalized.includes("LOCAL")) {
-    return "local";
-  }
-  if (normalized.includes("SERVER")) {
-    return "server";
-  }
-  return "unknown";
-}
-
-type IssueReasonCategory = "duplicate" | "led" | "qr" | "config" | "machine" | "connection" | "sync" | "data" | "local" | "server" | "unknown";
 
 function resolveScanProductCode(scan?: ScanRecord | null) {
   return (

@@ -11,6 +11,7 @@ import { apiDownloadBlob, apiGet } from "@/lib/api";
 import { appDatetimeLocalToIso, toAppDatetimeLocal } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
+import { DateTimePickerField } from "@/features/shared/date-time-picker";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
 import type { Machine, Profile } from "@/features/shared/types";
 
@@ -397,8 +398,8 @@ export function ReportsView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-            <TextInputField type="datetime-local" label={text.from} value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
-            <TextInputField type="datetime-local" label={text.to} value={toDate} onChange={(event) => setToDate(event.target.value)} />
+            <DateTimePickerField label={text.from} value={fromDate} onChange={setFromDate} />
+            <DateTimePickerField label={text.to} value={toDate} onChange={setToDate} />
             <SelectField label={text.fieldMachine} value={machineCode} onChange={(event) => setMachineCode(event.target.value)}>
               <option value="">{text.allMachines}</option>
               {machines.map((machine) => (

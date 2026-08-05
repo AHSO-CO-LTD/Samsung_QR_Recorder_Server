@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld("serverApp", {
     ipcRenderer.on("app:close-requested", listener);
     return () => ipcRenderer.removeListener("app:close-requested", listener);
   },
+  onDevRecoveryShortcutPress: (handler: () => void) => {
+    const listener = () => handler();
+    ipcRenderer.on("dev-recovery-shortcut:pressed", listener);
+    return () => ipcRenderer.removeListener("dev-recovery-shortcut:pressed", listener);
+  },
   getWindowState: () => ipcRenderer.invoke("window:get-state"),
   getDisplaySettings: () => ipcRenderer.invoke("window:get-display-settings"),
   saveDisplaySettings: (settings: unknown) => ipcRenderer.invoke("window:save-display-settings", settings),
@@ -31,6 +36,9 @@ contextBridge.exposeInMainWorld("serverApp", {
   previewDisplaySettings: (settings: unknown) => ipcRenderer.invoke("window:preview-display-settings", settings),
   confirmDisplaySettings: () => ipcRenderer.invoke("window:confirm-display-settings"),
   rollbackDisplaySettings: () => ipcRenderer.invoke("window:rollback-display-settings"),
+  guides: {
+    exportPdf: (options: { defaultFileName: string }) => ipcRenderer.invoke("guides:export-pdf", options)
+  },
   updates: {
     check: () => ipcRenderer.invoke("updates:check"),
     install: (tagName: string) => ipcRenderer.invoke("updates:install", tagName)

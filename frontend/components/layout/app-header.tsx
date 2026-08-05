@@ -56,7 +56,7 @@ export function AppHeader({
                 href="/"
                 className="flex min-w-0 max-w-[min(72vw,24rem)] flex-1 items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:max-w-none lg:gap-3"
               >
-                <AppLogo />
+                <AppLogo src="/shc-logo.png" imageClassName="h-9 w-9" />
                 <span className="block min-w-0 truncate text-sm font-semibold">{t("appName")}</span>
               </Link>
             </TooltipTrigger>

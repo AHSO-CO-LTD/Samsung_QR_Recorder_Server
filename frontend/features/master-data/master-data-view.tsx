@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiPatch, apiPost } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
+import { GuideLauncher } from "@/features/guides/guide-launcher";
 import { CheckboxField, SelectField, TextInputField } from "@/features/shared/form-fields";
 import { DataTablePanel, DateText, MonoText, type Column } from "@/features/shared/data-view";
 import { ProfilesView } from "@/features/profiles/profiles-view";
@@ -56,6 +57,7 @@ const MASTER_CODE_INPUT_LENGTH = 6;
 
 export function MasterDataView() {
   const { t } = useI18n();
+  const [activeTab, setActiveTab] = useState("profiles");
   const [refreshId, setRefreshId] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<VendorDraft>(emptyVendorDraft);
@@ -253,13 +255,16 @@ export function MasterDataView() {
 
   return (
     <div className="min-w-0 space-y-4">
-      <Tabs defaultValue="profiles" className="min-w-0 space-y-4">
-        <TabsList className="w-full justify-start overflow-x-auto [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
-          <TabsTrigger value="profiles">{t("profilesTitle")}</TabsTrigger>
-          <TabsTrigger value="vendors">{t("vendorsTitle")}</TabsTrigger>
-          <TabsTrigger value="chassis">{t("chassisCodesTitle")}</TabsTrigger>
-          <TabsTrigger value="led">{t("ledCodesTitle")}</TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-4">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="w-full justify-start overflow-x-auto [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden">
+            <TabsTrigger value="profiles">{t("profilesTitle")}</TabsTrigger>
+            <TabsTrigger value="vendors">{t("vendorsTitle")}</TabsTrigger>
+            <TabsTrigger value="chassis">{t("chassisCodesTitle")}</TabsTrigger>
+            <TabsTrigger value="led">{t("ledCodesTitle")}</TabsTrigger>
+          </TabsList>
+          <GuideLauncher guideIds={activeTab === "profiles" ? ["09-quan-ly-profile"] : ["10-quan-ly-ma"]} />
+        </div>
         <TabsContent value="profiles">
           <ProfilesView />
         </TabsContent>

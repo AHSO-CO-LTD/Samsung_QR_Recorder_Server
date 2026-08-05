@@ -385,7 +385,7 @@ export class ReportsService {
       { label: labels.pending, value: counts.PENDING }
     ]);
     sheet.getRow(1).font = { bold: true };
-    sheet.getColumn("value").numFmt = "yyyy-mm-dd hh:mm:ss";
+    sheet.getColumn("value").numFmt = "dd/mm/yyyy hh:mm:ss";
   }
 
   private addScansSheet(workbook: ExcelJS.Workbook, records: ScanReportRecord[], selectedColumns: ScanReportColumnKey[], locale: Locale) {
@@ -421,7 +421,7 @@ export class ReportsService {
     for (const column of sheet.columns) {
       column.alignment = { vertical: "top", wrapText: true };
       if (column.key === "scan_at" || column.key === "created_at") {
-        column.numFmt = "yyyy-mm-dd hh:mm:ss";
+        column.numFmt = "dd/mm/yyyy hh:mm:ss";
       }
     }
   }
