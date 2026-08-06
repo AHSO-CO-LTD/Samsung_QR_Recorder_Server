@@ -11,10 +11,5 @@ export function buildNgReasonWhere(ngReason?: string): Prisma.ScanRecordWhereInp
     mode: Prisma.QueryMode.insensitive
   };
 
-  return {
-    OR: [
-      { ng_reason: reasonFilter },
-      { led_items: { some: { ng_reason: reasonFilter } } }
-    ]
-  };
+  return { ng_reason: reasonFilter };
 }

@@ -26,7 +26,7 @@ Máy server là nguồn dữ liệu chính thức. Server có các trách nhiệ
 - Quản lý profile sản phẩm, chassis code, LED code, vendor và rule parse.
 - Nhận heartbeat từ máy local.
 - Nhận dữ liệu scan từ máy local.
-- Lưu tất cả scan OK và NG để truy vết.
+- Lưu tất cả scan OK, NG và REWORK để truy vết. REWORK tạo một lượt quét mới, đồng thời chuyển lượt NG gốc sang `NG_REWORK` mà vẫn giữ thời gian NG ban đầu; `NG_REWORK` được tính trong nhóm NG.
 - Chỉ kiểm duplicate với scan local OK.
 - Không dùng scan local NG để so sánh duplicate.
 - Trả response cuối cùng cho máy local.
@@ -62,7 +62,7 @@ Chỉ so sánh OK với OK.
 
 ## 6. Kết quả server trả cho local
 
-Server có 3 kết quả chính:
+Server có 4 kết quả chính:
 
 1. `SERVER_OK`
    - Local gửi OK.
@@ -82,3 +82,10 @@ Server có 3 kết quả chính:
    - Server đặt `server_status = SKIPPED`.
    - Server không kiểm duplicate.
    - Server không ghi key vào `recent_duplicate_keys`.
+
+4. `LOCAL_REWORK_SAVED`
+   - Local gửi REWORK qua API submit hiện có bằng một `local_scan_id` mới có dạng `RW-<local_scan_id_của_lượt_NG_gốc>`.
+   - Server kiểm tra duplicate như lượt OK.
+   - Nếu không trùng, server lưu record mới với `final_status = REWORK` và đổi lượt NG gốc sang `NG_REWORK`.
+   - Nếu trùng, server trả `SERVER_DUPLICATE`, không lưu record REWORK và không thay đổi lượt NG gốc.
+   - Server không cập nhật hoặc xóa lượt NG trước đó.

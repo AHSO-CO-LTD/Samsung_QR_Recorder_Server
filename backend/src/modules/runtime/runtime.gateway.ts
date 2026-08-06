@@ -53,7 +53,7 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
     machine_code: string;
     local_scan_id: string;
     result_code: string;
-    final_status: "OK" | "NG" | "PENDING" | null;
+    final_status: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING" | null;
     source: "LIVE" | "BATCH";
     is_replay: boolean;
   }) {

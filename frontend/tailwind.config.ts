@@ -30,7 +30,8 @@ const config: Config = {
         runtime: {
           ok: "rgb(var(--runtime-ok-channels) / <alpha-value>)",
           ng: "rgb(var(--runtime-ng-channels) / <alpha-value>)",
-          warning: "rgb(var(--runtime-warning-channels) / <alpha-value>)"
+          warning: "rgb(var(--runtime-warning-channels) / <alpha-value>)",
+          stopped: "rgb(var(--runtime-stopped-channels) / <alpha-value>)"
         },
         card: {
           DEFAULT: "hsl(var(--card))",

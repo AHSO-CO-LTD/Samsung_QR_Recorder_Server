@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Download, FileSpreadsheet, FilterX, ListChecks } from "lucide-react";
+import { ChevronDown, Download, FileSpreadsheet, FilterX, ListChecks, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,11 @@ import { cn } from "@/lib/utils";
 import { DateTimePickerField } from "@/features/shared/date-time-picker";
 import { SelectField, TextInputField } from "@/features/shared/form-fields";
 import type { Machine, Profile } from "@/features/shared/types";
+import { ReportPreview } from "@/features/reports/report-preview";
+import { reportExportTemplates, type ReportTemplateId } from "@/features/reports/report-export-templates";
+import { ReportTemplateOptions, type ReportTemplateOption } from "@/features/reports/report-template-options";
 
-type ReportColumnKey =
+export type ReportColumnKey =
   | "scan_record_id"
   | "scan_at"
   | "machine_code"
@@ -55,7 +58,7 @@ type ReportColumnKey =
   | "sync_batch_id"
   | "created_at";
 
-type ReportStatus = "OK" | "NG" | "PENDING";
+export type ReportStatus = "OK" | "NG" | "REWORK" | "PENDING";
 
 type ReportColumnGroup = {
   id: string;
@@ -101,22 +104,23 @@ const allColumnKeys = reportColumnGroups.flatMap((group) => group.columns);
 const defaultSelectedColumns: ReportColumnKey[] = [
   "scan_at",
   "machine_code",
+  "machine_name",
+  "line_name",
   "profile",
   "local_scan_id",
-  "local_status",
-  "server_status",
   "final_status",
   "ng_reason",
-  "full_code_raw",
-  "duplicate_key"
+  "full_code_raw"
 ];
-const reportStatuses: ReportStatus[] = ["OK", "NG", "PENDING"];
+const reportStatuses: ReportStatus[] = ["OK", "NG", "REWORK", "PENDING"];
 
 const copy = {
   vi: {
     title: "Báo cáo Excel",
     desc: "Chọn khoảng thời gian, máy, hồ sơ, trạng thái và các cột cần xuất.",
     filterTitle: "Bộ lọc báo cáo",
+    scopeTitle: "1. Chọn phạm vi báo cáo",
+    scopeDesc: "Thời gian và dữ liệu cần xuất.",
     fieldMachine: "Máy",
     fieldProfile: "Hồ sơ",
     allMachines: "Tất cả máy",
@@ -126,9 +130,23 @@ const copy = {
     statusTitle: "Trạng thái cần xuất",
     statusDesc: "Bỏ chọn trạng thái nào thì bản ghi trạng thái đó sẽ không có trong tệp.",
     includeSummary: "Thêm trang tổng quan",
-    includeSummaryDesc: "Trang tổng quan ghi bộ lọc và tổng OK/NG/PENDING của tệp.",
+    includeSummaryDesc: "Trang tổng quan ghi bộ lọc và tổng OK/NG/REWORK/PENDING của tệp.",
     columnsTitle: "Thông số xuất ra",
     columnsDesc: "Tích các cột người dùng muốn thấy trong tệp Excel.",
+    templateTitle: "2. Chọn mẫu xuất",
+    templateDesc: "Chọn nhanh theo mục đích; bạn vẫn có thể chỉnh cột riêng khi cần.",
+    templateOperational: "Báo cáo vận hành",
+    templateOperationalDesc: "Theo dõi kết quả quét hằng ngày với các cột thiết yếu.",
+    templateErrorDetail: "Chi tiết lỗi",
+    templateErrorDetailDesc: "Chỉ NG và Đã rework, kèm dữ liệu để truy nguyên lỗi.",
+    templateTechnical: "Truy vết kỹ thuật",
+    templateTechnicalDesc: "Toàn bộ dữ liệu quét, LED, đồng bộ và dấu vết máy chủ.",
+    templateApplied: "Đã áp dụng mẫu xuất: {name}.",
+    templateReverted: "Đã khôi phục lựa chọn trước khi áp dụng mẫu.",
+    revertTemplate: "Hoàn tác mẫu vừa chọn",
+    customColumnsTitle: "Tùy chỉnh cột nâng cao",
+    showCustomColumns: "Mở tùy chỉnh cột",
+    hideCustomColumns: "Đóng tùy chỉnh cột",
     selectAll: "Chọn tất cả",
     clearAll: "Bỏ chọn",
     resetFilters: "Xóa lọc",
@@ -142,8 +160,13 @@ const copy = {
     invalidRange: "Từ ngày phải nhỏ hơn đến ngày.",
     selectedColumns: "{count} cột",
     selectedStatuses: "{count} trạng thái",
+    previewTitle: "Xem trước báo cáo",
+    previewDesc: "Dữ liệu minh họa thay đổi theo các cột đang chọn; không phải dữ liệu thực tế.",
+    previewSampleRows: "{count} dòng dữ liệu mẫu",
+    previewEmpty: "Chọn ít nhất một cột để xem trước bố cục báo cáo.",
+    previewNoRows: "Chọn ít nhất một trạng thái để xem dữ liệu mẫu.",
     general: "Thông tin chung",
-    result: "Kết quả OK/NG",
+    result: "Kết quả quét",
     codes: "Toàn bộ mã",
     led: "Chi tiết LED",
     runtime: "Dấu vết phiên/máy chủ",
@@ -190,6 +213,8 @@ const copy = {
     title: "Excel reports",
     desc: "Choose time range, machine, profile, statuses, and the exact fields to export.",
     filterTitle: "Report filters",
+    scopeTitle: "1. Choose report scope",
+    scopeDesc: "Time range and data to export.",
     fieldMachine: "Machine",
     fieldProfile: "Profile",
     allMachines: "All machines",
@@ -199,9 +224,23 @@ const copy = {
     statusTitle: "Statuses to export",
     statusDesc: "Unchecked statuses will not be included in the file.",
     includeSummary: "Include summary sheet",
-    includeSummaryDesc: "The summary sheet records filters and OK/NG/PENDING totals.",
+    includeSummaryDesc: "The summary sheet records filters and OK/NG/REWORK/PENDING totals.",
     columnsTitle: "Export fields",
     columnsDesc: "Select the columns users need in the Excel file.",
+    templateTitle: "2. Choose export template",
+    templateDesc: "Start with a common purpose, then customize columns if needed.",
+    templateOperational: "Operations report",
+    templateOperationalDesc: "Daily scan outcomes with essential fields.",
+    templateErrorDetail: "Error detail",
+    templateErrorDetailDesc: "NG and rework results with fault-tracing data.",
+    templateTechnical: "Technical trace",
+    templateTechnicalDesc: "All scan, LED, sync, and server trace data.",
+    templateApplied: "Export template applied: {name}.",
+    templateReverted: "Selection before the template was restored.",
+    revertTemplate: "Undo selected template",
+    customColumnsTitle: "Advanced column settings",
+    showCustomColumns: "Open column settings",
+    hideCustomColumns: "Close column settings",
     selectAll: "Select all",
     clearAll: "Clear",
     resetFilters: "Clear filters",
@@ -215,8 +254,13 @@ const copy = {
     invalidRange: "From date must be before to date.",
     selectedColumns: "{count} columns",
     selectedStatuses: "{count} statuses",
+    previewTitle: "Report preview",
+    previewDesc: "Sample data follows the selected columns and is not actual production data.",
+    previewSampleRows: "{count} sample rows",
+    previewEmpty: "Select at least one column to preview the report layout.",
+    previewNoRows: "Select at least one status to view sample data.",
     general: "General info",
-    result: "OK/NG result",
+    result: "Scan result",
     codes: "All codes",
     led: "LED details",
     runtime: "Runtime/server trace",
@@ -270,10 +314,13 @@ export function ReportsView() {
   const [profileId, setProfileId] = useState("");
   const [fromDate, setFromDate] = useState(toAppDatetimeLocal(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
   const [toDate, setToDate] = useState(toAppDatetimeLocal(new Date()));
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<ReportStatus>>(new Set(["OK", "NG"]));
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<ReportStatus>>(new Set(["OK", "NG", "REWORK"]));
   const [selectedColumns, setSelectedColumns] = useState<Set<ReportColumnKey>>(new Set(defaultSelectedColumns));
   const [includeSummary, setIncludeSummary] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplateId | null>("operational");
+  const [templateSnapshot, setTemplateSnapshot] = useState<{ columns: Set<ReportColumnKey>; statuses: Set<ReportStatus> } | null>(null);
+  const [isColumnCustomizerOpen, setIsColumnCustomizerOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -298,6 +345,7 @@ export function ReportsView() {
   const selectedStatusList = useMemo(() => reportStatuses.filter((status) => selectedStatuses.has(status)), [selectedStatuses]);
 
   const updateColumn = (column: ReportColumnKey, checked: boolean) => {
+    setSelectedTemplate(null);
     setSelectedColumns((current) => {
       const next = new Set(current);
       if (checked) {
@@ -310,6 +358,7 @@ export function ReportsView() {
   };
 
   const updateGroup = (group: ReportColumnGroup, checked: boolean) => {
+    setSelectedTemplate(null);
     setSelectedColumns((current) => {
       const next = new Set(current);
       for (const column of group.columns) {
@@ -324,6 +373,7 @@ export function ReportsView() {
   };
 
   const updateStatus = (status: ReportStatus, checked: boolean) => {
+    setSelectedTemplate(null);
     setSelectedStatuses((current) => {
       const next = new Set(current);
       if (checked) {
@@ -333,6 +383,38 @@ export function ReportsView() {
       }
       return next;
     });
+  };
+
+  const templateOptions: ReportTemplateOption[] = [
+    { id: "operational", title: text.templateOperational, description: text.templateOperationalDesc, columnCount: reportExportTemplates[0].columns.length },
+    { id: "error-detail", title: text.templateErrorDetail, description: text.templateErrorDetailDesc, columnCount: reportExportTemplates[1].columns.length },
+    { id: "technical", title: text.templateTechnical, description: text.templateTechnicalDesc, columnCount: allColumnKeys.length }
+  ];
+
+  const applyTemplate = (templateId: ReportTemplateId) => {
+    const template = reportExportTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    setTemplateSnapshot({ columns: new Set(selectedColumns), statuses: new Set(selectedStatuses) });
+    setSelectedColumns(new Set(template.id === "technical" ? allColumnKeys : template.columns));
+    setSelectedStatuses(new Set(template.statuses));
+    setSelectedTemplate(template.id);
+    setIsColumnCustomizerOpen(false);
+    toast.success(text.templateApplied.replace("{name}", templateOptions.find((option) => option.id === template.id)?.title ?? template.id));
+  };
+
+  const revertTemplate = () => {
+    if (!templateSnapshot) {
+      return;
+    }
+
+    setSelectedColumns(new Set(templateSnapshot.columns));
+    setSelectedStatuses(new Set(templateSnapshot.statuses));
+    setSelectedTemplate(null);
+    setTemplateSnapshot(null);
+    toast.success(text.templateReverted);
   };
 
   const exportReport = async (event: FormEvent<HTMLFormElement>) => {
@@ -393,8 +475,9 @@ export function ReportsView() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-sky-600" aria-hidden="true" />
-            {text.filterTitle}
+            {text.scopeTitle}
           </CardTitle>
+          <CardDescription>{text.scopeDesc}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
@@ -404,7 +487,7 @@ export function ReportsView() {
               <option value="">{text.allMachines}</option>
               {machines.map((machine) => (
                 <option key={machine.id} value={machine.machine_code}>
-                  {machine.machine_code} - {machine.machine_name}
+                  {[machine.machine_code, machine.machine_name, machine.line_name].filter(Boolean).join(" - ")}
                 </option>
               ))}
             </SelectField>
@@ -449,24 +532,44 @@ export function ReportsView() {
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle>{text.templateTitle}</CardTitle>
+          <CardDescription>{text.templateDesc}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <ReportTemplateOptions options={templateOptions} selectedId={selectedTemplate} onSelect={applyTemplate} />
+          {templateSnapshot ? (
+            <Button type="button" variant="outline" size="sm" onClick={revertTemplate}>
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              {text.revertTemplate}
+            </Button>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="h-5 w-5 text-sky-600" aria-hidden="true" />
-              {text.columnsTitle}
+              {text.customColumnsTitle}
             </CardTitle>
             <CardDescription>{text.columnsDesc}</CardDescription>
           </div>
+          <Button type="button" variant="outline" size="sm" aria-expanded={isColumnCustomizerOpen} onClick={() => setIsColumnCustomizerOpen((current) => !current)}>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", isColumnCustomizerOpen && "rotate-180")} aria-hidden="true" />
+            {isColumnCustomizerOpen ? text.hideCustomColumns : text.showCustomColumns}
+          </Button>
+        </CardHeader>
+        {isColumnCustomizerOpen ? <CardContent className="space-y-4">
           <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSelectedColumns(new Set(allColumnKeys))}>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setSelectedColumns(new Set(allColumnKeys)); setSelectedTemplate(null); }}>
               {text.selectAll}
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setSelectedColumns(new Set())}>
+            <Button type="button" variant="outline" size="sm" onClick={() => { setSelectedColumns(new Set()); setSelectedTemplate(null); }}>
               {text.clearAll}
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
           <div className="grid gap-3 xl:grid-cols-2">
             {reportColumnGroups.map((group) => {
               const checkedCount = group.columns.filter((column) => selectedColumns.has(column)).length;
@@ -492,14 +595,26 @@ export function ReportsView() {
             })}
           </div>
 
-          <div className="flex justify-end border-t pt-4">
-            <Button type="submit" disabled={isExporting}>
-              <Download className={cn("h-4 w-4", isExporting && "animate-pulse")} aria-hidden="true" />
-              {isExporting ? text.exporting : text.exportExcel}
-            </Button>
-          </div>
-        </CardContent>
+        </CardContent> : null}
       </Card>
+
+      <ReportPreview
+        columns={selectedColumnList}
+        statuses={selectedStatusList}
+        labels={text}
+        title={text.previewTitle}
+        description={text.previewDesc}
+        sampleRowsLabel={text.previewSampleRows}
+        emptyLabel={text.previewEmpty}
+        noRowsLabel={text.previewNoRows}
+      />
+
+      <div className="flex justify-end border-t pt-4">
+        <Button type="submit" disabled={isExporting}>
+          <Download className={cn("h-4 w-4", isExporting && "animate-pulse")} aria-hidden="true" />
+          {isExporting ? text.exporting : text.exportExcel}
+        </Button>
+      </div>
     </form>
   );
 }

@@ -8,6 +8,7 @@ import { SelectField } from "@/features/shared/form-fields";
 import type { Machine, Profile, ScanErrorDefinition, Vendor } from "@/features/shared/types";
 import { useI18n } from "@/lib/i18n-provider";
 import { emptyScanFilters, getScanErrorOptionLabel, getScanLineOptions, selectScanErrorFilter, selectScanResultFilter, type ScanFilters } from "./scan-filter-state";
+import { ProfileFilterCombobox } from "./profile-filter-combobox";
 
 export type ScanErrorFilterOption = {
   code: string;
@@ -43,14 +44,16 @@ export function ScanFiltersCard({
             </option>
           ))}
         </SelectField>
-        <SelectField label={t("colProfile")} value={filters.profile_id} onChange={(event) => onFiltersChange({ ...filters, profile_id: event.target.value })}>
-          <option value="">{t("allProfiles")}</option>
-          {profiles.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.chassis_code?.code_full ?? t("profileFallbackName", { id: profile.id })}
-            </option>
-          ))}
-        </SelectField>
+        <ProfileFilterCombobox
+          label={t("colProfile")}
+          value={filters.profile_id}
+          profiles={profiles}
+          allProfilesLabel={t("allProfiles")}
+          searchPlaceholder={t("quickSearch")}
+          emptyLabel={t("noMatchedData")}
+          fallbackLabel={(id) => t("profileFallbackName", { id })}
+          onValueChange={(profile_id) => onFiltersChange({ ...filters, profile_id })}
+        />
         <SelectField label={t("colVendor")} value={filters.vendor_char} onChange={(event) => onFiltersChange({ ...filters, vendor_char: event.target.value })}>
           <option value="">{t("allVendors")}</option>
           {vendors.map((vendor) => (
@@ -67,6 +70,8 @@ export function ScanFiltersCard({
           <option value="">{t("allStatuses")}</option>
           <option value="OK">OK</option>
           <option value="NG">NG</option>
+          <option value="NG_REWORK">{t("statusNgRework")}</option>
+          <option value="REWORK">REWORK</option>
           <option value="PENDING">{t("pending")}</option>
         </SelectField>
         <SelectField

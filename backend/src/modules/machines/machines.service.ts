@@ -85,11 +85,14 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createMachine(dto: CreateMachineDto, actorUserId?: number | null) {
+    const machineName = this.requiredMachineName(dto.machine_name);
+    await this.ensureMachineNameAvailable(machineName);
+
     const machine = await this.prisma.machine.create({
       data: {
         machine_code: dto.machine_code.trim(),
-        machine_name: dto.machine_name.trim(),
-        line_name: this.optionalTrim(dto.line_name),
+        machine_name: machineName,
+        line_name: this.requiredTrim(dto.line_name, "dây chuyền"),
         station_name: this.optionalTrim(dto.station_name),
         ip_address: this.optionalTrim(dto.ip_address),
         is_active: dto.is_active ?? true
@@ -116,12 +119,16 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
 
   async updateMachine(id: number, dto: UpdateMachineDto, actorUserId?: number | null) {
     const oldMachine = await this.ensureMachineById(id);
+    const machineName = dto.machine_name === undefined ? undefined : this.requiredMachineName(dto.machine_name);
+    if (machineName !== undefined) {
+      await this.ensureMachineNameAvailable(machineName, id);
+    }
 
     const machine = await this.prisma.machine.update({
       where: { id },
       data: {
-        machine_name: dto.machine_name?.trim(),
-        line_name: dto.line_name === undefined ? undefined : this.optionalTrim(dto.line_name),
+        machine_name: machineName,
+        line_name: dto.line_name === undefined ? undefined : this.requiredTrim(dto.line_name, "dây chuyền"),
         station_name: dto.station_name === undefined ? undefined : this.optionalTrim(dto.station_name),
         ip_address: dto.ip_address === undefined ? undefined : this.optionalTrim(dto.ip_address),
         is_active: dto.is_active
@@ -908,11 +915,14 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    const machineName = this.requiredMachineName(dto.machine_name);
+    await this.ensureMachineNameAvailable(machineName);
+
     const result = await this.prisma.$transaction(async (tx) => {
       const machine = await tx.machine.create({
         data: {
           machine_code: machineCode,
-          machine_name: this.requiredTrim(dto.machine_name, "machine_name"),
+          machine_name: machineName,
           serial: request.serial,
           uid: request.uid,
           license_key_raw: request.license_key_raw,
@@ -1586,6 +1596,36 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     return machine;
   }
 
+  private async ensureMachineNameAvailable(machineName: string, excludeMachineId?: number) {
+    const existingMachine = await this.prisma.machine.findFirst({
+      where: {
+        machine_name: {
+          equals: machineName,
+          mode: "insensitive"
+        },
+        id: excludeMachineId === undefined ? undefined : { not: excludeMachineId }
+      },
+      select: {
+        id: true,
+        machine_code: true,
+        machine_name: true
+      }
+    });
+
+    if (existingMachine) {
+      throw new ConflictException({
+        success: false,
+        code: "MACHINE_NAME_DUPLICATE",
+        message: "Tên máy đã được sử dụng.",
+        data: {
+          machine_id: existingMachine.id,
+          machine_code: existingMachine.machine_code,
+          machine_name: existingMachine.machine_name
+        }
+      });
+    }
+  }
+
   async ensureActiveMachineSerialUid(identity: MachineIdentity) {
     return this.ensureActiveMachineByIdentity(identity);
   }
@@ -1843,6 +1883,18 @@ export class MachinesService implements OnModuleInit, OnModuleDestroy {
     }
 
     return trimmed;
+  }
+
+  private requiredMachineName(value: string | null | undefined) {
+    if (typeof value === "string" && /^[\p{L}\p{N}]+$/u.test(value)) {
+      return value;
+    }
+
+    throw new BadRequestException({
+      success: false,
+      code: "MACHINE_NAME_INVALID",
+      message: "Tên máy chỉ được chứa chữ và số, không có khoảng trắng hoặc ký tự đặc biệt."
+    });
   }
 
   private optionalTrim(value: string | null | undefined) {

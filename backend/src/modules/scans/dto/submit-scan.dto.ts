@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsArray, IsDefined, IsIn, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsString, Min, ValidateIf, ValidateNested } from "class-validator";
+import { LOCAL_SCAN_STATUSES, requiresCompleteScanPayload, type LocalSubmitScanStatus } from "../local-scan-status";
 
 export class FullCodePayloadDto {
   @ApiProperty({ example: "VN39BN9658567A1F1S58282ADZLVX880447" })
@@ -63,9 +64,9 @@ export class LedScanPayloadDto {
   @IsString()
   suffix!: string;
 
-  @ApiProperty({ enum: ["OK", "NG"], example: "OK" })
-  @IsIn(["OK", "NG"])
-  status!: "OK" | "NG";
+  @ApiProperty({ enum: LOCAL_SCAN_STATUSES, example: "OK" })
+  @IsIn(LOCAL_SCAN_STATUSES)
+  status!: LocalSubmitScanStatus;
 
   @ApiPropertyOptional({ example: null })
   @IsOptional()
@@ -74,7 +75,10 @@ export class LedScanPayloadDto {
 }
 
 export class SubmitScanDto {
-  @ApiProperty({ example: "LOCAL01-20260708-000001" })
+  @ApiProperty({
+    example: "LOCAL01-20260708-000001",
+    description: "For REWORK, use RW- followed by the original NG local_scan_id, for example RW-LOCAL01-20260708-000001."
+  })
   @IsString()
   local_scan_id!: string;
 
@@ -97,33 +101,33 @@ export class SubmitScanDto {
   @Min(1)
   profile_id!: number;
 
-  @ApiPropertyOptional({ example: "1F1SX880447", description: "Required when local_status is OK. Local NG may omit it." })
-  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
+  @ApiPropertyOptional({ example: "1F1SX880447", description: "Required when local_status is OK or REWORK. Local NG may omit it." })
+  @ValidateIf((dto: SubmitScanDto) => requiresCompleteScanPayload(dto.local_status))
   @IsString()
   duplicate_key?: string;
 
-  @ApiPropertyOptional({ type: FullCodePayloadDto, description: "Required when local_status is OK. Local NG may send malformed or partial code data." })
-  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
+  @ApiPropertyOptional({ type: FullCodePayloadDto, description: "Required when local_status is OK or REWORK. Local NG may send malformed or partial code data." })
+  @ValidateIf((dto: SubmitScanDto) => requiresCompleteScanPayload(dto.local_status))
   @IsDefined()
   @ValidateNested()
   @Type(() => FullCodePayloadDto)
   full_code?: FullCodePayloadDto;
 
-  @ApiPropertyOptional({ example: "BN96-58567A", description: "Required when local_status is OK. Local NG may omit it." })
-  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
+  @ApiPropertyOptional({ example: "BN96-58567A", description: "Required when local_status is OK or REWORK. Local NG may omit it." })
+  @ValidateIf((dto: SubmitScanDto) => requiresCompleteScanPayload(dto.local_status))
   @IsString()
   chassis_scan_raw?: string;
 
-  @ApiPropertyOptional({ type: [LedScanPayloadDto], description: "Required when local_status is OK. Local NG may omit it." })
-  @ValidateIf((dto: SubmitScanDto) => dto.local_status !== "NG")
+  @ApiPropertyOptional({ type: [LedScanPayloadDto], description: "Required when local_status is OK or REWORK. Local NG may omit it." })
+  @ValidateIf((dto: SubmitScanDto) => requiresCompleteScanPayload(dto.local_status))
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => LedScanPayloadDto)
   led_scans?: LedScanPayloadDto[];
 
-  @ApiProperty({ enum: ["OK", "NG"], example: "OK" })
-  @IsIn(["OK", "NG"])
-  local_status!: "OK" | "NG";
+  @ApiProperty({ enum: LOCAL_SCAN_STATUSES, example: "OK" })
+  @IsIn(LOCAL_SCAN_STATUSES)
+  local_status!: LocalSubmitScanStatus;
 
   @ApiPropertyOptional({ example: null })
   @IsOptional()

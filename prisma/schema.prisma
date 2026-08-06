@@ -100,6 +100,7 @@ enum MachineRegistrationStatus {
 enum LocalScanStatus {
   OK
   NG
+  REWORK
 }
 
 enum ServerScanStatus {
@@ -112,6 +113,8 @@ enum ServerScanStatus {
 enum FinalScanStatus {
   OK
   NG
+  NG_REWORK
+  REWORK
   PENDING
 }
 

@@ -38,7 +38,7 @@ export function createVirtualMachineRuntime(sequence: number, nowMs = Date.now()
   const lastResult = ng > 0 && Math.random() < 0.2 ? "NG" : "OK";
   const lastCode = randomQrCode();
   const machineCode = `VIRTUAL-${nowMs.toString(36).toUpperCase()}-${safeSequence.toString(36).toUpperCase()}`;
-  const machineName = `Máy ảo ${String(safeSequence).padStart(2, "0")}`;
+  const machineName = `Máyảo${String(safeSequence).padStart(2, "0")}`;
   const lineName = `LINE-${randomLetter()}`;
   const scanRecords = buildVirtualScanRecords({
     machineId,
@@ -140,6 +140,7 @@ export function getVirtualRuntimeCounts(session: MachineRuntimeSession): Runtime
   return {
     ok: session.ok_count,
     ng: session.ng_count,
+    rework: Math.max(0, session.total_count - session.ok_count - session.ng_count),
     total: session.total_count
   };
 }
@@ -157,6 +158,7 @@ function buildVirtualTrendData(ok: number, ng: number, nowMs: number): ScanTrend
       date: formatAppTime(timestamp, "en"),
       ok: bucketOk,
       ng: bucketNg,
+      rework: 0,
       pending: 0,
       total: bucketOk + bucketNg,
       timestamp

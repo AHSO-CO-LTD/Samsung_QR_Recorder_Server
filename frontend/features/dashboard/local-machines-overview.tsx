@@ -24,6 +24,7 @@ import {
   type TrendByMachine
 } from "@/features/shared/machine-runtime-card";
 import { RuntimeDisplaySettingsMenu } from "@/features/shared/runtime-display-settings-menu";
+import { MachineRuntimeCardSkeleton } from "@/features/shared/machine-runtime-card-skeleton";
 import {
   buildRuntimeChartTimeAxis,
   useRuntimeDisplayPreferences
@@ -363,7 +364,7 @@ export function LocalMachinesOverview() {
         trailingContent={<NgSoundControls />}
       />
 
-      {isLoading ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("loading")}</div> : null}
+      {isLoading ? <MachineRuntimeCardSkeleton label={t("loading")} /> : null}
       {error ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">{error}</div> : null}
       {!isLoading && !error && rows.length === 0 ? <div className="rounded-md border p-4 text-sm text-muted-foreground">{t("empty")}</div> : null}
 
@@ -383,6 +384,9 @@ export function LocalMachinesOverview() {
             if (timeRange.from) ngParams.set("from", timeRange.from);
             if (timeRange.to) ngParams.set("to", timeRange.to);
             const ngHref = `/scans?${ngParams.toString()}`;
+            const reworkParams = new URLSearchParams(ngParams);
+            reworkParams.set("final_status", "REWORK");
+            const reworkHref = `/scans?${reworkParams.toString()}`;
 
             return (
               <MachineRuntimeCard
@@ -396,8 +400,8 @@ export function LocalMachinesOverview() {
                 }
                 timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
                 displayOptions={displayOptions}
-                showCommonLocalNgReason
                 ngHref={ngHref}
+                reworkHref={reworkHref}
               />
             );
           })}

@@ -9,7 +9,7 @@ export type ServerScanUpdatedEvent = {
   machine_code?: string;
   local_scan_id?: string;
   result_code?: string;
-  final_status?: "OK" | "NG" | "PENDING" | null;
+  final_status?: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING" | null;
   source?: "LIVE" | "BATCH";
   is_replay?: boolean;
 };
@@ -98,7 +98,7 @@ function normalizeScanUpdatedEvent(payload: unknown): ServerScanUpdatedEvent {
 }
 
 function shouldPlayNgSound(event: ServerScanUpdatedEvent) {
-  const isNg = event.final_status === "NG" || event.result_code === "LOCAL_NG_SAVED" || event.result_code === "SERVER_DUPLICATE";
+  const isNg = event.final_status === "NG" || event.final_status === "NG_REWORK" || event.result_code === "LOCAL_NG_SAVED" || event.result_code === "SERVER_DUPLICATE";
   return isNg && event.source !== "BATCH" && event.is_replay !== true;
 }
 

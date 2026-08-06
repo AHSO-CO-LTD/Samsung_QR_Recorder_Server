@@ -16,6 +16,14 @@ type RolePermissionsCurrent = {
   permission_keys: ScreenPermissionKey[];
 };
 
+type RolePermissionsList = {
+  definitions: ScreenPermissionDefinition[];
+  roles: Array<{
+    role: string;
+    permission_keys: ScreenPermissionKey[];
+  }>;
+};
+
 type PermissionsContextValue = {
   definitions: ScreenPermissionDefinition[];
   permissionKeys: ScreenPermissionKey[];
@@ -29,7 +37,7 @@ type PermissionsContextValue = {
 const PermissionsContext = createContext<PermissionsContextValue | null>(null);
 
 export function PermissionsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, authenticatedUser, isRolePreview } = useAuth();
   const [definitions, setDefinitions] = useState<ScreenPermissionDefinition[]>([]);
   const [permissionKeys, setPermissionKeys] = useState<ScreenPermissionKey[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +62,16 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
+      if (isRolePreview && authenticatedUser?.role === "DEV") {
+        const result = await apiGet<RolePermissionsList>("/role-permissions");
+        const data = result.data;
+        const previewRolePermissions = data?.roles.find((roleEntry) => roleEntry.role === user.role);
+        setDefinitions(data?.definitions ?? []);
+        setPermissionKeys(previewRolePermissions?.permission_keys ?? []);
+        setLoadedUserScope(currentUserScope);
+        return;
+      }
+
       const result = await apiGet<RolePermissionsCurrent>("/role-permissions/me");
       const data = result.data;
       setDefinitions(data?.definitions ?? []);
@@ -68,7 +86,7 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserScope, user]);
+  }, [authenticatedUser?.role, currentUserScope, isRolePreview, user]);
 
   useEffect(() => {
     void loadPermissions();

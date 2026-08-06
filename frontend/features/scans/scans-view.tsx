@@ -97,7 +97,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     void apiGet<ScanErrorFilterOption[]>("/error-config")
       .then((result) => {
         if (isMounted) {
-          setErrorOptions(result.data ?? []);
+          setErrorOptions((result.data ?? []).filter((option) => option.definition?.is_active));
         }
       })
       .catch((error) => {
@@ -188,13 +188,26 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     if (filters.line_name) params.set("line_name", filters.line_name);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
+    if (filters.final_status === "NG" || filters.final_status === "NG_REWORK" || filters.final_status === "REWORK") {
+      params.set("final_status", filters.final_status);
+    }
+    if (filters.ng_reason) params.set("ng_reason", filters.ng_reason);
     if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
     if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
     return params.toString();
-  }, [filters.from, filters.line_name, filters.profile_id, filters.to, filters.vendor_char]);
+  }, [filters.final_status, filters.from, filters.line_name, filters.ng_reason, filters.profile_id, filters.to, filters.vendor_char]);
+
+  const summaryAnalyticsFilterQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (filters.line_name) params.set("line_name", filters.line_name);
+    if (filters.profile_id) params.set("profile_id", filters.profile_id);
+    if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
+    return params.toString();
+  }, [filters.line_name, filters.profile_id, filters.vendor_char]);
 
   const allScansEndpoint = `/scans?${scanFilterQuery}`;
   const machineErrorRankingEndpoint = `/scans/machine-error-ranking?${analyticsFilterQuery}`;
+  const scanResultSummaryEndpoint = `/scans/machine-error-ranking?${summaryAnalyticsFilterQuery}`;
 
   const columns: Column<ScanRecord>[] = [
     { key: "time", header: t("colScanTime"), className: "min-w-[10rem] whitespace-nowrap", render: (item) => <DateText value={item.scan_at} /> },
@@ -260,7 +273,8 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
         <TabsContent value="all-scans">
           <div className="space-y-4">
             <ScanHistoryAnalytics
-              endpoint={machineErrorRankingEndpoint}
+              summaryEndpoint={scanResultSummaryEndpoint}
+              rankingEndpoint={machineErrorRankingEndpoint}
               refreshSignal={realtimeRefreshSignal}
               autoRefreshMs={scanDisplaySettings.refreshMode === "automatic" ? scanDisplaySettings.autoRefreshSeconds * 1000 : undefined}
             />

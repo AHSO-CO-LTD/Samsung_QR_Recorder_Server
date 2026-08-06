@@ -10,14 +10,14 @@ import type { ScanAnalyticsResult } from "./scan-analytics-types";
 type ChartItem = {
   key: string;
   label: string;
-  ng_count: number;
+  count: number;
   ranking_label: string;
 };
 
 const chartConfig = {
-  ng_count: {
-    label: "NG",
-    color: "#b91c1c"
+  count: {
+    label: "Kết quả",
+    color: "var(--chart-ng)"
   }
 } satisfies ChartConfig;
 
@@ -33,6 +33,8 @@ export function ScanMachineErrorRankingCard({
   const { locale, t } = useI18n();
 
   const rankingType = result.ranking_type ?? "machine";
+  const rankingStatus = result.ranking_status ?? "NG";
+  const barColor = rankingStatus === "REWORK" ? "var(--chart-rework)" : "var(--chart-ng)";
 
   const { title, description, noDataMessage, chartData } = useMemo(() => {
     if (rankingType === "error_type") {
@@ -42,15 +44,15 @@ export function ScanMachineErrorRankingCard({
         return {
           key: err.code,
           label: errorName,
-          ng_count: err.ng_count,
+          count: err.ng_count,
           ranking_label: `${numberFormatter.format(err.ng_count)} (${percentageFormatter.format(err.percentage)}%)`
         };
       });
 
       return {
-        title: t("scanErrorTypeRankingTitle"),
-        description: t("scanErrorTypeRankingDesc"),
-        noDataMessage: t("scanErrorTypeRankingNoErrors"),
+        title: t("scanErrorTypeStatusRankingTitle", { status: rankingStatus }),
+        description: t("scanErrorTypeStatusRankingDesc", { status: rankingStatus }),
+        noDataMessage: t("scanErrorTypeStatusRankingNoErrors", { status: rankingStatus }),
         chartData: mapped
       };
     }
@@ -60,13 +62,13 @@ export function ScanMachineErrorRankingCard({
       const mapped: ChartItem[] = items.map((prof) => ({
         key: String(prof.profile_id),
         label: prof.profile_name,
-        ng_count: prof.ng_count,
+        count: prof.ng_count,
         ranking_label: `${numberFormatter.format(prof.ng_count)} (${percentageFormatter.format(prof.percentage)}%)`
       }));
 
       return {
-        title: t("scanProfileErrorRankingTitle"),
-        description: t("scanProfileErrorRankingDesc"),
+        title: t("scanProfileStatusRankingTitle", { status: rankingStatus }),
+        description: t("scanProfileStatusRankingDesc", { status: rankingStatus }),
         noDataMessage: t("scanProfileErrorRankingNoProfiles"),
         chartData: mapped
       };
@@ -76,24 +78,26 @@ export function ScanMachineErrorRankingCard({
     const items = result.machines ?? [];
     const mapped: ChartItem[] = items.map((machine) => {
       const machineName = machine.machine_name.trim();
+      const lineName = machine.line_name?.trim();
+      const machineLabel =
+        machineName && machineName.toLocaleLowerCase() !== machine.machine_code.toLocaleLowerCase()
+          ? `${machine.machine_code} - ${machineName}`
+          : machine.machine_code;
       return {
         key: String(machine.machine_id),
-        label:
-          machineName && machineName.toLocaleLowerCase() !== machine.machine_code.toLocaleLowerCase()
-            ? `${machine.machine_code} - ${machineName}`
-            : machine.machine_code,
-        ng_count: machine.ng_count,
+        label: lineName ? `${machineLabel} - ${lineName}` : machineLabel,
+        count: machine.ng_count,
         ranking_label: `${numberFormatter.format(machine.ng_count)} (${percentageFormatter.format(machine.percentage)}%)`
       };
     });
 
     return {
-      title: t("scanMachineErrorRankingTitle"),
-      description: t("scanMachineErrorRankingDesc"),
+      title: t("scanMachineStatusRankingTitle", { status: rankingStatus }),
+      description: t("scanMachineStatusRankingDesc", { status: rankingStatus }),
       noDataMessage: t("scanMachineErrorRankingNoMachines"),
       chartData: mapped
     };
-  }, [locale, numberFormatter, percentageFormatter, rankingType, result, t]);
+  }, [locale, numberFormatter, percentageFormatter, rankingStatus, rankingType, result, t]);
 
   const chartHeight = Math.max(280, chartData.length * 42 + 40);
 
@@ -127,7 +131,7 @@ export function ScanMachineErrorRankingCard({
                 tick={{ fontSize: 12 }}
               />
               <ChartTooltip content={<ChartTooltipContent />} />
-              <Bar dataKey="ng_count" fill="var(--color-ng_count)" radius={[0, 3, 3, 0]}>
+              <Bar dataKey="count" fill={barColor} radius={[0, 3, 3, 0]}>
                 <LabelList dataKey="ranking_label" position="right" className="fill-foreground" fontSize={12} />
               </Bar>
             </BarChart>

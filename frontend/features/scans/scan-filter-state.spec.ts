@@ -28,6 +28,40 @@ test("keeping the NG result preserves the selected error type", () => {
   assert.equal(filters.ng_reason, "LED_SUFFIX_NOT_MATCH");
 });
 
+test("changing the result from NG to REWORK preserves the error type", () => {
+  const filters = selectScanResultFilter(
+    { ...emptyScanFilters, final_status: "NG", ng_reason: "LED_SUFFIX_NOT_MATCH" },
+    "REWORK"
+  );
+
+  assert.equal(filters.final_status, "REWORK");
+  assert.equal(filters.ng_reason, "LED_SUFFIX_NOT_MATCH");
+});
+
+test("changing the result from NG to reworked preserves the error type", () => {
+  const filters = selectScanResultFilter(
+    { ...emptyScanFilters, final_status: "NG", ng_reason: "LED_SUFFIX_NOT_MATCH" },
+    "NG_REWORK"
+  );
+
+  assert.equal(filters.final_status, "NG_REWORK");
+  assert.equal(filters.ng_reason, "LED_SUFFIX_NOT_MATCH");
+});
+
+test("selecting an error type keeps the reworked result filter", () => {
+  const filters = selectScanErrorFilter({ ...emptyScanFilters, final_status: "NG_REWORK" }, "LED_SUFFIX_NOT_MATCH");
+
+  assert.equal(filters.final_status, "NG_REWORK");
+  assert.equal(filters.ng_reason, "LED_SUFFIX_NOT_MATCH");
+});
+
+test("selecting an error type keeps the REWORK result filter", () => {
+  const filters = selectScanErrorFilter({ ...emptyScanFilters, final_status: "REWORK" }, "LED_SUFFIX_NOT_MATCH");
+
+  assert.equal(filters.final_status, "REWORK");
+  assert.equal(filters.ng_reason, "LED_SUFFIX_NOT_MATCH");
+});
+
 test("shows only the localized error name without the code", () => {
   const option = {
     code: "LED_SUFFIX_NOT_MATCH",

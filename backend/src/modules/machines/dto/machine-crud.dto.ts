@@ -6,8 +6,9 @@ export class CreateMachineDto {
   @IsString()
   machine_code!: string;
 
-  @ApiProperty({ example: "Local scanner 01" })
+  @ApiProperty({ example: "LocalScanner01" })
   @IsString()
+  @IsNotEmpty()
   machine_name!: string;
 
   @ApiHideProperty()
@@ -15,10 +16,10 @@ export class CreateMachineDto {
   @IsString()
   ip_address?: string | null;
 
-  @ApiPropertyOptional({ example: "Line A" })
-  @IsOptional()
+  @ApiProperty({ example: "LINE-A" })
   @IsString()
-  line_name?: string | null;
+  @IsNotEmpty()
+  line_name!: string;
 
   @ApiPropertyOptional({ example: "Station 01" })
   @IsOptional()
@@ -32,7 +33,7 @@ export class CreateMachineDto {
 }
 
 export class UpdateMachineDto {
-  @ApiPropertyOptional({ example: "Local scanner 01" })
+  @ApiPropertyOptional({ example: "LocalScanner01" })
   @IsOptional()
   @IsString()
   machine_name?: string;
@@ -45,6 +46,7 @@ export class UpdateMachineDto {
   @ApiPropertyOptional({ example: "Line A" })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   line_name?: string | null;
 
   @ApiPropertyOptional({ example: "Station 01" })
@@ -175,7 +177,7 @@ export class ApproveMachineRegistrationRequestDto {
   @IsNotEmpty()
   machine_code!: string;
 
-  @ApiProperty({ example: "Local scanner 01" })
+  @ApiProperty({ example: "LocalScanner01" })
   @IsString()
   @IsNotEmpty()
   machine_name!: string;

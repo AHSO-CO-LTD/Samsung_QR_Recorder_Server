@@ -251,7 +251,7 @@ export class ReportsService {
     return {
       machine: filters.machineCodes.length ? { machine_code: { in: filters.machineCodes } } : undefined,
       profile_id: filters.profileIds.length ? { in: filters.profileIds } : undefined,
-      final_status: filters.finalStatuses.length ? { in: filters.finalStatuses } : undefined,
+      final_status: filters.finalStatuses.length ? { in: expandFinalStatuses(filters.finalStatuses) } : undefined,
       scan_at:
         filters.from || filters.to
           ? {
@@ -343,6 +343,7 @@ export class ReportsService {
             total: "Tổng bản ghi",
             ok: "Cuối cùng OK",
             ng: "Cuối cùng NG",
+            rework: "Cuối cùng REWORK",
             pending: "Cuối cùng đang chờ"
           }
         : {
@@ -356,16 +357,21 @@ export class ReportsService {
             total: "Total records",
             ok: "Final OK",
             ng: "Final NG",
+            rework: "Final REWORK",
             pending: "Final pending"
           };
     const sheet = workbook.addWorksheet(labels.sheet);
     const allValue = locale === "vi" ? "Tất cả" : "All";
     const counts = records.reduce(
       (current, record) => {
-        current[record.final_status] += 1;
+        if (record.final_status === "NG_REWORK") {
+          current.NG += 1;
+        } else {
+          current[record.final_status] += 1;
+        }
         return current;
       },
-      { OK: 0, NG: 0, PENDING: 0 } as Record<FinalScanStatus, number>
+      { OK: 0, NG: 0, NG_REWORK: 0, REWORK: 0, PENDING: 0 } as Record<FinalScanStatus, number>
     );
 
     sheet.columns = [
@@ -382,6 +388,7 @@ export class ReportsService {
       { label: labels.total, value: records.length },
       { label: labels.ok, value: counts.OK },
       { label: labels.ng, value: counts.NG },
+      { label: labels.rework, value: counts.REWORK },
       { label: labels.pending, value: counts.PENDING }
     ]);
     sheet.getRow(1).font = { bold: true };
@@ -476,6 +483,10 @@ function parseFinalStatuses(value?: string): FinalScanStatus[] {
     }
     return status as FinalScanStatus;
   });
+}
+
+function expandFinalStatuses(statuses: FinalScanStatus[]) {
+  return statuses.flatMap((status) => (status === "NG" ? (["NG", "NG_REWORK"] as FinalScanStatus[]) : [status]));
 }
 
 function parseDate(value: string | undefined, fieldName: string) {

@@ -153,7 +153,26 @@ Response ý nghĩa:
 }
 ```
 
-## 6. Race condition
+## 6. Luồng local REWORK
+
+Điều kiện:
+
+- Local gửi `local_status = REWORK` qua `POST /api/scans/submit` với `local_scan_id` có dạng `RW-<local_scan_id_NG_gốc>`.
+- REWORK gửi đầy đủ `duplicate_key`, `full_code`, `chassis_scan_raw` và `led_scans` như lượt OK để server kiểm tra trùng.
+
+Server lưu kết quả:
+
+1. Kiểm tra duplicate giống lượt OK.
+2. Nếu trùng, trả `SERVER_DUPLICATE`, `final_status = NG`, `server_scan_id = null` và không tạo record REWORK.
+3. Nếu không trùng, tạo một record mới trong `scan_records` với `local_status = REWORK`, `server_status = OK`, `final_status = REWORK`.
+4. Lưu `ng_stage = LOCAL` và `ng_reason` từ `local_ng_reason` (hoặc lỗi LED đầu tiên) để biết REWORK đang sửa lỗi gì.
+5. Ghi `recent_duplicate_keys` để các lượt sau tiếp tục được kiểm tra trùng.
+6. Tách tiền tố `RW-` để tìm đúng bản ghi NG gốc của cùng máy, rồi cập nhật bản ghi đó thành `final_status = NG_REWORK`; giữ nguyên `scan_at`, mã lỗi và toàn bộ dữ liệu NG ban đầu. `NG_REWORK` vẫn được tính là NG trong biểu đồ và báo cáo.
+7. Trả response `LOCAL_REWORK_SAVED`.
+
+Gửi lại đúng cùng `machine_code + local_scan_id` chỉ trả kết quả replay để chống lưu trùng do retry mạng. Một lượt REWORK mới phải có `local_scan_id` mới.
+
+## 7. Race condition
 
 Trong môi trường nhiều máy local gửi cùng lúc, duplicate có thể bị race condition nếu chỉ query rồi insert `scan_records`. Vì vậy server cần bảng `recent_duplicate_keys` có unique constraint:
 

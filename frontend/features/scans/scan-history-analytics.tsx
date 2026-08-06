@@ -13,21 +13,25 @@ import { ScanResultSummaryCard } from "./scan-result-summary-card";
 const emptyResult: ScanAnalyticsResult = {
   ok_count: 0,
   ng_count: 0,
+  rework_count: 0,
   total_count: 0,
   machines: []
 };
 
 export function ScanHistoryAnalytics({
-  endpoint,
+  summaryEndpoint,
+  rankingEndpoint,
   refreshSignal,
   autoRefreshMs
 }: {
-  endpoint: string;
+  summaryEndpoint: string;
+  rankingEndpoint: string;
   refreshSignal: number;
   autoRefreshMs?: number;
 }) {
   const { locale, t } = useI18n();
-  const [result, setResult] = useState<ScanAnalyticsResult>(emptyResult);
+  const [summaryResult, setSummaryResult] = useState<ScanAnalyticsResult>(emptyResult);
+  const [rankingResult, setRankingResult] = useState<ScanAnalyticsResult>(emptyResult);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -41,11 +45,15 @@ export function ScanHistoryAnalytics({
         setIsLoading(true);
       }
       try {
-        const response = await apiGet<ScanAnalyticsResult>(endpoint);
+        const [summaryResponse, rankingResponse] = await Promise.all([
+          apiGet<ScanAnalyticsResult>(summaryEndpoint),
+          apiGet<ScanAnalyticsResult>(rankingEndpoint)
+        ]);
         if (!isMounted) {
           return;
         }
-        setResult(response.data ?? emptyResult);
+        setSummaryResult(summaryResponse.data ?? emptyResult);
+        setRankingResult(rankingResponse.data ?? emptyResult);
         setError(null);
         hasNotifiedError = false;
       } catch (currentError) {
@@ -73,7 +81,7 @@ export function ScanHistoryAnalytics({
         window.clearInterval(interval);
       }
     };
-  }, [autoRefreshMs, endpoint, refreshSignal, reloadKey, t]);
+  }, [autoRefreshMs, rankingEndpoint, refreshSignal, reloadKey, summaryEndpoint, t]);
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"), [locale]);
   const percentageFormatter = useMemo(
@@ -105,8 +113,8 @@ export function ScanHistoryAnalytics({
 
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-      <ScanResultSummaryCard result={result} numberFormatter={numberFormatter} />
-      <ScanMachineErrorRankingCard result={result} numberFormatter={numberFormatter} percentageFormatter={percentageFormatter} />
+      <ScanResultSummaryCard result={summaryResult} numberFormatter={numberFormatter} />
+      <ScanMachineErrorRankingCard result={rankingResult} numberFormatter={numberFormatter} percentageFormatter={percentageFormatter} />
     </div>
   );
 }

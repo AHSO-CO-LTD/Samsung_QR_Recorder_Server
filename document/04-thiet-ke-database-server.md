@@ -39,7 +39,7 @@ Lưu danh sách máy local được phép kết nối.
 Các field quan trọng:
 
 - `machine_code`: mã máy, ví dụ `LOCAL01`, unique.
-- `machine_name`: tên máy.
+- `machine_name`: tên máy chỉ gồm chữ và số (cho phép tiếng Việt), không có khoảng trắng hoặc ký tự đặc biệt; bắt buộc duy nhất, không phân biệt chữ hoa/thường.
 - `serial`: serial phần cứng của máy local sau khi định danh.
 - `uid`: UID ổn định của app/máy local sau khi định danh.
 - `license_key_raw`: license key tạm thời ở giai đoạn raw.
@@ -129,7 +129,7 @@ Lưu snapshot rule profile mỗi lần thay đổi. Scan cũ phải truy vết �
 
 ### `scan_records`
 
-Đây là bảng chính lưu từng lần scan TV/full code. Bảng này lưu cả OK và NG.
+Đây là bảng chính lưu từng lần scan TV/full code. Bảng này lưu OK, NG và REWORK như các lượt quét độc lập.
 
 Không tách bảng NG riêng vì:
 
@@ -140,9 +140,9 @@ Không tách bảng NG riêng vì:
 
 Các status quan trọng:
 
-- `local_status`: local trả OK hoặc NG.
+- `local_status`: local trả OK, NG hoặc REWORK.
 - `server_status`: server trả OK, NG, SKIPPED hoặc PENDING.
-- `final_status`: kết quả cuối cùng OK, NG hoặc PENDING.
+- `final_status`: kết quả cuối cùng OK, NG, NG_REWORK, REWORK hoặc PENDING. `NG_REWORK` là lượt NG đã có một lượt REWORK thành công và vẫn thuộc tổng NG.
 - `ng_stage`: lỗi đến từ LOCAL, SERVER hoặc SYSTEM.
 - `ng_reason`: mã lỗi chuẩn.
 

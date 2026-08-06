@@ -383,13 +383,20 @@ export function StatusBadge({ value }: { value?: string | boolean | null }) {
     normalized.includes("OFFLINE") ||
     normalized.includes("DISCONNECTED")
       ? "destructive"
-      : normalized.includes("PENDING") || normalized.includes("WARNING") || normalized.includes("UNKNOWN")
+      : normalized.includes("PENDING") || normalized.includes("WARNING") || normalized.includes("UNKNOWN") || normalized === "REWORK"
         ? "outline"
         : normalized.includes("OK") || normalized.includes("ACTIVE") || normalized.includes("ONLINE") || normalized.includes("RUNNING") || normalized.includes("DONE")
           ? "default"
           : "secondary";
 
-  return <Badge variant={variant}>{text}</Badge>;
+  return (
+    <Badge
+      variant={variant}
+      className={cn(normalized === "REWORK" && "border-orange-600/50 bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300")}
+    >
+      {text}
+    </Badge>
+  );
 }
 
 export function DateText({ value }: { value?: string | Date | null }) {
@@ -412,6 +419,7 @@ function getStatusLabel(normalized: string, rawText: string | boolean | number, 
   if (normalized === "ACTIVATED") return t("activated");
   if (normalized === "NOT_ACTIVE") return t("notActive");
   if (normalized === "PENDING") return t("pending");
+  if (normalized === "NG_REWORK") return t("statusNgRework");
   if (normalized === "UNKNOWN") return t("unknown");
   if (normalized === "ONLINE") return t("online");
   if (normalized === "OFFLINE") return t("offline");
