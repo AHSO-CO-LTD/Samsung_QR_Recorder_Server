@@ -14,12 +14,7 @@ export type RuntimeSummaryRow = RuntimeResultCounts & {
 
 export function indexRuntimeSummary(rows: RuntimeSummaryRow[]) {
   return rows.reduce<Record<number, RuntimeResultCounts>>((indexedRows, row) => {
-    indexedRows[row.machine_id] = {
-      ok: toSafeRuntimeCount(row.ok),
-      ng: toSafeRuntimeCount(row.ng),
-      rework: toSafeRuntimeCount(row.rework),
-      total: toSafeRuntimeCount(row.total)
-    };
+    indexedRows[row.machine_id] = createDisplayedRuntimeCounts({ ok: row.ok, ng: row.ng, rework: row.rework });
     return indexedRows;
   }, {});
 }
@@ -30,7 +25,14 @@ export function resolveSessionResultCounts(session?: MachineRuntimeSession): Run
   const total = toSafeRuntimeCount(session?.total_count);
   const rework = Math.max(0, total - ok - ng);
 
-  return { ok, ng, rework, total: ok + ng + rework };
+  return createDisplayedRuntimeCounts({ ok, ng, rework });
+}
+
+function createDisplayedRuntimeCounts(input: Pick<RuntimeResultCounts, "ok" | "ng" | "rework">): RuntimeResultCounts {
+  const ok = toSafeRuntimeCount(input.ok);
+  const ng = toSafeRuntimeCount(input.ng);
+  const rework = toSafeRuntimeCount(input.rework);
+  return { ok, ng, rework, total: ok + ng };
 }
 
 function toSafeRuntimeCount(value: number | null | undefined) {

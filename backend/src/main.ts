@@ -8,7 +8,7 @@ import { AppModule } from "./app.module";
 
 const runtimeRequire = createRequire(__filename);
 const backendPackage = runtimeRequire("../package.json") as { version?: string };
-const apiVersion = backendPackage.version?.trim() || "1.1.8";
+const apiVersion = backendPackage.version?.trim() || "1.2.0";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {

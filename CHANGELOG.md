@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 - 2026-08-10
+
+### Changed
+
+- Chuẩn hóa cách đếm kết quả: Tổng = OK + NG; REWORK là tập con của NG và được hiển thị theo dạng `REWORK / NG`.
+- Đồng bộ số liệu tổng quan, runtime, biểu đồ xu hướng, báo cáo Excel và xếp hạng lỗi theo quy ước kết quả mới.
+- Bổ sung các bước hướng dẫn máy local trong catalog hướng dẫn.
+
 ## 1.1.8 - 2026-08-03
 
 ### Added

@@ -157,6 +157,7 @@ export function ScanTrendChart() {
             definition={definition}
             data={chartData}
             total={totals[definition.key]}
+            reworkNgTotal={definition.key === "rework" ? totals.ng : undefined}
             isLoading={isLoading}
             error={error}
             onRetry={() => setReloadKey((current) => current + 1)}
@@ -171,6 +172,7 @@ function TrendChartCard({
   definition,
   data,
   total,
+  reworkNgTotal,
   isLoading,
   error,
   onRetry
@@ -178,6 +180,7 @@ function TrendChartCard({
   definition: TrendDefinition;
   data: ScanTrendPoint[];
   total: number;
+  reworkNgTotal?: number;
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -200,7 +203,7 @@ function TrendChartCard({
             <InfoTooltip content={t(definition.tooltipKey)} />
           </div>
           <span className="shrink-0 text-2xl font-semibold tabular-nums" style={{ color: definition.color }}>
-            {new Intl.NumberFormat().format(total)}
+            {reworkNgTotal === undefined ? new Intl.NumberFormat().format(total) : `${new Intl.NumberFormat().format(total)} / ${new Intl.NumberFormat().format(reworkNgTotal)}`}
           </span>
         </div>
       </CardHeader>

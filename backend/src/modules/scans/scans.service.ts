@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { resolveLogicalResultCounts } from "../../common/results/logical-result-counts";
 import { getVietnamDayRange } from "../../common/time/vietnam-time";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MachinesService } from "../machines/machines.service";
@@ -158,8 +159,9 @@ export class ScansService {
       ]);
 
       const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
-      const ngCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
+      const rawNgCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
       const reworkCount = groupedCounts.reduce((total, item) => total + (item.final_status === "REWORK" ? item._count._all : 0), 0);
+      const displayCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
 
       const errorCodeMap = new Map(errorCodes.map((ec) => [ec.code.toUpperCase(), ec]));
       const errorData = ngReasonGroups
@@ -174,8 +176,8 @@ export class ScansService {
             name_vi: definition?.name_vi ?? null,
             name_en: definition?.name_en ?? null,
             ng_count: count,
-            percentage: (rankingStatus === "REWORK" ? reworkCount : ngCount) > 0
-              ? Number(((count / (rankingStatus === "REWORK" ? reworkCount : ngCount)) * 100).toFixed(2))
+            percentage: (rankingStatus === "REWORK" ? reworkCount : rawNgCount) > 0
+              ? Number(((count / (rankingStatus === "REWORK" ? reworkCount : rawNgCount)) * 100).toFixed(2))
               : 0
           };
         })
@@ -186,10 +188,10 @@ export class ScansService {
         code: "MACHINE_ERROR_RANKING_LOADED",
         message: `Đã tải xếp hạng loại lỗi ${rankingStatus}.`,
         data: {
-          ok_count: okCount,
-          ng_count: ngCount,
-          rework_count: reworkCount,
-          total_count: okCount + ngCount + reworkCount,
+          ok_count: displayCounts.ok,
+          ng_count: displayCounts.ng,
+          rework_count: displayCounts.rework,
+          total_count: displayCounts.total,
           ranking_status: rankingStatus,
           ranking_type: "error_type" as const,
           machines: [],
@@ -221,8 +223,9 @@ export class ScansService {
       ]);
 
       const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
-      const ngCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
+      const rawNgCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
       const reworkCount = groupedCounts.reduce((total, item) => total + (item.final_status === "REWORK" ? item._count._all : 0), 0);
+      const displayCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
 
       const profileMap = new Map(profiles.map((p) => [p.id, p]));
       const profileNgMap = new Map(
@@ -240,8 +243,8 @@ export class ScansService {
             profile_name: profile?.chassis_code?.code_full ?? (profileId ? `Profile #${profileId}` : "Chưa gắn hồ sơ"),
             factory_code: profile?.factory_code ?? "-",
             ng_count: count,
-            percentage: (rankingStatus === "REWORK" ? reworkCount : ngCount) > 0
-              ? Number(((count / (rankingStatus === "REWORK" ? reworkCount : ngCount)) * 100).toFixed(2))
+            percentage: (rankingStatus === "REWORK" ? reworkCount : rawNgCount) > 0
+              ? Number(((count / (rankingStatus === "REWORK" ? reworkCount : rawNgCount)) * 100).toFixed(2))
               : 0
           };
         })
@@ -253,10 +256,10 @@ export class ScansService {
         code: "MACHINE_ERROR_RANKING_LOADED",
         message: `Đã tải tỷ lệ ${rankingStatus} theo hồ sơ.`,
         data: {
-          ok_count: okCount,
-          ng_count: ngCount,
-          rework_count: reworkCount,
-          total_count: okCount + ngCount + reworkCount,
+          ok_count: displayCounts.ok,
+          ng_count: displayCounts.ng,
+          rework_count: displayCounts.rework,
+          total_count: displayCounts.total,
           ranking_status: rankingStatus,
           ranking_type: "profile" as const,
           machines: [],
@@ -289,8 +292,9 @@ export class ScansService {
     ]);
 
     const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
-    const ngCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
+    const rawNgCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
     const reworkCount = groupedCounts.reduce((total, item) => total + (item.final_status === "REWORK" ? item._count._all : 0), 0);
+    const displayCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
     const rankedCountByMachineId = new Map(
       groupedCounts
         .filter((item) => (rankingStatus === "NG" ? isNgFinalStatus(item.final_status) : item.final_status === rankingStatus))
@@ -305,8 +309,8 @@ export class ScansService {
           machine_name: machine.machine_name,
           line_name: machine.line_name,
           ng_count: machineNgCount,
-          percentage: (rankingStatus === "REWORK" ? reworkCount : ngCount) > 0
-            ? Number(((machineNgCount / (rankingStatus === "REWORK" ? reworkCount : ngCount)) * 100).toFixed(2))
+          percentage: (rankingStatus === "REWORK" ? reworkCount : rawNgCount) > 0
+            ? Number(((machineNgCount / (rankingStatus === "REWORK" ? reworkCount : rawNgCount)) * 100).toFixed(2))
             : 0
         };
       })
@@ -317,10 +321,10 @@ export class ScansService {
       code: "MACHINE_ERROR_RANKING_LOADED",
       message: `Đã tải tỷ lệ ${rankingStatus} theo máy.`,
       data: {
-        ok_count: okCount,
-        ng_count: ngCount,
-        rework_count: reworkCount,
-        total_count: okCount + ngCount + reworkCount,
+        ok_count: displayCounts.ok,
+        ng_count: displayCounts.ng,
+        rework_count: displayCounts.rework,
+        total_count: displayCounts.total,
         ranking_status: rankingStatus,
         ranking_type: "machine" as const,
         machines: data
@@ -404,7 +408,7 @@ export class ScansService {
               lt: todayRange.end
             }
           };
-    const [okCount, ngCount, reworkCount, pendingCount, todayDuplicateCount, totalOkCount, totalNgCount, totalReworkCount, totalDuplicateCount, pendingSyncMachines, settings] = await Promise.all([
+    const [okCount, rawNgCount, reworkCount, pendingCount, todayDuplicateCount, totalOkCount, totalRawNgCount, totalReworkCount, totalDuplicateCount, pendingSyncMachines, settings] = await Promise.all([
       this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "OK" } }),
       this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: { in: NG_FINAL_STATUSES } } }),
       this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "REWORK" } }),
@@ -424,20 +428,23 @@ export class ScansService {
       })
     ]);
 
+    const resultCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
+    const historicalResultCounts = resolveLogicalResultCounts({ ok: totalOkCount, ng: totalRawNgCount, rework: totalReworkCount });
+
     return {
       success: true,
       code: "SCAN_SUMMARY_LOADED",
       message: "Đã tải tổng quan lượt quét.",
       data: {
-        ok: okCount,
-        ng: ngCount,
-        rework: reworkCount,
+        ok: resultCounts.ok,
+        ng: resultCounts.ng,
+        rework: resultCounts.rework,
         pending: pendingCount,
-        total: okCount + ngCount + reworkCount + pendingCount,
+        total: resultCounts.total,
         today_duplicates: todayDuplicateCount,
-        total_ok: totalOkCount,
-        total_ng: totalNgCount,
-        total_rework: totalReworkCount,
+        total_ok: historicalResultCounts.ok,
+        total_ng: historicalResultCounts.ng,
+        total_rework: historicalResultCounts.rework,
         total_duplicates: totalDuplicateCount,
         pending_sync: pendingSyncMachines._sum.local_pending_sync ?? 0,
         duplicate_days: settings?.duplicate_days ?? 31
@@ -504,13 +511,11 @@ export class ScansService {
       message: "Đã tải tổng kết quả theo phạm vi.",
       data: machines.map((machine) => {
         const counts = countsByMachine.get(machine.id) ?? { ok: 0, ng: 0, rework: 0 };
+        const resultCounts = resolveLogicalResultCounts(counts);
         return {
           machine_id: machine.id,
           machine_code: machine.machine_code,
-          ok: counts.ok,
-          ng: counts.ng,
-          rework: counts.rework,
-          total: counts.ok + counts.ng + counts.rework
+          ...resultCounts
         };
       })
     };
@@ -608,7 +613,7 @@ export class ScansService {
           ng,
           rework,
           pending,
-          total: ok + ng + rework + pending
+          total: ok + ng
         };
       })
     );
@@ -765,7 +770,7 @@ export class ScansService {
           ng: counts.ng,
           rework: counts.rework,
           pending: counts.pending,
-          total: counts.ok + counts.ng + counts.rework + counts.pending
+          total: counts.ok + counts.ng
         });
       }
 
@@ -789,7 +794,7 @@ export class ScansService {
         ng: counts.ng,
         rework: counts.rework,
         pending: counts.pending,
-        total: counts.ok + counts.ng + counts.rework + counts.pending
+        total: counts.ok + counts.ng
       });
     }
 
@@ -860,7 +865,7 @@ export class ScansService {
       } else if (record.final_status === "PENDING") {
         bucket.pending += 1;
       }
-      bucket.total = bucket.ok + bucket.ng + bucket.rework + bucket.pending;
+      bucket.total = bucket.ok + bucket.ng;
     }
 
     return {

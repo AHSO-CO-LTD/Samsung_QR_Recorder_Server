@@ -209,7 +209,7 @@ function buildHeaderGridTemplate(itemCount: number) {
 }
 
 function MachineIdentity({ name, line, isVirtual }: { name: string; line: string; isVirtual: boolean }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const lineText = `Line: ${line}`;
 
   return (
@@ -300,7 +300,7 @@ function MachineRuntimeOverview({
   ngHref?: string;
   reworkHref?: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   return (
     <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(15rem,0.9fr)] md:items-stretch">
@@ -310,7 +310,7 @@ function MachineRuntimeOverview({
       <div className="grid min-h-52 grid-rows-4 gap-2">
         <RuntimeMetricRow label="OK" value={ok} tone="ok" />
         <RuntimeMetricRow label="NG" value={ng} tone="ng" href={ngHref} />
-        <RuntimeMetricRow label="REWORK" value={rework} tone="rework" href={reworkHref} />
+        <RuntimeMetricRow label="REWORK / NG" value={`${formatRuntimeCountFull(rework, locale)} / ${formatRuntimeCountFull(ng, locale)}`} tone="rework" href={reworkHref} />
         <RuntimeMetricRow label={t("colTotal")} value={total} tone="total" />
       </div>
     </div>
@@ -319,10 +319,11 @@ function MachineRuntimeOverview({
 
 function ResultDonut({ ok, ng, rework, total }: { ok: number; ng: number; rework: number; total: number }) {
   const { t, locale } = useI18n();
+  const reworkInDonut = Math.min(rework, ng);
   const data = [
     { key: "ok", name: "OK", value: ok, color: "var(--color-ok)" },
-    { key: "ng", name: "NG", value: ng, color: "var(--color-ng)" },
-    { key: "rework", name: "REWORK", value: rework, color: "var(--color-rework)" }
+    { key: "ng", name: "NG", value: Math.max(0, ng - reworkInDonut), color: "var(--color-ng)" },
+    { key: "rework", name: "REWORK", value: reworkInDonut, color: "var(--color-rework)" }
   ];
   const hasData = total > 0;
   const compactTotal = formatRuntimeCount(total, locale);
@@ -373,7 +374,7 @@ function RuntimeMetricRow({
   href
 }: {
   label: string;
-  value: number;
+  value: number | string;
   tone: "ok" | "ng" | "rework" | "total";
   href?: string;
 }) {
@@ -400,7 +401,7 @@ function RuntimeMetricRow({
       >
         {label}
       </div>
-      <ResponsiveRuntimeCount value={value} />
+      {typeof value === "number" ? <ResponsiveRuntimeCount value={value} /> : <div className="flex items-center justify-end px-3 font-mono text-sm font-semibold tabular-nums">{value}</div>}
     </div>
   );
 
@@ -518,7 +519,7 @@ export function buildSessionServerTrendData(session?: MachineRuntimeSession): Sc
 function buildScanRecordPoint(record: ScanRecord): ScanTrendPoint {
   const status = record.final_status;
   const ok = status === "OK" ? 1 : 0;
-  const ng = status === "NG" ? 1 : 0;
+  const ng = status === "NG" || status === "NG_REWORK" ? 1 : 0;
   const rework = status === "REWORK" ? 1 : 0;
   return {
     date: formatLiveSampleTime(record.scan_at),
@@ -526,7 +527,7 @@ function buildScanRecordPoint(record: ScanRecord): ScanTrendPoint {
     ng,
     rework,
     pending: 0,
-    total: ok + ng + rework,
+    total: ok + ng,
     timestamp: toTimestamp(record.scan_at)
   };
 }
@@ -571,7 +572,7 @@ function buildIncrementalCumulativeChartData(data: ScanTrendPoint[], timeAxis?: 
         ng,
         rework,
         pending: 0,
-        total: ok + ng + rework
+        total: ok + ng
       };
     })
   ];
@@ -624,7 +625,7 @@ function buildFixedBucketCumulativeChartData(data: ScanTrendPoint[], timeAxis: R
       ng,
       rework,
       pending: 0,
-      total: ok + ng + rework,
+      total: ok + ng,
       timestamp: bucketStartMs
     };
   });

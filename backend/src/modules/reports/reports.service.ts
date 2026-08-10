@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { FinalScanStatus, Prisma } from "@prisma/client";
+import { resolveLogicalResultCounts } from "../../common/results/logical-result-counts";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { ScanReportQueryDto } from "./dto/scan-report-query.dto";
 import { DEFAULT_REPORT_COLUMNS, MAX_EXPORT_ROWS, REPORT_COLUMN_KEYS, REPORT_FINAL_STATUSES, type ScanReportColumnKey, type ScanReportLocale } from "./report-definition";
@@ -340,10 +341,10 @@ export class ReportsService {
             machines: "Máy",
             profiles: "Hồ sơ",
             statuses: "Trạng thái",
-            total: "Tổng bản ghi",
+            total: "Tổng kết quả",
             ok: "Cuối cùng OK",
             ng: "Cuối cùng NG",
-            rework: "Cuối cùng REWORK",
+            rework: "REWORK / NG",
             pending: "Cuối cùng đang chờ"
           }
         : {
@@ -354,10 +355,10 @@ export class ReportsService {
             machines: "Machines",
             profiles: "Profiles",
             statuses: "Statuses",
-            total: "Total records",
+            total: "Total outcomes",
             ok: "Final OK",
             ng: "Final NG",
-            rework: "Final REWORK",
+            rework: "REWORK / NG",
             pending: "Final pending"
           };
     const sheet = workbook.addWorksheet(labels.sheet);
@@ -373,6 +374,7 @@ export class ReportsService {
       },
       { OK: 0, NG: 0, NG_REWORK: 0, REWORK: 0, PENDING: 0 } as Record<FinalScanStatus, number>
     );
+    const resultCounts = resolveLogicalResultCounts({ ok: counts.OK, ng: counts.NG, rework: counts.REWORK });
 
     sheet.columns = [
       { key: "label", width: 24 },
@@ -385,10 +387,10 @@ export class ReportsService {
       { label: labels.machines, value: filters.machineCodes.join(", ") || allValue },
       { label: labels.profiles, value: filters.profileIds.join(", ") || allValue },
       { label: labels.statuses, value: filters.finalStatuses.join(", ") || allValue },
-      { label: labels.total, value: records.length },
-      { label: labels.ok, value: counts.OK },
-      { label: labels.ng, value: counts.NG },
-      { label: labels.rework, value: counts.REWORK },
+      { label: labels.total, value: resultCounts.total },
+      { label: labels.ok, value: resultCounts.ok },
+      { label: labels.ng, value: resultCounts.ng },
+      { label: labels.rework, value: `${resultCounts.rework} / ${resultCounts.ng}` },
       { label: labels.pending, value: counts.PENDING }
     ]);
     sheet.getRow(1).font = { bold: true };

@@ -26,10 +26,11 @@ const chartConfig = {
 
 export function ScanResultSummaryCard({ result, numberFormatter }: { result: ScanAnalyticsResult; numberFormatter: Intl.NumberFormat }) {
   const { t, locale } = useI18n();
+  const reworkInDonut = Math.min(result.rework_count, result.ng_count);
   const data: SummaryChartItem[] = [
     { key: "ok", name: "OK", value: result.ok_count, color: "var(--color-ok)" },
-    { key: "ng", name: "NG", value: result.ng_count, color: "var(--color-ng)" },
-    { key: "rework", name: "REWORK", value: result.rework_count, color: "var(--color-rework)" }
+    { key: "ng", name: "NG", value: Math.max(0, result.ng_count - reworkInDonut), color: "var(--color-ng)" },
+    { key: "rework", name: "REWORK", value: reworkInDonut, color: "var(--color-rework)" }
   ];
   const hasData = result.total_count > 0;
   const chartData = hasData
@@ -81,7 +82,7 @@ export function ScanResultSummaryCard({ result, numberFormatter }: { result: Sca
           <div className="grid min-h-64 grid-rows-4 gap-3">
             <SummaryMetricRow label="OK" value={result.ok_count} tone="ok" numberFormatter={numberFormatter} />
             <SummaryMetricRow label="NG" value={result.ng_count} tone="ng" numberFormatter={numberFormatter} />
-            <SummaryMetricRow label="REWORK" value={result.rework_count} tone="rework" numberFormatter={numberFormatter} />
+            <SummaryMetricRow label="REWORK / NG" value={`${numberFormatter.format(result.rework_count)} / ${numberFormatter.format(result.ng_count)}`} tone="rework" numberFormatter={numberFormatter} />
             <SummaryMetricRow label={t("scanResultSummaryTotal")} value={result.total_count} tone="total" numberFormatter={numberFormatter} />
           </div>
         </div>
@@ -97,7 +98,7 @@ function SummaryMetricRow({
   numberFormatter
 }: {
   label: string;
-  value: number;
+  value: number | string;
   tone: "ok" | "ng" | "rework" | "total";
   numberFormatter: Intl.NumberFormat;
 }) {
@@ -118,7 +119,7 @@ function SummaryMetricRow({
     <div className={`grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm ${toneClasses}`}>
       <div className={`flex items-center px-3 font-semibold ${labelClasses}`}>{label}</div>
       <div className="flex items-center justify-end px-4 font-mono text-base font-semibold tabular-nums">
-        {numberFormatter.format(value)}
+        {typeof value === "number" ? numberFormatter.format(value) : value}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { formatAppTime } from "@/lib/app-time";
 import type { Machine, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
 import type { RuntimeResultCounts, ScanTrendPoint } from "@/features/shared/machine-runtime-card";
+import { resolveSessionResultCounts } from "./runtime-result-counts";
 
 const virtualStatuses: MachineRuntimeSession["status"][] = [
   "RUNNING",
@@ -137,12 +138,7 @@ export function createVirtualMachineRuntime(sequence: number, nowMs = Date.now()
 }
 
 export function getVirtualRuntimeCounts(session: MachineRuntimeSession): RuntimeResultCounts {
-  return {
-    ok: session.ok_count,
-    ng: session.ng_count,
-    rework: Math.max(0, session.total_count - session.ok_count - session.ng_count),
-    total: session.total_count
-  };
+  return resolveSessionResultCounts(session);
 }
 
 function buildVirtualTrendData(ok: number, ng: number, nowMs: number): ScanTrendPoint[] {
