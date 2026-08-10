@@ -73,6 +73,10 @@ type ManagedService = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   process?: ChildProcessWithoutNullStreams;
+  isStarting?: boolean;
+  restartAttempts?: number;
+  restartTimer?: NodeJS.Timeout;
+  healthFailures?: number;
 };
 
 type UpdateAsset = {
@@ -116,6 +120,10 @@ let isQuitting = false;
 let canCloseStartupWindow = false;
 let f12PressCount = 0;
 let f12ResetTimer: NodeJS.Timeout | null = null;
+let managedServiceHealthTimer: NodeJS.Timeout | null = null;
+
+const MANAGED_SERVICE_HEALTH_INTERVAL_MS = 5_000;
+const MANAGED_SERVICE_FAILURE_THRESHOLD = 3;
 
 process.on("uncaughtException", (error) => {
   appendServiceLog("SYSTEM", `Uncaught exception: ${formatUnknownError(error)}`);
@@ -466,11 +474,17 @@ async function waitForUrl(url: string, timeoutMs = 45000) {
 }
 
 async function startManagedService(service: ManagedService) {
+  if (service.isStarting) {
+    return false;
+  }
   if (await isUrlReady(service.readyUrl)) {
     appendServiceLog(service.name, `${service.readyUrl} is already running.`);
+    service.restartAttempts = 0;
+    service.healthFailures = 0;
     return true;
   }
 
+  service.isStarting = true;
   appendServiceLog(service.name, `Starting ${service.command} ${service.args.join(" ")}`);
   try {
     service.process = spawn(service.command, service.args, {
@@ -483,9 +497,12 @@ async function startManagedService(service: ManagedService) {
       windowsHide: true
     });
   } catch (error) {
+    service.isStarting = false;
     appendServiceLog(service.name, `Failed to start service: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
+
+  const childProcess = service.process;
 
   service.process.on("error", (error) => {
     appendServiceLog(service.name, `Service process error: ${error.message}`);
@@ -494,14 +511,74 @@ async function startManagedService(service: ManagedService) {
   service.process.stdout.on("data", (chunk) => appendServiceLog(service.name, chunk));
   service.process.stderr.on("data", (chunk) => appendServiceLog(service.name, chunk));
   service.process.on("exit", (code, signal) => {
+    if (service.process === childProcess) {
+      service.process = undefined;
+    }
     if (!isQuitting) {
       appendServiceLog(service.name, `Service exited. code=${code ?? "null"} signal=${signal ?? "null"}`);
+      scheduleManagedServiceRestart(service, "process exited");
     }
   });
 
   const ready = await waitForUrl(service.readyUrl);
+  service.isStarting = false;
+  if (ready) {
+    service.restartAttempts = 0;
+    service.healthFailures = 0;
+  }
   appendServiceLog(service.name, ready ? `${service.readyUrl} is ready.` : `${service.readyUrl} did not become ready in time.`);
   return ready;
+}
+
+function scheduleManagedServiceRestart(service: ManagedService, reason: string) {
+  if (isQuitting || !SHOULD_START_SERVICES || service.restartTimer) {
+    return;
+  }
+
+  const attempts = service.restartAttempts ?? 0;
+  const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempts, 5));
+  appendServiceLog(service.name, `Scheduling service restart in ${delayMs}ms. reason=${reason}`);
+  service.restartTimer = setTimeout(async () => {
+    service.restartTimer = undefined;
+    if (isQuitting) return;
+    if (service.isStarting) {
+      scheduleManagedServiceRestart(service, "service is still starting");
+      return;
+    }
+
+    service.restartAttempts = attempts + 1;
+    if (service.process?.pid) {
+      appendServiceLog(service.name, `Stopping unresponsive service pid=${service.process.pid} before restart.`);
+      stopProcessTree(service.process.pid);
+      service.process = undefined;
+    }
+
+    const ready = await startManagedService(service);
+    if (!ready) {
+      scheduleManagedServiceRestart(service, "restart readiness check failed");
+    }
+  }, delayMs);
+}
+
+function startManagedServiceHealthWatchdog() {
+  if (!SHOULD_START_SERVICES || managedServiceHealthTimer) return;
+  managedServiceHealthTimer = setInterval(() => {
+    for (const service of managedServices) {
+      void isUrlReady(service.readyUrl).then((ready) => {
+        if (isQuitting) return;
+        if (ready) {
+          service.healthFailures = 0;
+          return;
+        }
+
+        service.healthFailures = (service.healthFailures ?? 0) + 1;
+        if (service.healthFailures >= MANAGED_SERVICE_FAILURE_THRESHOLD) {
+          service.healthFailures = 0;
+          scheduleManagedServiceRestart(service, "health check failed repeatedly");
+        }
+      });
+    }
+  }, MANAGED_SERVICE_HEALTH_INTERVAL_MS);
 }
 
 async function waitForExistingServices() {
@@ -605,7 +682,15 @@ function stopProcessTree(pid: number) {
 
 function stopManagedServices() {
   isQuitting = true;
+  if (managedServiceHealthTimer) {
+    clearInterval(managedServiceHealthTimer);
+    managedServiceHealthTimer = null;
+  }
   for (const service of managedServices) {
+    if (service.restartTimer) {
+      clearTimeout(service.restartTimer);
+      service.restartTimer = undefined;
+    }
     if (service.process?.pid) {
       appendServiceLog("SYSTEM", `Stopping ${service.name} pid=${service.process.pid}`);
       stopProcessTree(service.process.pid);
@@ -1773,6 +1858,7 @@ app.whenReady().then(async () => {
   }
   appendServiceLog("STARTUP", "Opening desktop UI.");
   createMainWindow();
+  startManagedServiceHealthWatchdog();
 
   app.on("activate", () => {
     if (!mainWindow) {

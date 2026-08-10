@@ -9,7 +9,7 @@ import { AppModule } from "./app.module";
 const runtimeRequire = createRequire(__filename);
 const expressBodyParser = runtimeRequire("express");
 const backendPackage = runtimeRequire("../package.json") as { version?: string };
-const apiVersion = backendPackage.version?.trim() || "1.2.1";
+const apiVersion = backendPackage.version?.trim() || "1.2.2";
 const payloadLimitLogger = new Logger("PayloadLimit");
 
 type PayloadLimitError = {

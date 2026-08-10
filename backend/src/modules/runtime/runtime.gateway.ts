@@ -52,8 +52,12 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   publishScanUpdated(payload: {
     machine_code: string;
     local_scan_id: string;
+    server_scan_id: number | null;
     result_code: string;
     final_status: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING" | null;
+    full_code_raw: string | null;
+    full_chassis_code: string | null;
+    scan_at: string;
     source: "LIVE" | "BATCH";
     is_replay: boolean;
   }) {

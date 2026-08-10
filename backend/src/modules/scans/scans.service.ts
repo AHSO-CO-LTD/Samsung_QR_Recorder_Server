@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, HttpException, Injectable, Logger } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Prisma, type ErrorCode } from "@prisma/client";
 import { resolveLogicalResultCounts } from "../../common/results/logical-result-counts";
 import { getVietnamDayRange } from "../../common/time/vietnam-time";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -45,6 +45,7 @@ type ListScansQuery = ScanFilterQuery & {
   skip?: number;
   q?: string;
   duplicate_only?: boolean;
+  include_details?: boolean;
 };
 
 type CompleteSubmitScanDto = SubmitScanDto & {
@@ -55,10 +56,12 @@ type CompleteSubmitScanDto = SubmitScanDto & {
 };
 
 const NG_FINAL_STATUSES: Array<"NG" | "NG_REWORK"> = ["NG", "NG_REWORK"];
+const SCAN_COUNT_CACHE_MS = 15_000;
 
 @Injectable()
 export class ScansService {
   private readonly logger = new Logger(ScansService.name);
+  private readonly scanCountCache = new Map<string, { expiresAt: number; value?: number; pending?: Promise<number> }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -73,42 +76,45 @@ export class ScansService {
     const skip = Math.max(query.skip || 0, 0);
     const where = this.buildScanWhere(query);
 
+    const includeDetails = query.include_details !== false;
     const [total, scans, errorDefinitions] = await Promise.all([
-      this.prisma.scanRecord.count({ where }),
+      this.getCachedScanCount(query, where),
       this.prisma.scanRecord.findMany({
         where,
         skip,
         take,
         orderBy: { scan_at: "desc" },
-        include: {
-          machine: true,
-          profile: {
-            include: {
-              chassis_code: true,
-              profile_led_codes: {
+        include: includeDetails
+          ? {
+              machine: true,
+              profile: {
                 include: {
-                  led_code: true
-                },
-                orderBy: [{ led_slot: "asc" }, { id: "asc" }]
+                  chassis_code: true,
+                  profile_led_codes: {
+                    include: {
+                      led_code: true
+                    },
+                    orderBy: [{ led_slot: "asc" }, { id: "asc" }]
+                  }
+                }
+              },
+              led_items: {
+                orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
               }
             }
-          },
-          led_items: {
-            orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
-          }
-        }
+          : {
+              machine: true,
+              profile: {
+                include: {
+                  chassis_code: true
+                }
+              }
+            }
       }),
       this.prisma.errorCode.findMany()
     ]);
     const definitionByCode = new Map(errorDefinitions.map((definition) => [definition.code, definition]));
-    const scansWithDefinitions = scans.map((scan) => ({
-      ...scan,
-      ng_reason_definition: scan.ng_reason ? (definitionByCode.get(scan.ng_reason.trim().toUpperCase()) ?? null) : null,
-      led_items: scan.led_items.map((item) => ({
-        ...item,
-        ng_reason_definition: item.ng_reason ? (definitionByCode.get(item.ng_reason.trim().toUpperCase()) ?? null) : null
-      }))
-    }));
+    const scansWithDefinitions = scans.map((scan) => this.attachErrorDefinitions(scan, definitionByCode));
 
     return {
       success: true,
@@ -126,6 +132,112 @@ export class ScansService {
         has_next: skip + scans.length < total
       }
     };
+  }
+
+  async getScanDetails(id: number) {
+    const [scan, errorDefinitions] = await Promise.all([
+      this.prisma.scanRecord.findUnique({
+        where: { id },
+        include: {
+          machine: true,
+          profile: {
+            include: {
+              chassis_code: true,
+              profile_led_codes: {
+                include: { led_code: true },
+                orderBy: [{ led_slot: "asc" }, { id: "asc" }]
+              }
+            }
+          },
+          led_items: {
+            orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
+          }
+        }
+      }),
+      this.prisma.errorCode.findMany()
+    ]);
+    if (!scan) {
+      throw new NotFoundException({
+        success: false,
+        code: "SCAN_NOT_FOUND",
+        message: "Không tìm thấy lượt quét."
+      });
+    }
+
+    const definitionByCode = new Map(errorDefinitions.map((definition) => [definition.code, definition]));
+    return {
+      success: true,
+      code: "SCAN_DETAILS_LOADED",
+      message: "Đã tải chi tiết lượt quét.",
+      data: this.attachErrorDefinitions(scan, definitionByCode)
+    };
+  }
+
+  private attachErrorDefinitions<
+    T extends {
+      ng_reason: string | null;
+      led_items?: Array<{ ng_reason: string | null }>;
+    }
+  >(scan: T, definitionByCode: Map<string, ErrorCode>) {
+    return {
+      ...scan,
+      ng_reason_definition: scan.ng_reason ? (definitionByCode.get(scan.ng_reason.trim().toUpperCase()) ?? null) : null,
+      ...(scan.led_items
+        ? {
+            led_items: scan.led_items.map((item) => ({
+              ...item,
+              ng_reason_definition: item.ng_reason ? (definitionByCode.get(item.ng_reason.trim().toUpperCase()) ?? null) : null
+            }))
+          }
+        : {})
+    };
+  }
+
+  private getCachedScanCount(query: ListScansQuery, where: Prisma.ScanRecordWhereInput) {
+    const cacheKey = JSON.stringify({
+      q: query.q ?? null,
+      machine_code: query.machine_code ?? null,
+      line_name: query.line_name ?? null,
+      profile_id: query.profile_id ?? null,
+      vendor_char: query.vendor_char ?? null,
+      final_status: query.final_status ?? null,
+      ng_reason: query.ng_reason ?? null,
+      duplicate_only: query.duplicate_only ?? false,
+      from: query.from ?? null,
+      to: query.to ?? null
+    });
+    const now = Date.now();
+    const cached = this.scanCountCache.get(cacheKey);
+    if (cached?.value !== undefined && cached.expiresAt > now) {
+      return Promise.resolve(cached.value);
+    }
+    if (cached?.pending) {
+      return cached.pending;
+    }
+
+    const pending = this.prisma.scanRecord.count({ where }).then((value) => {
+      this.scanCountCache.set(cacheKey, { value, expiresAt: Date.now() + SCAN_COUNT_CACHE_MS });
+      this.pruneScanCountCache();
+      return value;
+    }).catch((error) => {
+      this.scanCountCache.delete(cacheKey);
+      throw error;
+    });
+    this.scanCountCache.set(cacheKey, { pending, expiresAt: now + SCAN_COUNT_CACHE_MS });
+    return pending;
+  }
+
+  private pruneScanCountCache() {
+    if (this.scanCountCache.size <= 100) return;
+    const now = Date.now();
+    for (const [key, entry] of this.scanCountCache) {
+      if (!entry.pending && entry.expiresAt <= now) this.scanCountCache.delete(key);
+    }
+    while (this.scanCountCache.size > 100) {
+      const oldestKey = this.scanCountCache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.scanCountCache.delete(oldestKey);
+    }
   }
 
   async getMachineErrorRanking(query: ScanFilterQuery) {
@@ -328,6 +440,29 @@ export class ScansService {
         ranking_status: rankingStatus,
         ranking_type: "machine" as const,
         machines: data
+      }
+    };
+  }
+
+  async getHistoryAnalytics(query: ScanFilterQuery) {
+    const summaryQuery: ScanFilterQuery = {
+      machine_code: query.machine_code,
+      line_name: query.line_name,
+      profile_id: query.profile_id,
+      vendor_char: query.vendor_char
+    };
+    const [summaryResponse, rankingResponse] = await Promise.all([
+      this.getMachineErrorRanking(summaryQuery),
+      this.getMachineErrorRanking(query)
+    ]);
+
+    return {
+      success: true,
+      code: "SCAN_HISTORY_ANALYTICS_LOADED",
+      message: "Đã tải thống kê lịch sử quét.",
+      data: {
+        summary: summaryResponse.data,
+        ranking: rankingResponse.data
       }
     };
   }
@@ -911,14 +1046,19 @@ export class ScansService {
         await this.logSyncRequest(machineForLog.id, dto, result, options.requestType ?? "SUBMIT_SCAN", "OK", options.batchCode);
       }
       const resultData = result.data as {
+        server_scan_id?: number | null;
         final_status?: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING";
         is_replay?: boolean;
       } | undefined;
       this.runtimeGateway.publishScanUpdated({
         machine_code: dto.machine_code,
         local_scan_id: dto.local_scan_id,
+        server_scan_id: resultData?.server_scan_id ?? null,
         result_code: result.code,
         final_status: resultData?.final_status ?? null,
+        full_code_raw: dto.full_code?.raw ?? null,
+        full_chassis_code: dto.full_code?.chassis_code ?? dto.chassis_scan_raw ?? null,
+        scan_at: dto.scan_at,
         source: options.syncBatchId ? "BATCH" : "LIVE",
         is_replay: resultData?.is_replay === true
       });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from "@nestjs/common";
 import { ApiOkResponse, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Public } from "../../common/auth/auth.decorators";
 import { SubmitScanDto } from "./dto/submit-scan.dto";
@@ -109,10 +109,44 @@ export class ScansController {
     });
   }
 
+  @Get("history-analytics")
+  @ApiTags("scan-dashboard")
+  @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
+  @ApiQuery({ name: "line_name", required: false, example: "LINE-01" })
+  @ApiQuery({ name: "profile_id", required: false, example: 1 })
+  @ApiQuery({ name: "vendor_char", required: false, example: "S" })
+  @ApiQuery({ name: "final_status", required: false, enum: ["OK", "NG", "NG_REWORK", "REWORK", "PENDING"] })
+  @ApiQuery({ name: "ng_reason", required: false, example: "SERVER_DUPLICATE" })
+  @ApiQuery({ name: "from", required: false, example: "2026-07-01T00:00:00+07:00" })
+  @ApiQuery({ name: "to", required: false, example: "2026-07-10T23:59:59+07:00" })
+  @ApiOkResponse({ description: "Load scan summary and filtered error ranking in one request." })
+  getHistoryAnalytics(
+    @Query("machine_code") machineCode?: string,
+    @Query("line_name") lineName?: string,
+    @Query("profile_id") profileId?: string,
+    @Query("vendor_char") vendorChar?: string,
+    @Query("final_status") finalStatus?: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING",
+    @Query("ng_reason") ngReason?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    return this.scansService.getHistoryAnalytics({
+      machine_code: machineCode?.trim() || undefined,
+      line_name: lineName?.trim() || undefined,
+      profile_id: profileId ? Number(profileId) : undefined,
+      vendor_char: vendorChar?.trim() || undefined,
+      final_status: finalStatus,
+      ng_reason: ngReason?.trim() || undefined,
+      from,
+      to
+    });
+  }
+
   @Get()
   @ApiTags("scan-dashboard")
   @ApiQuery({ name: "take", required: false, example: 100 })
   @ApiQuery({ name: "skip", required: false, example: 0 })
+  @ApiQuery({ name: "include_details", required: false, enum: ["true", "false"], description: "Set false for a lightweight table response. Defaults to true for backward compatibility." })
   @ApiQuery({ name: "q", required: false, example: "LOCAL01" })
   @ApiQuery({ name: "machine_code", required: false, example: "LOCAL01" })
   @ApiQuery({ name: "line_name", required: false, example: "LINE-01" })
@@ -127,6 +161,7 @@ export class ScansController {
   listScans(
     @Query("take") take?: string,
     @Query("skip") skip?: string,
+    @Query("include_details") includeDetails?: string,
     @Query("q") q?: string,
     @Query("machine_code") machineCode?: string,
     @Query("line_name") lineName?: string,
@@ -141,6 +176,7 @@ export class ScansController {
     return this.scansService.listLatestScans({
       take: Number(take || 100),
       skip: Number(skip || 0),
+      include_details: includeDetails !== "false",
       q: q?.trim() || undefined,
       machine_code: machineCode?.trim() || undefined,
       line_name: lineName?.trim() || undefined,
@@ -152,5 +188,12 @@ export class ScansController {
       from,
       to
     });
+  }
+
+  @Get(":id")
+  @ApiTags("scan-dashboard")
+  @ApiOkResponse({ description: "Load one scan with profile and LED details." })
+  getScanDetails(@Param("id", ParseIntPipe) id: number) {
+    return this.scansService.getScanDetails(id);
   }
 }

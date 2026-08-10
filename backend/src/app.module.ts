@@ -6,6 +6,7 @@ import { RuntimeConnectionModule } from "./common/runtime/runtime-connection.mod
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DuplicatesModule } from "./modules/duplicates/duplicates.module";
+import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { ErrorConfigModule } from "./modules/error-config/error-config.module";
 import { HealthModule } from "./modules/health/health.module";
 import { MachinesModule } from "./modules/machines/machines.module";
@@ -40,6 +41,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     ScansModule,
     ErrorConfigModule,
     DuplicatesModule,
+    DashboardModule,
     SyncModule,
     NotificationsModule,
     SettingsModule,

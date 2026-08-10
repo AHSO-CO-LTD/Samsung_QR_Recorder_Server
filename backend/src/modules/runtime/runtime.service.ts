@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { hasNewRuntimeResult } from "../../common/runtime/runtime-state";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -356,6 +357,25 @@ export class RuntimeService {
     };
   }
 
+  async listLatestSessionsForMachines(machineIds: number[]) {
+    if (machineIds.length === 0) {
+      return [];
+    }
+
+    const sessions = await (this.prisma as any).machineRuntimeSession.findMany({
+      where: {
+        machine_id: { in: machineIds }
+      },
+      orderBy: [{ machine_id: "asc" }, { last_seen_at: "desc" }, { id: "desc" }],
+      distinct: ["machine_id"],
+      include: {
+        current_product: true
+      }
+    });
+    const normalizedSessions = await this.normalizeSessionCounters(sessions);
+    return this.attachLatestMachineScanRecords(normalizedSessions, true);
+  }
+
   async getSession(id: number) {
     const session = await this.getSessionEntity(id);
     if (!session) {
@@ -703,25 +723,19 @@ export class RuntimeService {
       return sessions;
     }
 
-    const baselineEvents = await (this.prisma as any).machineRuntimeEvent.findMany({
-      where: {
-        session_id: {
-          in: sessionIds
-        },
-        OR: [
-          { total_count: { not: null } },
-          { ok_count: { not: null } },
-          { ng_count: { not: null } }
-        ]
-      },
-      orderBy: [{ created_at: "asc" }, { id: "asc" }],
-      select: {
-        session_id: true,
-        total_count: true,
-        ok_count: true,
-        ng_count: true
-      }
-    });
+    const baselineEvents = await this.prisma.$queryRaw<
+      Array<{ session_id: number; total_count: number | null; ok_count: number | null; ng_count: number | null }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON ("session_id")
+        "session_id",
+        "total_count",
+        "ok_count",
+        "ng_count"
+      FROM "machine_runtime_events"
+      WHERE "session_id" IN (${Prisma.join(sessionIds)})
+        AND ("total_count" IS NOT NULL OR "ok_count" IS NOT NULL OR "ng_count" IS NOT NULL)
+      ORDER BY "session_id" ASC, "created_at" ASC, "id" ASC
+    `);
 
     const baselineBySessionId = new Map<number, { total_count?: number | null; ok_count?: number | null; ng_count?: number | null }>();
     for (const event of baselineEvents) {
@@ -759,7 +773,10 @@ export class RuntimeService {
     return Math.max(0, current - baseline);
   }
 
-  private async attachLatestMachineScanRecords<T extends { machine_id?: number }>(sessions: T[]): Promise<Array<T & { latest_scan_record?: unknown }>> {
+  private async attachLatestMachineScanRecords<T extends { machine_id?: number }>(
+    sessions: T[],
+    lightweight = false
+  ): Promise<Array<T & { latest_scan_record?: unknown }>> {
     const machineIds = Array.from(
       new Set(
         sessions
@@ -780,19 +797,41 @@ export class RuntimeService {
       },
       orderBy: [{ machine_id: "asc" }, { scan_at: "desc" }, { id: "desc" }],
       distinct: ["machine_id"],
-      include: {
-        profile: {
-          include: {
-            chassis_code: true
+      ...(lightweight
+        ? {
+            select: {
+              id: true,
+              machine_id: true,
+              local_scan_id: true,
+              full_code_raw: true,
+              full_chassis_code: true,
+              full_vendor_char: true,
+              full_led_code: true,
+              full_factory_code: true,
+              duplicate_key: true,
+              chassis_scan_raw: true,
+              local_status: true,
+              server_status: true,
+              final_status: true,
+              ng_reason: true,
+              scan_at: true
+            }
           }
-        },
-        led_items: {
-          select: {
-            led_scan_raw: true
-          }
-        }
-      }
-    });
+        : {
+            include: {
+              profile: {
+                include: {
+                  chassis_code: true
+                }
+              },
+              led_items: {
+                select: {
+                  led_scan_raw: true
+                }
+              }
+            }
+          })
+    } as any);
     const latestScanByMachineId = new Map(latestScans.map((scan) => [scan.machine_id, scan]));
 
     return sessions.map((session) => ({

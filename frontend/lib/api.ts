@@ -1,6 +1,12 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:3979/api";
 const SESSION_STORAGE_KEY = "server-session-token";
 const REMEMBER_STORAGE_KEY = "server-remember-token";
+const DEFAULT_API_TIMEOUT_MS = 30_000;
+
+export type ApiRequestOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
 
 export type ApiResult<T = unknown> = {
   success: boolean;
@@ -21,11 +27,11 @@ export type ApiPaginationMeta = {
   has_next?: boolean;
 };
 
-export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+export async function apiGet<T>(path: string, options: ApiRequestOptions = {}): Promise<ApiResult<T>> {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     headers: buildAuthHeaders(),
     cache: "no-store"
-  });
+  }, options);
 
   const payload = (await response.json()) as ApiResult<T>;
   if (!response.ok) {
@@ -36,7 +42,7 @@ export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
 }
 
 export async function apiPost<T, TBody = unknown>(path: string, body: TBody): Promise<ApiResult<T>> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: buildAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
@@ -52,7 +58,7 @@ export async function apiPost<T, TBody = unknown>(path: string, body: TBody): Pr
 }
 
 export async function apiPatch<T, TBody = unknown>(path: string, body: TBody): Promise<ApiResult<T>> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: "PATCH",
     headers: buildAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
@@ -68,7 +74,7 @@ export async function apiPatch<T, TBody = unknown>(path: string, body: TBody): P
 }
 
 export async function apiPut<T, TBody = unknown>(path: string, body: TBody): Promise<ApiResult<T>> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: "PUT",
     headers: buildAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
@@ -84,7 +90,7 @@ export async function apiPut<T, TBody = unknown>(path: string, body: TBody): Pro
 }
 
 export async function apiDelete<T>(path: string): Promise<ApiResult<T>> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: "DELETE",
     headers: buildAuthHeaders(),
     cache: "no-store"
@@ -99,10 +105,10 @@ export async function apiDelete<T>(path: string): Promise<ApiResult<T>> {
 }
 
 export async function apiDownloadBlob(path: string): Promise<{ blob: Blob; fileName: string }> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     headers: buildAuthHeaders(),
     cache: "no-store"
-  });
+  }, { timeoutMs: 120_000 });
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -113,6 +119,38 @@ export async function apiDownloadBlob(path: string): Promise<{ blob: Blob; fileN
     blob: await response.blob(),
     fileName: getDownloadFileName(response.headers.get("content-disposition")) ?? "download.xlsx"
   };
+}
+
+async function fetchWithTimeout(input: string, init: RequestInit, options: ApiRequestOptions = {}) {
+  const controller = new AbortController();
+  const timeoutMs = Math.max(1_000, options.timeoutMs ?? DEFAULT_API_TIMEOUT_MS);
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal?.reason);
+
+  if (options.signal?.aborted) {
+    abortFromCaller();
+  } else {
+    options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
+
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      const timeoutError = new Error(`API không phản hồi trong ${Math.round(timeoutMs / 1000)} giây.`);
+      timeoutError.name = "TimeoutError";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
 }
 
 function buildAuthHeaders(baseHeaders: Record<string, string> = {}) {

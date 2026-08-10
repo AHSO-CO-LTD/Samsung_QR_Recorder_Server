@@ -1,0 +1,11 @@
+import { Module } from "@nestjs/common";
+import { RuntimeModule } from "../runtime/runtime.module";
+import { DashboardController } from "./dashboard.controller";
+import { DashboardService } from "./dashboard.service";
+
+@Module({
+  imports: [RuntimeModule],
+  controllers: [DashboardController],
+  providers: [DashboardService]
+})
+export class DashboardModule {}

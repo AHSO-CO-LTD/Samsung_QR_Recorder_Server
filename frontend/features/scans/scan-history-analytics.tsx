@@ -19,13 +19,11 @@ const emptyResult: ScanAnalyticsResult = {
 };
 
 export function ScanHistoryAnalytics({
-  summaryEndpoint,
-  rankingEndpoint,
+  endpoint,
   refreshSignal,
   autoRefreshMs
 }: {
-  summaryEndpoint: string;
-  rankingEndpoint: string;
+  endpoint: string;
   refreshSignal: number;
   autoRefreshMs?: number;
 }) {
@@ -39,24 +37,29 @@ export function ScanHistoryAnalytics({
   useEffect(() => {
     let isMounted = true;
     let hasNotifiedError = false;
+    let activeRequest: AbortController | null = null;
 
     const load = async (showLoading: boolean) => {
+      if (activeRequest) return;
+      const controller = new AbortController();
+      activeRequest = controller;
       if (showLoading) {
         setIsLoading(true);
       }
       try {
-        const [summaryResponse, rankingResponse] = await Promise.all([
-          apiGet<ScanAnalyticsResult>(summaryEndpoint),
-          apiGet<ScanAnalyticsResult>(rankingEndpoint)
-        ]);
+        const response = await apiGet<{ summary: ScanAnalyticsResult; ranking: ScanAnalyticsResult }>(endpoint, {
+          signal: controller.signal,
+          timeoutMs: 15_000
+        });
         if (!isMounted) {
           return;
         }
-        setSummaryResult(summaryResponse.data ?? emptyResult);
-        setRankingResult(rankingResponse.data ?? emptyResult);
+        setSummaryResult(response.data?.summary ?? emptyResult);
+        setRankingResult(response.data?.ranking ?? emptyResult);
         setError(null);
         hasNotifiedError = false;
       } catch (currentError) {
+        if (currentError instanceof Error && currentError.name === "AbortError") return;
         if (!isMounted) {
           return;
         }
@@ -67,6 +70,7 @@ export function ScanHistoryAnalytics({
           hasNotifiedError = true;
         }
       } finally {
+        if (activeRequest === controller) activeRequest = null;
         if (isMounted && showLoading) {
           setIsLoading(false);
         }
@@ -77,11 +81,12 @@ export function ScanHistoryAnalytics({
     const interval = autoRefreshMs ? window.setInterval(() => void load(false), autoRefreshMs) : undefined;
     return () => {
       isMounted = false;
+      activeRequest?.abort();
       if (interval !== undefined) {
         window.clearInterval(interval);
       }
     };
-  }, [autoRefreshMs, rankingEndpoint, refreshSignal, reloadKey, summaryEndpoint, t]);
+  }, [autoRefreshMs, endpoint, refreshSignal, reloadKey, t]);
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US"), [locale]);
   const percentageFormatter = useMemo(

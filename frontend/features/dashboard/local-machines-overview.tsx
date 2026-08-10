@@ -40,7 +40,7 @@ import {
   type RuntimeResultScope,
   type RuntimeSummaryRow
 } from "@/features/shared/runtime-result-scope-control";
-import type { Machine, MachineRuntimeSession } from "@/features/shared/types";
+import type { Machine, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
 import { DevVirtualMachineButton } from "@/features/shared/dev-virtual-machine-button";
 import { useVirtualMachineRuntimes } from "@/features/shared/use-virtual-machine-runtimes";
 import { getVirtualRuntimeCounts } from "@/features/shared/virtual-machine-runtime";
@@ -48,8 +48,29 @@ import { NgSoundControls } from "@/features/sound/ng-sound-controls";
 import { handleNgSoundScanEvent } from "@/features/sound/ng-sound-player";
 import { DashboardSectionHeader } from "./dashboard-section-header";
 
-const RUNTIME_REFRESH_MS = 5000;
-const TREND_REFRESH_MS = 30000;
+const RUNTIME_REFRESH_MS = 15_000;
+const SOCKET_SYNC_REFRESH_MS = 2_000;
+const DASHBOARD_REQUEST_TIMEOUT_MS = 15_000;
+
+type DashboardRuntimeOverview = {
+  generated_at: string;
+  machines: Machine[];
+  sessions: MachineRuntimeSession[];
+  result_summary: RuntimeSummaryRow[];
+  trends: TrendByMachine;
+};
+
+type DashboardScanUpdate = {
+  machine_code: string;
+  local_scan_id: string;
+  server_scan_id: number | null;
+  final_status: ScanRecord["final_status"] | null;
+  full_code_raw: string | null;
+  full_chassis_code: string | null;
+  scan_at: string;
+  source: "LIVE" | "BATCH";
+  is_replay: boolean;
+};
 
 export function LocalMachinesOverview() {
   const { t } = useI18n();
@@ -66,7 +87,10 @@ export function LocalMachinesOverview() {
   const [timeAxisNowMs, setTimeAxisNowMs] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const summaryLoadSequence = useRef(0);
+  const overviewLoadSequence = useRef(0);
+  const activeOverviewRequest = useRef<AbortController | null>(null);
+  const machineIdByCode = useRef(new Map<string, number>());
+  const resultScopeRef = useRef<RuntimeResultScope>(resultScope);
   const { virtualMachines, createVirtualMachine } = useVirtualMachineRuntimes(user?.id);
   const {
     columnsPerRow,
@@ -85,91 +109,63 @@ export function LocalMachinesOverview() {
     setPreferencesReady(true);
   }, []);
 
-  const load = useCallback(
+  useEffect(() => {
+    resultScopeRef.current = resultScope;
+  }, [resultScope]);
+
+  const loadOverview = useCallback(
     async (showToast = false, background = false) => {
+      if (!preferencesReady) return;
+      if (background && activeOverviewRequest.current) return;
+
+      activeOverviewRequest.current?.abort();
+      const controller = new AbortController();
+      activeOverviewRequest.current = controller;
+      const requestId = ++overviewLoadSequence.current;
+
       if (!background) {
         setIsLoading(true);
+        setIsScopeLoading(true);
         setError(null);
+        setScopeError(null);
       }
+
       try {
-        const [machineResult, sessionResult] = await Promise.allSettled([
-          apiGet<Machine[]>("/machines"),
-          apiGet<MachineRuntimeSession[]>("/runtime/sessions?take=200")
-        ]);
+        const params = new URLSearchParams({
+          scope: resultScope,
+          trend_hours: String(SERVER_TREND_HOURS),
+          bucket_minutes: String(SERVER_TREND_BUCKET_MINUTES)
+        });
+        if (resultScope === "since") params.set("from", sinceDate);
 
-        if (machineResult.status === "rejected") {
-          throw machineResult.reason;
-        }
+        const result = await apiGet<DashboardRuntimeOverview>(`/dashboard/runtime-overview?${params.toString()}`, {
+          signal: controller.signal,
+          timeoutMs: DASHBOARD_REQUEST_TIMEOUT_MS
+        });
+        if (requestId !== overviewLoadSequence.current) return;
 
-        const nextMachines = (machineResult.value.data ?? []).filter((machine) => machine.is_active);
-        const nextSessions = sessionResult.status === "fulfilled" ? sessionResult.value.data ?? [] : [];
+        const overview = result.data;
+        const nextMachines = (overview?.machines ?? []).filter((machine) => machine.is_active);
+        machineIdByCode.current = new Map(nextMachines.map((machine) => [machine.machine_code, machine.id] as const));
         setMachines(nextMachines);
-        setSessions(nextSessions);
+        setSessions(overview?.sessions ?? []);
+        setResultCountsByMachine(indexRuntimeSummary(overview?.result_summary ?? []));
+        setTrendByMachine(overview?.trends ?? {});
+        setTimeAxisNowMs(Date.now());
         setError(null);
-
-        if (sessionResult.status === "rejected" && showToast) {
-          toast.error(sessionResult.reason instanceof Error ? sessionResult.reason.message : t("error"));
-        }
+        setScopeError(null);
       } catch (currentError) {
-        const message = currentError instanceof Error ? currentError.message : t("error");
+        if (requestId !== overviewLoadSequence.current || isAbortedRequest(currentError)) return;
+        const message = currentError instanceof Error ? currentError.message : t("runtimeSummaryLoadFailed");
         if (!background) {
           setError(message);
+          setScopeError(message);
         }
-        if (showToast) {
-          toast.error(message);
-        }
+        if (showToast) toast.error(message);
       } finally {
-        if (!background) {
+        if (activeOverviewRequest.current === controller) activeOverviewRequest.current = null;
+        if (!background && requestId === overviewLoadSequence.current) {
           setIsLoading(false);
-        }
-      }
-    },
-    [t]
-  );
-
-  const machineCodesKey = useMemo(() => machines.map((machine) => machine.machine_code).sort().join("|"), [machines]);
-
-  const loadResultSummary = useCallback(
-    async (showToast = false, background = false) => {
-      if (!preferencesReady) {
-        return;
-      }
-
-      const requestId = ++summaryLoadSequence.current;
-      if (resultScope === "session") {
-        setResultCountsByMachine({});
-        setScopeError(null);
-        setIsScopeLoading(false);
-        return;
-      }
-
-      if (!background) {
-        setIsScopeLoading(true);
-        setResultCountsByMachine({});
-      }
-      setScopeError(null);
-
-      try {
-        const path = `/scans/runtime-summary?scope=${resultScope}${
-          resultScope === "since" ? `&from=${encodeURIComponent(sinceDate)}` : ""
-        }`;
-        const result = await apiGet<RuntimeSummaryRow[]>(path);
-        if (requestId !== summaryLoadSequence.current) {
-          return;
-        }
-        setResultCountsByMachine(indexRuntimeSummary(result.data ?? []));
-      } catch (currentError) {
-        if (requestId !== summaryLoadSequence.current) {
-          return;
-        }
-        const message = currentError instanceof Error ? currentError.message : t("runtimeSummaryLoadFailed");
-        setResultCountsByMachine({});
-        setScopeError(message);
-        if (showToast) {
-          toast.error(message);
-        }
-      } finally {
-        if (!background && requestId === summaryLoadSequence.current) {
           setIsScopeLoading(false);
         }
       }
@@ -177,107 +173,89 @@ export function LocalMachinesOverview() {
     [preferencesReady, resultScope, sinceDate, t]
   );
 
-  const loadTrendData = useCallback(
-    async (showToast = false) => {
-      const machineCodes = machineCodesKey ? machineCodesKey.split("|") : [];
-      if (machineCodes.length === 0) {
-        setTrendByMachine({});
-        return;
-      }
+  const applyScanUpdate = useCallback((payload: unknown) => {
+    const update = parseDashboardScanUpdate(payload);
+    if (!update || update.is_replay || !update.final_status) return;
+    const finalStatus = update.final_status;
 
-      try {
-        const entries = await Promise.all(
-          machineCodes.map(async (machineCode) => {
-            const result = await apiGet<ScanTrendPoint[]>(
-              `/scans/trend?hours=${SERVER_TREND_HOURS}&bucket_minutes=${SERVER_TREND_BUCKET_MINUTES}&machine_code=${encodeURIComponent(machineCode)}`
-            );
-            return [machineCode, result.data ?? emptyTrendData] as const;
-          })
-        );
-        setTrendByMachine(Object.fromEntries(entries));
-      } catch (trendError) {
-        if (showToast) {
-          toast.error(trendError instanceof Error ? trendError.message : t("error"));
-        }
-      }
-    },
-    [machineCodesKey, t]
-  );
+    setSessions((currentSessions) =>
+      currentSessions.map((session) => {
+        if (session.machine_code !== update.machine_code) return session;
+        const latestScan = buildRealtimeScanRecord(update, session.latest_scan_record);
+        const countDelta = getResultDelta(finalStatus);
+        return {
+          ...session,
+          total_count: session.total_count + countDelta.total,
+          ok_count: session.ok_count + countDelta.ok,
+          ng_count: session.ng_count + countDelta.ng,
+          last_result: finalStatus,
+          last_code: update.full_code_raw ?? update.local_scan_id,
+          last_local_scan_id: update.local_scan_id,
+          last_result_at: update.scan_at,
+          latest_scan_record: latestScan
+        };
+      })
+    );
+
+    setResultCountsByMachine((currentCounts) => {
+      const machineId = machineIdByCode.current.get(update.machine_code);
+      if (!machineId || resultScopeRef.current === "session") return currentCounts;
+      const previous = currentCounts[machineId] ?? { ok: 0, ng: 0, rework: 0, total: 0 };
+      const delta = getResultDelta(finalStatus);
+      const next = {
+        ok: previous.ok + delta.ok,
+        ng: previous.ng + delta.ng,
+        rework: previous.rework + delta.rework,
+        total: previous.total + delta.ok + delta.ng
+      };
+      return { ...currentCounts, [machineId]: next };
+    });
+
+    setTrendByMachine((currentTrends) => ({
+      ...currentTrends,
+      [update.machine_code]: appendTrendUpdate(currentTrends[update.machine_code] ?? [], update)
+    }));
+    setTimeAxisNowMs(Date.now());
+  }, []);
 
   useEffect(() => {
-    void load();
+    if (!preferencesReady) return;
+    void loadOverview(false, false);
     const interval = window.setInterval(() => {
-      void load(false, true);
+      void loadOverview(false, true);
     }, RUNTIME_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [load]);
+    return () => window.clearInterval(interval);
+  }, [loadOverview, preferencesReady]);
 
   useEffect(() => {
     const socket = io(buildRuntimeSocketUrl(), {
       transports: ["websocket", "polling"]
     });
-    let scanRefreshTimer: number | null = null;
-
-    const refreshFromRuntime = () => {
-      void load(false, true);
-      void loadTrendData();
-      void loadResultSummary(false, true);
+    let syncTimer: number | null = null;
+    const scheduleServerSync = () => {
+      if (syncTimer !== null) return;
+      syncTimer = window.setTimeout(() => {
+        syncTimer = null;
+        void loadOverview(false, true);
+      }, SOCKET_SYNC_REFRESH_MS);
     };
     const refreshFromScan = (payload: unknown) => {
       handleNgSoundScanEvent(payload, t("ngSoundPlaybackFailed"));
-      if (scanRefreshTimer) {
-        window.clearTimeout(scanRefreshTimer);
-      }
-      scanRefreshTimer = window.setTimeout(() => {
-        void load(false, true);
-        void loadTrendData();
-        void loadResultSummary(false, true);
-      }, 150);
+      applyScanUpdate(payload);
+      scheduleServerSync();
     };
 
-    socket.on("server:runtime-updated", refreshFromRuntime);
+    socket.on("server:runtime-updated", scheduleServerSync);
     socket.on("server:scan-updated", refreshFromScan);
-
     return () => {
-      socket.off("server:runtime-updated", refreshFromRuntime);
+      socket.off("server:runtime-updated", scheduleServerSync);
       socket.off("server:scan-updated", refreshFromScan);
-      if (scanRefreshTimer) {
-        window.clearTimeout(scanRefreshTimer);
-      }
+      if (syncTimer !== null) window.clearTimeout(syncTimer);
       socket.disconnect();
     };
-  }, [load, loadResultSummary, loadTrendData]);
+  }, [applyScanUpdate, loadOverview, t]);
 
-  useEffect(() => {
-    setTimeAxisNowMs(Date.now());
-    void loadTrendData();
-    const interval = window.setInterval(() => {
-      setTimeAxisNowMs(Date.now());
-      void loadTrendData();
-    }, TREND_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [loadTrendData]);
-
-  useEffect(() => {
-    if (!preferencesReady) {
-      return;
-    }
-
-    void loadResultSummary();
-    const interval = window.setInterval(() => {
-      void loadResultSummary(false, true);
-    }, RUNTIME_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [loadResultSummary, preferencesReady]);
+  useEffect(() => () => activeOverviewRequest.current?.abort(), []);
 
   const rows = useMemo(() => {
     return buildMachineRows(
@@ -329,9 +307,7 @@ export function LocalMachinesOverview() {
               onColumnsPerRowChange={updateColumnsPerRow}
               onOptionChange={updateDisplayOption}
               onReload={() => {
-                void load(true);
-                void loadTrendData(true);
-                void loadResultSummary(true);
+                void loadOverview(true, false);
               }}
               onReset={resetDisplayOptions}
             />
@@ -339,9 +315,7 @@ export function LocalMachinesOverview() {
               variant="outline"
               size="sm"
               onClick={() => {
-                void load(true);
-                void loadTrendData(true);
-                void loadResultSummary(true);
+                void loadOverview(true, false);
               }}
               disabled={isLoading || isScopeLoading}
               className="w-full sm:w-auto"
@@ -409,4 +383,89 @@ export function LocalMachinesOverview() {
       ) : null}
     </section>
   );
+}
+
+function parseDashboardScanUpdate(payload: unknown): DashboardScanUpdate | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = payload as Record<string, unknown>;
+  const machineCode = typeof value.machine_code === "string" ? value.machine_code.trim() : "";
+  const localScanId = typeof value.local_scan_id === "string" ? value.local_scan_id.trim() : "";
+  const finalStatus = typeof value.final_status === "string" && ["OK", "NG", "NG_REWORK", "REWORK", "PENDING"].includes(value.final_status)
+    ? (value.final_status as ScanRecord["final_status"])
+    : null;
+  if (!machineCode || !localScanId) return null;
+
+  return {
+    machine_code: machineCode,
+    local_scan_id: localScanId,
+    server_scan_id: typeof value.server_scan_id === "number" ? value.server_scan_id : null,
+    final_status: finalStatus,
+    full_code_raw: typeof value.full_code_raw === "string" ? value.full_code_raw : null,
+    full_chassis_code: typeof value.full_chassis_code === "string" ? value.full_chassis_code : null,
+    scan_at: typeof value.scan_at === "string" ? value.scan_at : new Date().toISOString(),
+    source: value.source === "BATCH" ? "BATCH" : "LIVE",
+    is_replay: value.is_replay === true
+  };
+}
+
+function buildRealtimeScanRecord(update: DashboardScanUpdate, current?: ScanRecord | null): ScanRecord {
+  const updateTimestamp = new Date(update.scan_at).getTime();
+  const currentTimestamp = current ? new Date(current.scan_at).getTime() : Number.NEGATIVE_INFINITY;
+  if (current && Number.isFinite(currentTimestamp) && currentTimestamp > updateTimestamp) return current;
+
+  return {
+    id: update.server_scan_id ?? current?.id ?? -1,
+    local_scan_id: update.local_scan_id,
+    full_code_raw: update.full_code_raw ?? current?.full_code_raw ?? update.local_scan_id,
+    full_chassis_code: update.full_chassis_code ?? current?.full_chassis_code,
+    full_vendor_char: current?.full_vendor_char ?? "",
+    duplicate_key: current?.duplicate_key ?? "",
+    local_status: current?.local_status ?? (update.final_status === "OK" ? "OK" : update.final_status === "REWORK" ? "REWORK" : "NG"),
+    server_status: current?.server_status ?? (update.final_status === "OK" || update.final_status === "REWORK" ? "OK" : "NG"),
+    final_status: update.final_status ?? current?.final_status ?? "PENDING",
+    ng_reason: current?.ng_reason ?? null,
+    scan_at: update.scan_at
+  };
+}
+
+function getResultDelta(status: ScanRecord["final_status"]) {
+  return {
+    ok: status === "OK" ? 1 : 0,
+    ng: status === "NG" || status === "NG_REWORK" ? 1 : 0,
+    rework: status === "REWORK" ? 1 : 0,
+    total: status === "OK" || status === "NG" || status === "NG_REWORK" || status === "REWORK" ? 1 : 0,
+    pending: status === "PENDING" ? 1 : 0
+  };
+}
+
+function appendTrendUpdate(current: ScanTrendPoint[], update: DashboardScanUpdate) {
+  if (!update.final_status) return current;
+  const scanTimestamp = new Date(update.scan_at).getTime();
+  const oldestAllowedTimestamp = Date.now() - SERVER_TREND_HOURS * 60 * 60 * 1000;
+  if (!Number.isFinite(scanTimestamp) || scanTimestamp < oldestAllowedTimestamp) return current;
+
+  const bucketMs = SERVER_TREND_BUCKET_MINUTES * 60 * 1000;
+  const timestamp = Math.floor(scanTimestamp / bucketMs) * bucketMs;
+  const delta = getResultDelta(update.final_status);
+  const existingIndex = current.findIndex((point) => point.timestamp === timestamp);
+  const next = [...current];
+  const existing = existingIndex >= 0 ? next[existingIndex] : undefined;
+  const ok = (existing?.ok ?? 0) + delta.ok;
+  const ng = (existing?.ng ?? 0) + delta.ng;
+  const point: ScanTrendPoint = {
+    date: `${String(new Date(timestamp).getHours()).padStart(2, "0")}:${String(new Date(timestamp).getMinutes()).padStart(2, "0")}`,
+    ok,
+    ng,
+    rework: (existing?.rework ?? 0) + delta.rework,
+    pending: (existing?.pending ?? 0) + delta.pending,
+    total: ok + ng,
+    timestamp
+  };
+  if (existingIndex >= 0) next[existingIndex] = point;
+  else next.push(point);
+  return next.sort((left, right) => (left.timestamp ?? 0) - (right.timestamp ?? 0));
+}
+
+function isAbortedRequest(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
 }

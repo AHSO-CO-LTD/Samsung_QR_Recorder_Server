@@ -72,11 +72,13 @@ export function DataTablePanel<T>({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [paginationMeta, setPaginationMeta] = useState<ApiPaginationMeta | null>(null);
   const previousRefreshSignal = useRef(refreshSignal);
-  const trimmedSearch = searchText.trim();
+  const activeRequest = useRef<AbortController | null>(null);
+  const trimmedSearch = debouncedSearch.trim();
   const normalizedSearch = trimmedSearch.toLowerCase();
   const pageSize = Math.max(pagination?.pageSize ?? 0, 0);
   const isPaginationEnabled = pageSize > 0;
@@ -90,12 +92,16 @@ export function DataTablePanel<T>({
     : endpoint;
 
   const load = useCallback(async (background = false) => {
+    if (background && activeRequest.current) return;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     if (!background) {
       setIsLoading(true);
       setError(null);
     }
     try {
-      const result = await apiGet<T[] | T>(requestEndpoint);
+      const result = await apiGet<T[] | T>(requestEndpoint, { signal: controller.signal, timeoutMs: 15_000 });
       const nextItems = Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
       setItems(nextItems);
       setExpandedRows(new Set());
@@ -103,17 +109,28 @@ export function DataTablePanel<T>({
       onData?.(nextItems);
       setError(null);
     } catch (currentError) {
+      if (currentError instanceof Error && currentError.name === "AbortError") return;
       const message = currentError instanceof Error ? currentError.message : t("error");
       if (!background) {
         setError(message);
         toast.error(message);
       }
     } finally {
-      if (!background) {
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+      }
+      if (!background && !controller.signal.aborted) {
         setIsLoading(false);
       }
     }
   }, [requestEndpoint, isServerPaginated, onData, t]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchText), 400);
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
+  useEffect(() => () => activeRequest.current?.abort(), []);
 
   useEffect(() => {
     void load();
