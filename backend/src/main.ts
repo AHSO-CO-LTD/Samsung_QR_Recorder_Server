@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { ValidationPipe } from "@nestjs/common";
+import { Logger, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -7,16 +7,78 @@ import { createRequire } from "node:module";
 import { AppModule } from "./app.module";
 
 const runtimeRequire = createRequire(__filename);
+const expressBodyParser = runtimeRequire("express");
 const backendPackage = runtimeRequire("../package.json") as { version?: string };
-const apiVersion = backendPackage.version?.trim() || "1.2.0";
+const apiVersion = backendPackage.version?.trim() || "1.2.1";
+const payloadLimitLogger = new Logger("PayloadLimit");
+
+type PayloadLimitError = {
+  type?: unknown;
+  limit?: unknown;
+  length?: unknown;
+};
+
+type PayloadLimitRequest = {
+  method?: unknown;
+  originalUrl?: unknown;
+  url?: unknown;
+  headers?: Record<string, unknown>;
+  ip?: unknown;
+  socket?: { remoteAddress?: unknown };
+};
+
+type PayloadLimitResponse = {
+  status: (statusCode: number) => { json: (body: unknown) => void };
+};
+
+function toLogValue(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? value : null;
+}
+
+function resolveClientIp(request: PayloadLimitRequest) {
+  const forwardedFor = request.headers?.["x-forwarded-for"];
+  if (typeof forwardedFor === "string") {
+    return forwardedFor.split(",")[0]?.trim() || null;
+  }
+
+  return toLogValue(request.ip) ?? toLogValue(request.socket?.remoteAddress);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
     cors: {
       origin: true,
       credentials: true,
       exposedHeaders: ["Content-Disposition"]
     }
+  });
+
+  app.use(expressBodyParser.json({ limit: "25mb" }));
+  app.use(expressBodyParser.urlencoded({ extended: true, limit: "25mb" }));
+  app.use((error: unknown, request: PayloadLimitRequest, response: PayloadLimitResponse, next: (nextError?: unknown) => void) => {
+    const payloadError = error as PayloadLimitError;
+    if (payloadError.type !== "entity.too.large") {
+      next(error);
+      return;
+    }
+
+    payloadLimitLogger.warn(
+      JSON.stringify({
+        event: "REQUEST_PAYLOAD_TOO_LARGE",
+        method: toLogValue(request.method),
+        path: toLogValue(request.originalUrl) ?? toLogValue(request.url),
+        content_length: toLogValue(request.headers?.["content-length"]),
+        expected_length: toLogValue(payloadError.length),
+        limit: toLogValue(payloadError.limit),
+        client_ip: resolveClientIp(request)
+      })
+    );
+    response.status(413).json({
+      success: false,
+      code: "REQUEST_PAYLOAD_TOO_LARGE",
+      message: "Dữ liệu gửi lên vượt quá giới hạn cho phép."
+    });
   });
 
   app.setGlobalPrefix("api");

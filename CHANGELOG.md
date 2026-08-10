@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 - 2026-08-10
+
+### Fixed
+
+- Tăng giới hạn JSON và URL-encoded request lên 25 MB để tiếp nhận các đợt đồng bộ hợp lệ có payload lớn.
+- Ghi nhật ký an toàn khi request vượt giới hạn, gồm method, route, kích thước, giới hạn và IP nguồn; không ghi nội dung payload.
+
 ## 1.2.0 - 2026-08-10
 
 ### Changed
