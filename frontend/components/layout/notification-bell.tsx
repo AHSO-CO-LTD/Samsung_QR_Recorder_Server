@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Check, ExternalLink, RefreshCw } from "lucide-react";
+import { Bell, Check, CheckCheck, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ export function NotificationBell({ locale, t }: NotificationBellProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const newestIdRef = useRef<number | null>(null);
   const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,6 +101,21 @@ export function NotificationBell({ locale, t }: NotificationBellProps) {
     [load, t]
   );
 
+  const markAllRead = useCallback(async () => {
+    if (unreadCount === 0 || isMarkingAllRead) return;
+
+    setIsMarkingAllRead(true);
+    try {
+      await apiPatch<{ updated_count: number }, Record<string, never>>("/notifications/read-all", {});
+      setItems((currentItems) => currentItems.map((item) => (item.status === "NEW" ? { ...item, status: "READ" } : item)));
+      toast.success(t("allNotificationsMarkedRead"));
+    } catch (currentError) {
+      toast.error(currentError instanceof Error ? currentError.message : t("notificationStatusUpdateFailed"));
+    } finally {
+      setIsMarkingAllRead(false);
+    }
+  }, [isMarkingAllRead, t, unreadCount]);
+
   return (
     <DropdownMenu>
       <Tooltip>
@@ -155,10 +171,14 @@ export function NotificationBell({ locale, t }: NotificationBellProps) {
         </div>
 
         <DropdownMenuSeparator />
-        <div className="grid grid-cols-2 gap-1 p-1">
+        <div className="grid grid-cols-3 gap-1 p-1">
           <Button variant="ghost" size="sm" onClick={() => void load(true)} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} aria-hidden="true" />
             {t("retry")}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void markAllRead()} disabled={unreadCount === 0 || isMarkingAllRead}>
+            {isMarkingAllRead ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
+            {t("markAllNotificationsRead")}
           </Button>
           <DropdownMenuItem asChild>
             <Link href="/notifications" className="justify-center">

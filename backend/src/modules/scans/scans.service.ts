@@ -449,7 +449,9 @@ export class ScansService {
       machine_code: query.machine_code,
       line_name: query.line_name,
       profile_id: query.profile_id,
-      vendor_char: query.vendor_char
+      vendor_char: query.vendor_char,
+      from: query.from,
+      to: query.to
     };
     const [summaryResponse, rankingResponse] = await Promise.all([
       this.getMachineErrorRanking(summaryQuery),

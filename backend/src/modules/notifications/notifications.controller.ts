@@ -21,6 +21,13 @@ export class NotificationsController {
     return this.notificationsService.listNotifications(Number(take || 50));
   }
 
+  @Patch("read-all")
+  @Roles("ADMIN", "ENGINEER", "DEV")
+  @ApiOkResponse({ description: "Mark all visible new notification events as read." })
+  markAllNotificationsRead(@Req() request: AuthenticatedRequest) {
+    return this.notificationsService.markAllNotificationsRead(request.user?.id);
+  }
+
   @Patch(":id/status")
   @Roles("ADMIN", "ENGINEER", "DEV")
   @ApiOkResponse({ description: "Update one notification event status." })

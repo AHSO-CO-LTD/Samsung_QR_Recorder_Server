@@ -14,6 +14,8 @@ import { resolveCurrentProductCode } from "@/features/shared/machine-runtime-car
 import { resolveSessionResultCounts } from "@/features/shared/runtime-result-counts";
 import type { MachineRuntimeAdjustmentLog, MachineRuntimeEvent, MachineRuntimeProduct, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
 
+const RUNTIME_LIST_REFRESH_THROTTLE_MS = 5_000;
+
 export function RuntimeView() {
   const { t } = useI18n();
   const [refreshId, setRefreshId] = useState(0);
@@ -23,12 +25,28 @@ export function RuntimeView() {
 
   useEffect(() => {
     const socket = io(buildRuntimeSocketUrl(), {
-      transports: ["websocket", "polling"]
+      transports: ["websocket", "polling"],
+      auth: {
+        client_type: "SERVER_UI",
+        page: "runtime-sessions"
+      }
     });
+    let refreshTimer: number | null = null;
+    let lastRefreshAt = 0;
+
     socket.on("server:runtime-updated", () => {
-      setRefreshId((value) => value + 1);
+      if (refreshTimer !== null) return;
+      const delay = Math.max(0, RUNTIME_LIST_REFRESH_THROTTLE_MS - (Date.now() - lastRefreshAt));
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        lastRefreshAt = Date.now();
+        setRefreshId((value) => value + 1);
+      }, delay);
     });
     return () => {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
       socket.disconnect();
     };
   }, []);
@@ -84,10 +102,12 @@ export function RuntimeView() {
     <div className="min-w-0 space-y-4">
       <DataTablePanel
         title={t("runtimeSessionList")}
-        endpoint={`/runtime/sessions?take=100&refresh=${refreshId}`}
+        endpoint="/runtime/sessions"
         columns={columns}
         getRowKey={(item) => item.id}
         emptyText={t("noRuntimeSessions")}
+        refreshSignal={refreshId}
+        pagination={{ pageSize: 25, mode: "server" }}
         searchableText={(item) =>
           `${item.session_code} ${item.machine_code} ${item.machine?.machine_name ?? ""} ${item.machine?.line_name ?? ""} ${item.status} ${
             resolveCurrentProductCode(item) ?? ""

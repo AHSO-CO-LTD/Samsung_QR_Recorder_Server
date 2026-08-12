@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, type MachineRuntimeStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { hasNewRuntimeResult } from "../../common/runtime/runtime-state";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -336,16 +336,60 @@ export class RuntimeService {
     return updatedSession;
   }
 
-  async listSessions(query: { take: number; machine_code?: string; status?: string; include_scans?: boolean }) {
-    const sessions = await (this.prisma as any).machineRuntimeSession.findMany({
-      where: {
-        machine_code: this.clean(query.machine_code) ?? undefined,
-        status: this.clean(query.status) ?? undefined
-      },
-      take: Math.min(Math.max(query.take || 50, 1), 200),
-      orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
-      include: this.sessionInclude(query.include_scans)
-    });
+  async listSessions(query: { take: number; skip?: number; q?: string; machine_code?: string; status?: string; include_scans?: boolean }) {
+    const requestedTake = Number.isFinite(query.take) ? query.take : 50;
+    const requestedSkip = Number.isFinite(query.skip) ? (query.skip ?? 0) : 0;
+    const take = Math.min(Math.max(requestedTake || 50, 1), 200);
+    const skip = Math.max(requestedSkip, 0);
+    const searchText = this.clean(query.q);
+    const status = this.clean(query.status);
+    const where: Prisma.MachineRuntimeSessionWhereInput = {
+      machine_code: this.clean(query.machine_code) ?? undefined,
+      status: status ? (status as MachineRuntimeStatus) : undefined
+    };
+
+    if (searchText) {
+      const searchMode = Prisma.QueryMode.insensitive;
+      const searchFilters: Prisma.MachineRuntimeSessionWhereInput[] = [
+        { session_code: { contains: searchText, mode: searchMode } },
+        { machine_code: { contains: searchText, mode: searchMode } },
+        { last_result: { contains: searchText, mode: searchMode } },
+        { last_code: { contains: searchText, mode: searchMode } },
+        {
+          machine: {
+            is: {
+              OR: [
+                { machine_name: { contains: searchText, mode: searchMode } },
+                { line_name: { contains: searchText, mode: searchMode } }
+              ]
+            }
+          }
+        },
+        {
+          current_product: {
+            is: {
+              product_code: { contains: searchText, mode: searchMode }
+            }
+          }
+        }
+      ];
+      const normalizedSearchStatus = searchText.toUpperCase();
+      if (["RUNNING", "PAUSED", "STOPPED", "DISCONNECTED", "ERROR"].includes(normalizedSearchStatus)) {
+        searchFilters.push({ status: normalizedSearchStatus as MachineRuntimeStatus });
+      }
+      where.OR = searchFilters;
+    }
+
+    const [total, sessions] = await Promise.all([
+      (this.prisma as any).machineRuntimeSession.count({ where }),
+      (this.prisma as any).machineRuntimeSession.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
+        include: this.sessionInclude(query.include_scans)
+      })
+    ]);
     const normalizedSessions = await this.normalizeSessionCounters(sessions);
     const sessionsWithLatestScan = await this.attachLatestMachineScanRecords(normalizedSessions);
 
@@ -353,7 +397,17 @@ export class RuntimeService {
       success: true,
       code: "RUNTIME_SESSIONS_LISTED",
       message: "Đã tải phiên chạy của máy.",
-      data: sessionsWithLatestScan
+      data: sessionsWithLatestScan,
+      meta: {
+        total,
+        take,
+        skip,
+        page: Math.floor(skip / take) + 1,
+        page_size: take,
+        total_pages: Math.max(1, Math.ceil(total / take)),
+        has_previous: skip > 0,
+        has_next: skip + sessions.length < total
+      }
     };
   }
 

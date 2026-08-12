@@ -11,6 +11,7 @@ import {
   resolveCompletedUpdateVersion,
   type PendingUpdateState
 } from "./updates/update-completion";
+import { buildUpdateDownloadProgress, type UpdateDownloadProgress } from "./updates/download-progress";
 
 const APP_NAME = "QR Recorder Server";
 const APP_USER_MODEL_ID = "vn.ahso.samsung.qrrecorder.server";
@@ -1298,10 +1299,20 @@ async function checkForUpdates() {
   }
 }
 
-function downloadFile(url: string, targetPath: string) {
+function downloadFile(
+  url: string,
+  targetPath: string,
+  options: {
+    tagName: string;
+    expectedTotalBytes?: number | null;
+    startedAt?: number;
+    onProgress?: (progress: UpdateDownloadProgress) => void;
+  }
+) {
   return new Promise<void>((resolve, reject) => {
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     const file = fs.createWriteStream(targetPath);
+    const startedAt = options.startedAt ?? Date.now();
 
     const request = https.get(
       url,
@@ -1315,7 +1326,7 @@ function downloadFile(url: string, targetPath: string) {
         if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           file.close();
           fs.rmSync(targetPath, { force: true });
-          downloadFile(response.headers.location, targetPath).then(resolve, reject);
+          downloadFile(response.headers.location, targetPath, { ...options, startedAt }).then(resolve, reject);
           return;
         }
 
@@ -1326,8 +1337,37 @@ function downloadFile(url: string, targetPath: string) {
           return;
         }
 
+        const contentLengthHeader = Array.isArray(response.headers["content-length"])
+          ? response.headers["content-length"][0]
+          : response.headers["content-length"];
+        const responseTotalBytes = Number(contentLengthHeader);
+        const totalBytes = Number.isFinite(responseTotalBytes) && responseTotalBytes > 0 ? responseTotalBytes : options.expectedTotalBytes;
+        let transferredBytes = 0;
+        let lastProgressAt = 0;
+        const reportProgress = (force = false) => {
+          const now = Date.now();
+          if (!force && now - lastProgressAt < 250) return;
+          lastProgressAt = now;
+          options.onProgress?.(
+            buildUpdateDownloadProgress({
+              tagName: options.tagName,
+              phase: "downloading",
+              transferredBytes,
+              totalBytes,
+              startedAt,
+              now
+            })
+          );
+        };
+
+        reportProgress(true);
+        response.on("data", (chunk: Buffer) => {
+          transferredBytes += chunk.length;
+          reportProgress();
+        });
         response.pipe(file);
         file.on("finish", () => {
+          reportProgress(true);
           file.close();
           resolve();
         });
@@ -1461,7 +1501,7 @@ function showCompletedUpdateNotification() {
   return true;
 }
 
-async function installUpdate(tagName: string) {
+async function installUpdate(tagName: string, onProgress?: (progress: UpdateDownloadProgress) => void) {
   if (!app.isPackaged) {
     throw new Error("Update install is only available in packaged desktop builds.");
   }
@@ -1472,6 +1512,15 @@ async function installUpdate(tagName: string) {
     throw new Error("Selected release is not a valid upgrade target.");
   }
 
+  onProgress?.(
+    buildUpdateDownloadProgress({
+      tagName,
+      phase: "preparing",
+      transferredBytes: 0,
+      totalBytes: release.assetSize
+    })
+  );
+
   const githubRelease = await requestJson<GithubRelease>(`https://api.github.com/repos/${state.repository}/releases/tags/${encodeURIComponent(tagName)}`);
   const asset = githubRelease.assets.find((item) => item.name === release.assetName);
   if (!asset) {
@@ -1480,7 +1529,20 @@ async function installUpdate(tagName: string) {
 
   const targetPath = path.join(app.getPath("userData"), "updates", asset.name);
   appendServiceLog("SYSTEM", `Downloading update ${tagName} to ${targetPath}`);
-  await downloadFile(asset.browser_download_url, targetPath);
+  await downloadFile(asset.browser_download_url, targetPath, {
+    tagName,
+    expectedTotalBytes: asset.size,
+    onProgress
+  });
+
+  onProgress?.(
+    buildUpdateDownloadProgress({
+      tagName,
+      phase: "installing",
+      transferredBytes: asset.size,
+      totalBytes: asset.size
+    })
+  );
 
   const installDir = path.dirname(process.execPath);
   const envBackup = createUpdateEnvBackup(installDir);
@@ -1635,7 +1697,13 @@ function registerAppIpc() {
     };
   });
   ipcMain.handle("updates:check", () => checkForUpdates());
-  ipcMain.handle("updates:install", (_event, tagName: unknown) => installUpdate(String(tagName ?? "")));
+  ipcMain.handle("updates:install", (event, tagName: unknown) =>
+    installUpdate(String(tagName ?? ""), (progress) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("updates:progress", progress);
+      }
+    })
+  );
   ipcMain.handle("license:get-status", async () => {
     try {
       const status = await evaluateServerLicense();
