@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Download, ExternalLink, RefreshCw, ShieldAlert } from "lucide-react";
+import { Activity, AlertCircle, Download, ExternalLink, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getDesktopApp, type DesktopUpdateRelease, type DesktopUpdateState } from "@/lib/desktop-app";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getDesktopApp, type DesktopUpdateProgress, type DesktopUpdateRelease, type DesktopUpdateState } from "@/lib/desktop-app";
 import { formatAppDateTime } from "@/lib/app-time";
 import { useI18n } from "@/lib/i18n-provider";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,16 @@ const copy = {
     installing: "Đang tải {tag}...",
     installStarted: "Cập nhật đã bắt đầu. Ứng dụng sẽ đóng; mở lại ứng dụng sau khi trình cài đặt chạy xong.",
     installFailed: "Không cài được bản cập nhật.",
-    updateDisabledInDev: "Cài cập nhật chỉ khả dụng trong bản đã đóng gói."
+    updateDisabledInDev: "Cài cập nhật chỉ khả dụng trong bản đã đóng gói.",
+    progressTitle: "Đang cập nhật {tag}",
+    preparing: "Đang chuẩn bị bản cập nhật...",
+    downloading: "Đang tải trình cài đặt...",
+    launchingInstaller: "Đã tải xong. Đang khởi chạy trình cài đặt...",
+    downloaded: "Đã tải",
+    downloadSpeed: "Tốc độ tải",
+    keepAppOpen: "Giữ ứng dụng mở và không tắt máy trong quá trình này.",
+    progressFailedTitle: "Cập nhật không thành công",
+    close: "Đóng"
   },
   en: {
     title: "Application updates",
@@ -63,11 +73,25 @@ const copy = {
     installing: "Downloading {tag}...",
     installStarted: "Update started. The app will close; reopen it after the installer finishes.",
     installFailed: "Unable to install update.",
-    updateDisabledInDev: "Installing updates is only available in packaged builds."
+    updateDisabledInDev: "Installing updates is only available in packaged builds.",
+    progressTitle: "Updating {tag}",
+    preparing: "Preparing the update...",
+    downloading: "Downloading the installer...",
+    launchingInstaller: "Download complete. Starting the installer...",
+    downloaded: "Downloaded",
+    downloadSpeed: "Download speed",
+    keepAppOpen: "Keep the app open and do not shut down the computer during this process.",
+    progressFailedTitle: "Update failed",
+    close: "Close"
   }
 } as const;
 
 type UpdateCopy = { [Key in keyof (typeof copy)["vi"]]: string };
+
+type UpdateDialogState = Omit<DesktopUpdateProgress, "phase"> & {
+  phase: DesktopUpdateProgress["phase"] | "failed";
+  error?: string | null;
+};
 
 export function UpdatePanel({ mode = "settings", autoCheck = mode === "settings" }: { mode?: UpdatePanelMode; autoCheck?: boolean }) {
   const { locale } = useI18n();
@@ -75,6 +99,7 @@ export function UpdatePanel({ mode = "settings", autoCheck = mode === "settings"
   const [state, setState] = useState<DesktopUpdateState | null>(null);
   const [isChecking, setIsChecking] = useState(autoCheck);
   const [installingTag, setInstallingTag] = useState<string | null>(null);
+  const [updateDialog, setUpdateDialog] = useState<UpdateDialogState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isLoginMode = mode === "login";
 
@@ -110,6 +135,15 @@ export function UpdatePanel({ mode = "settings", autoCheck = mode === "settings"
     }
   }, [autoCheck, checkUpdates]);
 
+  useEffect(() => {
+    const desktopApp = getDesktopApp();
+    if (!desktopApp?.updates.onProgress) return;
+
+    return desktopApp.updates.onProgress((progress) => {
+      setUpdateDialog((current) => (current?.tagName === progress.tagName ? { ...progress, error: null } : current));
+    });
+  }, []);
+
   const installUpdate = async (release: DesktopUpdateRelease) => {
     const desktopApp = getDesktopApp();
     if (!desktopApp?.updates) {
@@ -118,22 +152,54 @@ export function UpdatePanel({ mode = "settings", autoCheck = mode === "settings"
     }
 
     setInstallingTag(release.tagName);
-    const toastId = toast.loading(text.installing.replace("{tag}", release.tagName));
+    setUpdateDialog({
+      tagName: release.tagName,
+      phase: "preparing",
+      transferredBytes: 0,
+      totalBytes: release.assetSize > 0 ? release.assetSize : null,
+      bytesPerSecond: 0,
+      percent: release.assetSize > 0 ? 0 : null,
+      error: null
+    });
     try {
       const result = await desktopApp.updates.install(release.tagName);
       if (!result.success) {
         throw new Error(result.message);
       }
-      toast.success(text.installStarted, { id: toastId });
+      setUpdateDialog((current) =>
+        current
+          ? {
+              ...current,
+              phase: "installing",
+              transferredBytes: current.totalBytes ?? current.transferredBytes,
+              bytesPerSecond: 0,
+              percent: 100,
+              error: null
+            }
+          : current
+      );
+      toast.success(text.installStarted);
     } catch (currentError) {
-      toast.error(currentError instanceof Error ? currentError.message : text.installFailed, { id: toastId });
+      const message = currentError instanceof Error ? currentError.message : text.installFailed;
+      setUpdateDialog((current) =>
+        current
+          ? {
+              ...current,
+              phase: "failed",
+              bytesPerSecond: 0,
+              error: message
+            }
+          : current
+      );
+      toast.error(message);
     } finally {
       setInstallingTag(null);
     }
   };
 
   return (
-    <Card className={cn("w-full", isLoginMode ? "border-dashed" : "")}>
+    <>
+      <Card className={cn("w-full", isLoginMode ? "border-dashed" : "")}>
       <CardHeader className={cn(isLoginMode ? "p-4 pb-3" : undefined)}>
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1">
@@ -177,7 +243,89 @@ export function UpdatePanel({ mode = "settings", autoCheck = mode === "settings"
           </div>
         ) : null}
       </CardContent>
-    </Card>
+      </Card>
+      <UpdateProgressDialog state={updateDialog} text={text} onClose={() => setUpdateDialog(null)} />
+    </>
+  );
+}
+
+function UpdateProgressDialog({ state, text, onClose }: { state: UpdateDialogState | null; text: UpdateCopy; onClose: () => void }) {
+  const isFailed = state?.phase === "failed";
+  const percent = state?.phase === "installing" ? 100 : state?.percent;
+  const progressWidth = percent === null || percent === undefined ? 0 : Math.min(100, Math.max(0, percent));
+  const phaseText = !state
+    ? text.preparing
+    : state.phase === "preparing"
+      ? text.preparing
+      : state.phase === "downloading"
+        ? text.downloading
+        : state.phase === "installing"
+          ? text.launchingInstaller
+          : state.error ?? text.installFailed;
+
+  return (
+    <Dialog
+      open={Boolean(state)}
+      onOpenChange={(open) => {
+        if (!open && isFailed) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={isFailed}
+        onEscapeKeyDown={(event) => {
+          if (!isFailed) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (!isFailed) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{isFailed ? text.progressFailedTitle : text.progressTitle.replace("{tag}", state?.tagName ?? "")}</DialogTitle>
+          <DialogDescription aria-live="polite">{phaseText}</DialogDescription>
+        </DialogHeader>
+
+        {isFailed ? (
+          <div className="flex gap-3 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 break-words">{state?.error ?? text.installFailed}</span>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted-foreground">{text.downloaded}</span>
+                <span className="font-semibold tabular-nums">{percent === null || percent === undefined ? "--" : `${Math.round(percent)}%`}</span>
+              </div>
+              <div
+                className="h-2 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label={text.downloaded}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent === null || percent === undefined ? undefined : Math.round(percent)}
+              >
+                <div className={cn("h-full bg-primary transition-[width] duration-200", percent === null || percent === undefined ? "w-1/3 animate-pulse" : "")} style={percent === null || percent === undefined ? undefined : { width: `${progressWidth}%` }} />
+              </div>
+            </div>
+
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
+              <StatusCell label={text.downloaded} value={formatDownloadAmount(state?.transferredBytes ?? 0, state?.totalBytes ?? null)} />
+              <StatusCell label={text.downloadSpeed} value={state?.phase === "downloading" ? formatDownloadSpeed(state.bytesPerSecond) : "-"} />
+            </div>
+
+            <p className="text-xs leading-5 text-muted-foreground">{text.keepAppOpen}</p>
+          </>
+        )}
+
+        {isFailed ? (
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {text.close}
+            </Button>
+          </DialogFooter>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -269,4 +417,21 @@ function formatFileSize(size: number) {
   }
 
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatDownloadAmount(transferredBytes: number, totalBytes: number | null) {
+  const transferred = formatFileSize(transferredBytes);
+  return totalBytes ? `${transferred} / ${formatFileSize(totalBytes)}` : transferred;
+}
+
+function formatDownloadSpeed(bytesPerSecond: number) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) {
+    return "-";
+  }
+
+  if (bytesPerSecond >= 1024 * 1024) {
+    return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
+  }
+
+  return `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
 }

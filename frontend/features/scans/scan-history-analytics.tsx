@@ -13,6 +13,7 @@ import { ScanResultSummaryCard } from "./scan-result-summary-card";
 const emptyResult: ScanAnalyticsResult = {
   ok_count: 0,
   ng_count: 0,
+  rework_count: 0,
   total_count: 0,
   machines: []
 };
@@ -27,7 +28,8 @@ export function ScanHistoryAnalytics({
   autoRefreshMs?: number;
 }) {
   const { locale, t } = useI18n();
-  const [result, setResult] = useState<ScanAnalyticsResult>(emptyResult);
+  const [summaryResult, setSummaryResult] = useState<ScanAnalyticsResult>(emptyResult);
+  const [rankingResult, setRankingResult] = useState<ScanAnalyticsResult>(emptyResult);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -35,20 +37,29 @@ export function ScanHistoryAnalytics({
   useEffect(() => {
     let isMounted = true;
     let hasNotifiedError = false;
+    let activeRequest: AbortController | null = null;
 
     const load = async (showLoading: boolean) => {
+      if (activeRequest) return;
+      const controller = new AbortController();
+      activeRequest = controller;
       if (showLoading) {
         setIsLoading(true);
       }
       try {
-        const response = await apiGet<ScanAnalyticsResult>(endpoint);
+        const response = await apiGet<{ summary: ScanAnalyticsResult; ranking: ScanAnalyticsResult }>(endpoint, {
+          signal: controller.signal,
+          timeoutMs: 15_000
+        });
         if (!isMounted) {
           return;
         }
-        setResult(response.data ?? emptyResult);
+        setSummaryResult(response.data?.summary ?? emptyResult);
+        setRankingResult(response.data?.ranking ?? emptyResult);
         setError(null);
         hasNotifiedError = false;
       } catch (currentError) {
+        if (currentError instanceof Error && currentError.name === "AbortError") return;
         if (!isMounted) {
           return;
         }
@@ -59,6 +70,7 @@ export function ScanHistoryAnalytics({
           hasNotifiedError = true;
         }
       } finally {
+        if (activeRequest === controller) activeRequest = null;
         if (isMounted && showLoading) {
           setIsLoading(false);
         }
@@ -69,6 +81,7 @@ export function ScanHistoryAnalytics({
     const interval = autoRefreshMs ? window.setInterval(() => void load(false), autoRefreshMs) : undefined;
     return () => {
       isMounted = false;
+      activeRequest?.abort();
       if (interval !== undefined) {
         window.clearInterval(interval);
       }
@@ -105,8 +118,8 @@ export function ScanHistoryAnalytics({
 
   return (
     <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-      <ScanResultSummaryCard result={result} numberFormatter={numberFormatter} />
-      <ScanMachineErrorRankingCard result={result} numberFormatter={numberFormatter} percentageFormatter={percentageFormatter} />
+      <ScanResultSummaryCard result={summaryResult} numberFormatter={numberFormatter} />
+      <ScanMachineErrorRankingCard result={rankingResult} numberFormatter={numberFormatter} percentageFormatter={percentageFormatter} />
     </div>
   );
 }

@@ -240,6 +240,47 @@ Payload mẫu local NG:
 }
 ```
 
+Payload mẫu local REWORK:
+
+```json
+{
+  "local_scan_id": "RW-LOCAL01-20260708-000002",
+  "machine_code": "LOCAL01",
+  "serial": "SN-LOCAL01-2026",
+  "uid": "UID-8f8f2f1c-local01",
+  "profile_id": 5,
+  "duplicate_key": "1A1Y420675",
+  "full_code": {
+    "raw": "VN39BN9660877C1A1L60376ADYS3Y420675",
+    "prefix": "VN39",
+    "chassis_code": "BN96-60877C",
+    "before_vendor": "1A1",
+    "vendor_char": "L",
+    "led_code": "BN96-60376A",
+    "factory_code": "DYS3",
+    "after_factory": "Y420675"
+  },
+  "chassis_scan_raw": "BN96-60877C",
+  "led_scans": [
+    {
+      "slot": 1,
+      "index": 1,
+      "raw": "ZB36L582465U528LD9999X",
+      "lot_no": "528",
+      "vendor_char": "L",
+      "suffix": "9999X",
+      "status": "REWORK",
+      "ng_reason": "LED_SUFFIX_NOT_MATCH"
+    }
+  ],
+  "local_status": "REWORK",
+  "local_ng_reason": "LED_SUFFIX_NOT_MATCH",
+  "scan_at": "2026-07-08T14:32:25+07:00"
+}
+```
+
+Mỗi lượt REWORK dùng một `local_scan_id` mới theo dạng `RW-<local_scan_id_của_lượt_NG_gốc>`. REWORK phải gửi đầy đủ `duplicate_key`, `full_code`, `chassis_scan_raw` và `led_scans` như local OK để server kiểm tra trùng; đồng thời gửi `local_ng_reason` (hoặc `ng_reason` trong LED) để lưu vết lỗi đang được sửa. Nếu trùng, server trả `SERVER_DUPLICATE`, không lưu record REWORK và giữ nguyên lượt NG gốc. Nếu không trùng, server lưu record REWORK mới và đổi lượt NG gốc thành `NG_REWORK`, giữ nguyên thời gian NG.
+
 ## 6. Response submit scan
 
 ### Local OK, server OK
@@ -291,6 +332,23 @@ Payload mẫu local NG:
 }
 ```
 
+### Local REWORK saved
+
+```json
+{
+  "success": true,
+  "code": "LOCAL_REWORK_SAVED",
+  "message": "Đã lưu lượt quét REWORK và cập nhật lượt NG gốc.",
+  "data": {
+    "decision": "LOCAL_REWORK_SAVED",
+    "server_scan_id": 126,
+    "reworked_scan_record_id": 125,
+    "final_status": "REWORK",
+    "ng_reason": "LED_SUFFIX_NOT_MATCH"
+  }
+}
+```
+
 ## 7. Lưu ý cho máy local
 
 Máy local nên:
@@ -300,7 +358,7 @@ Máy local nên:
 - Nếu server mất kết nối, giữ scan ở trạng thái pending.
 - Không hiển thị final OK khi chưa có server OK.
 - Dựa vào `code` để quyết định UI.
-- Gửi cả local OK và local NG lên server để server lưu trace.
+- Gửi local OK, NG và REWORK lên server để server lưu trace.
 
 Máy local không nên:
 

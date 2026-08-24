@@ -22,16 +22,20 @@ export function selectScanResultFilter(filters: ScanFilters, finalStatus: string
   return {
     ...filters,
     final_status: finalStatus,
-    ng_reason: finalStatus === "NG" ? filters.ng_reason : ""
+    ng_reason: isErrorCapableFinalStatus(finalStatus) ? filters.ng_reason : ""
   };
 }
 
 export function selectScanErrorFilter(filters: ScanFilters, ngReason: string): ScanFilters {
   return {
     ...filters,
-    final_status: ngReason ? "NG" : filters.final_status,
+    final_status: ngReason ? (isErrorCapableFinalStatus(filters.final_status) ? filters.final_status : "NG") : filters.final_status,
     ng_reason: ngReason
   };
+}
+
+function isErrorCapableFinalStatus(finalStatus: string) {
+  return finalStatus === "NG" || finalStatus === "NG_REWORK" || finalStatus === "REWORK";
 }
 
 export function getScanErrorOptionLabel(

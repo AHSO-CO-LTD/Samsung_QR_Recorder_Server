@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
@@ -35,7 +34,6 @@ type TrendDefinition = {
   labelKey: MessageKey;
   tooltipKey: MessageKey;
   color: string;
-  comingSoon?: boolean;
 };
 
 const trendDefinitions: TrendDefinition[] = [
@@ -61,8 +59,7 @@ const trendDefinitions: TrendDefinition[] = [
     key: "rework",
     labelKey: "dashboardTrendRework",
     tooltipKey: "dashboardTrendReworkDesc",
-    color: "#ea580c",
-    comingSoon: true
+    color: "#ea580c"
   }
 ];
 
@@ -94,7 +91,7 @@ export function ScanTrendChart() {
     setIsLoading(true);
     setError(null);
 
-    void apiGet<Omit<ScanTrendPoint, "rework">[]>(`/scans/trend?scope=${scope}`)
+    void apiGet<ScanTrendPoint[]>(`/scans/trend?scope=${scope}`)
       .then((result) => {
         if (!isMounted || !result.data) {
           return;
@@ -102,8 +99,7 @@ export function ScanTrendChart() {
         setChartData(
           result.data.map((point) => ({
             ...point,
-            date: formatTrendDateLabel(point.date, locale),
-            rework: 0
+            date: formatTrendDateLabel(point.date, locale)
           }))
         );
       })
@@ -133,7 +129,7 @@ export function ScanTrendChart() {
           total: current.total + point.total,
           ok: current.ok + point.ok,
           ng: current.ng + point.ng,
-          rework: 0
+          rework: current.rework + point.rework
         }),
         { total: 0, ok: 0, ng: 0, rework: 0 }
       ),
@@ -161,6 +157,7 @@ export function ScanTrendChart() {
             definition={definition}
             data={chartData}
             total={totals[definition.key]}
+            reworkNgTotal={definition.key === "rework" ? totals.ng : undefined}
             isLoading={isLoading}
             error={error}
             onRetry={() => setReloadKey((current) => current + 1)}
@@ -175,6 +172,7 @@ function TrendChartCard({
   definition,
   data,
   total,
+  reworkNgTotal,
   isLoading,
   error,
   onRetry
@@ -182,6 +180,7 @@ function TrendChartCard({
   definition: TrendDefinition;
   data: ScanTrendPoint[];
   total: number;
+  reworkNgTotal?: number;
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -202,14 +201,9 @@ function TrendChartCard({
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: definition.color }} aria-hidden="true" />
             <CardTitle className="truncate text-base tracking-tight sm:text-lg">{t(definition.labelKey)}</CardTitle>
             <InfoTooltip content={t(definition.tooltipKey)} />
-            {definition.comingSoon ? (
-              <Badge className="border-orange-600/40 bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300" variant="outline">
-                {t("comingSoon")}
-              </Badge>
-            ) : null}
           </div>
           <span className="shrink-0 text-2xl font-semibold tabular-nums" style={{ color: definition.color }}>
-            {new Intl.NumberFormat().format(total)}
+            {reworkNgTotal === undefined ? new Intl.NumberFormat().format(total) : `${new Intl.NumberFormat().format(total)} / ${new Intl.NumberFormat().format(reworkNgTotal)}`}
           </span>
         </div>
       </CardHeader>

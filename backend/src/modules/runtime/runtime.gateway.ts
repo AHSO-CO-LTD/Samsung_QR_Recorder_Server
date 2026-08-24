@@ -23,6 +23,10 @@ type RuntimeSocketData = {
     uid?: string | null;
   };
   gracefulStop?: boolean;
+  clientType?: string;
+  page?: string;
+  connectedAt?: number;
+  disconnectReason?: string;
 };
 
 @WebSocketGateway({
@@ -52,8 +56,12 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   publishScanUpdated(payload: {
     machine_code: string;
     local_scan_id: string;
+    server_scan_id: number | null;
     result_code: string;
-    final_status: "OK" | "NG" | "PENDING" | null;
+    final_status: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING" | null;
+    full_code_raw: string | null;
+    full_chassis_code: string | null;
+    scan_at: string;
     source: "LIVE" | "BATCH";
     is_replay: boolean;
   }) {
@@ -61,7 +69,16 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   handleConnection(client: Socket) {
-    this.logger.log(`Runtime socket connected: ${client.id}`);
+    const socketData = this.getSocketData(client);
+    socketData.clientType = this.readHandshakeLabel(client.handshake.auth?.client_type) ?? "UNKNOWN";
+    socketData.page = this.readHandshakeLabel(client.handshake.auth?.page) ?? undefined;
+    socketData.connectedAt = Date.now();
+    client.on("disconnecting", (reason) => {
+      socketData.disconnectReason = this.readHandshakeLabel(reason) ?? "unknown";
+    });
+    this.logger.log(
+      `Runtime socket connected: ${client.id} client_type=${socketData.clientType} page=${socketData.page ?? "-"} transport=${client.conn.transport.name} ip=${this.getClientIp(client) ?? "-"}`
+    );
     client.emit("server:hello-required", {
       code: "RUNTIME_HELLO_REQUIRED",
       message: "Hãy gửi machine:hello kèm machine_code, serial và uid trước các sự kiện phiên chạy."
@@ -71,7 +88,10 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
   async handleDisconnect(client: Socket) {
     const socketData = this.getSocketData(client);
     const machine = socketData.machine;
-    this.logger.log(`Runtime socket disconnected: ${client.id}`);
+    const lifetimeMs = socketData.connectedAt ? Math.max(0, Date.now() - socketData.connectedAt) : null;
+    this.logger.log(
+      `Runtime socket disconnected: ${client.id} client_type=${machine ? "MACHINE" : socketData.clientType ?? "UNKNOWN"} page=${socketData.page ?? "-"} machine_code=${machine?.machine_code ?? "-"} reason=${socketData.disconnectReason ?? "unknown"} lifetime_ms=${lifetimeMs ?? "-"}`
+    );
     if (!machine) {
       return;
     }
@@ -96,8 +116,10 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
     const response = await this.runtimeService.acceptHello(dto, this.getClientIp(client));
     const socketData = this.getSocketData(client);
     socketData.machine = response.data.machine;
+    socketData.clientType = "MACHINE";
     socketData.gracefulStop = false;
     this.runtimeConnections.connect(response.data.machine.id, client.id);
+    this.logger.log(`Runtime socket identified: ${client.id} client_type=MACHINE machine_code=${response.data.machine.machine_code}`);
     client.emit("machine:accepted", response);
     this.server.emit("server:runtime-updated", {
       event: "SOCKET_CONNECTED",
@@ -192,6 +214,15 @@ export class RuntimeGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
   private getSocketData(client: Socket) {
     return client.data as RuntimeSocketData;
+  }
+
+  private readHandshakeLabel(value: unknown) {
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const normalized = value.trim().replace(/[^a-zA-Z0-9_.:-]/g, "_").slice(0, 80);
+    return normalized || null;
   }
 
   private getClientIp(client: Socket) {

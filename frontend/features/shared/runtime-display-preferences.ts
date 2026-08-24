@@ -11,7 +11,7 @@ export const defaultRuntimeDisplayOptions: MachineRuntimeCardDisplayOptions = {
   machineInfo: true,
   currentProduct: true,
   duration: true,
-  commonIssue: true,
+  machineStatus: true,
   serverChart: true
 };
 
@@ -23,7 +23,7 @@ export const runtimeDisplayOptionLabelKeys: Record<keyof MachineRuntimeCardDispl
   machineInfo: "showMachineInfo",
   currentProduct: "showCurrentProduct",
   duration: "showRuntimeDuration",
-  commonIssue: "showCommonIssue",
+  machineStatus: "showMachineStatus",
   serverChart: "showServerChart"
 };
 

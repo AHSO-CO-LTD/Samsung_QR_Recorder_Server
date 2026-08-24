@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { FinalScanStatus, Prisma } from "@prisma/client";
+import { resolveLogicalResultCounts } from "../../common/results/logical-result-counts";
 import { PrismaService } from "../../prisma/prisma.service";
 import type { ScanReportQueryDto } from "./dto/scan-report-query.dto";
 import { DEFAULT_REPORT_COLUMNS, MAX_EXPORT_ROWS, REPORT_COLUMN_KEYS, REPORT_FINAL_STATUSES, type ScanReportColumnKey, type ScanReportLocale } from "./report-definition";
@@ -251,7 +252,7 @@ export class ReportsService {
     return {
       machine: filters.machineCodes.length ? { machine_code: { in: filters.machineCodes } } : undefined,
       profile_id: filters.profileIds.length ? { in: filters.profileIds } : undefined,
-      final_status: filters.finalStatuses.length ? { in: filters.finalStatuses } : undefined,
+      final_status: filters.finalStatuses.length ? { in: expandFinalStatuses(filters.finalStatuses) } : undefined,
       scan_at:
         filters.from || filters.to
           ? {
@@ -340,9 +341,10 @@ export class ReportsService {
             machines: "Máy",
             profiles: "Hồ sơ",
             statuses: "Trạng thái",
-            total: "Tổng bản ghi",
+            total: "Tổng kết quả",
             ok: "Cuối cùng OK",
             ng: "Cuối cùng NG",
+            rework: "REWORK / NG",
             pending: "Cuối cùng đang chờ"
           }
         : {
@@ -353,20 +355,26 @@ export class ReportsService {
             machines: "Machines",
             profiles: "Profiles",
             statuses: "Statuses",
-            total: "Total records",
+            total: "Total outcomes",
             ok: "Final OK",
             ng: "Final NG",
+            rework: "REWORK / NG",
             pending: "Final pending"
           };
     const sheet = workbook.addWorksheet(labels.sheet);
     const allValue = locale === "vi" ? "Tất cả" : "All";
     const counts = records.reduce(
       (current, record) => {
-        current[record.final_status] += 1;
+        if (record.final_status === "NG_REWORK") {
+          current.NG += 1;
+        } else {
+          current[record.final_status] += 1;
+        }
         return current;
       },
-      { OK: 0, NG: 0, PENDING: 0 } as Record<FinalScanStatus, number>
+      { OK: 0, NG: 0, NG_REWORK: 0, REWORK: 0, PENDING: 0 } as Record<FinalScanStatus, number>
     );
+    const resultCounts = resolveLogicalResultCounts({ ok: counts.OK, ng: counts.NG, rework: counts.REWORK });
 
     sheet.columns = [
       { key: "label", width: 24 },
@@ -379,9 +387,10 @@ export class ReportsService {
       { label: labels.machines, value: filters.machineCodes.join(", ") || allValue },
       { label: labels.profiles, value: filters.profileIds.join(", ") || allValue },
       { label: labels.statuses, value: filters.finalStatuses.join(", ") || allValue },
-      { label: labels.total, value: records.length },
-      { label: labels.ok, value: counts.OK },
-      { label: labels.ng, value: counts.NG },
+      { label: labels.total, value: resultCounts.total },
+      { label: labels.ok, value: resultCounts.ok },
+      { label: labels.ng, value: resultCounts.ng },
+      { label: labels.rework, value: `${resultCounts.rework} / ${resultCounts.ng}` },
       { label: labels.pending, value: counts.PENDING }
     ]);
     sheet.getRow(1).font = { bold: true };
@@ -476,6 +485,10 @@ function parseFinalStatuses(value?: string): FinalScanStatus[] {
     }
     return status as FinalScanStatus;
   });
+}
+
+function expandFinalStatuses(statuses: FinalScanStatus[]) {
+  return statuses.flatMap((status) => (status === "NG" ? (["NG", "NG_REWORK"] as FinalScanStatus[]) : [status]));
 }
 
 function parseDate(value: string | undefined, fieldName: string) {

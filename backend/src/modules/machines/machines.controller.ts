@@ -151,6 +151,7 @@ export class MachinesController {
 
   @Get(":id/commands")
   @ApiTags("machine-commands-admin")
+  @Roles("DEV")
   @ApiQuery({ name: "take", required: false, example: 50 })
   @ApiOkResponse({ description: "Liệt kê lệnh đang xếp hàng cho một máy." })
   listCommands(@Param("id", ParseIntPipe) id: number, @Query("take") take?: string) {
@@ -159,7 +160,7 @@ export class MachinesController {
 
   @Post(":id/commands")
   @ApiTags("machine-commands-admin")
-  @Roles("ADMIN", "ENGINEER", "DEV")
+  @Roles("DEV")
   @ApiOkResponse({ description: "Xếp hàng lệnh để máy cục bộ lấy về." })
   createCommand(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateMachineCommandDto, @Req() request: AuthenticatedRequest) {
     return this.machinesService.createCommand(id, dto, request.user?.id);

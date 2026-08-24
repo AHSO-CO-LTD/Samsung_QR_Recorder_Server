@@ -11,7 +11,10 @@ import { apiGet, API_BASE_URL } from "@/lib/api";
 import { useI18n } from "@/lib/i18n-provider";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
 import { resolveCurrentProductCode } from "@/features/shared/machine-runtime-card";
+import { resolveSessionResultCounts } from "@/features/shared/runtime-result-counts";
 import type { MachineRuntimeAdjustmentLog, MachineRuntimeEvent, MachineRuntimeProduct, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
+
+const RUNTIME_LIST_REFRESH_THROTTLE_MS = 5_000;
 
 export function RuntimeView() {
   const { t } = useI18n();
@@ -22,12 +25,28 @@ export function RuntimeView() {
 
   useEffect(() => {
     const socket = io(buildRuntimeSocketUrl(), {
-      transports: ["websocket", "polling"]
+      transports: ["websocket", "polling"],
+      auth: {
+        client_type: "SERVER_UI",
+        page: "runtime-sessions"
+      }
     });
+    let refreshTimer: number | null = null;
+    let lastRefreshAt = 0;
+
     socket.on("server:runtime-updated", () => {
-      setRefreshId((value) => value + 1);
+      if (refreshTimer !== null) return;
+      const delay = Math.max(0, RUNTIME_LIST_REFRESH_THROTTLE_MS - (Date.now() - lastRefreshAt));
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        lastRefreshAt = Date.now();
+        setRefreshId((value) => value + 1);
+      }, delay);
     });
     return () => {
+      if (refreshTimer !== null) {
+        window.clearTimeout(refreshTimer);
+      }
       socket.disconnect();
     };
   }, []);
@@ -59,9 +78,9 @@ export function RuntimeView() {
       { key: "status", header: t("colStatus"), render: (item) => <StatusBadge value={item.status} /> },
       { key: "product", header: t("colCurrentProduct"), render: (item) => <MonoText value={resolveCurrentProductCode(item)} /> },
       { key: "duration", header: t("colDuration"), render: (item) => formatDuration(item.started_at, item.ended_at ?? item.last_seen_at) },
-      { key: "total", header: t("colTotal"), render: (item) => item.total_count },
-      { key: "ok", header: t("colOk"), render: (item) => item.ok_count },
-      { key: "ng", header: t("colNg"), render: (item) => item.ng_count },
+      { key: "total", header: t("colTotal"), render: (item) => resolveSessionResultCounts(item).total },
+      { key: "ok", header: t("colOk"), render: (item) => resolveSessionResultCounts(item).ok },
+      { key: "ng", header: t("colNg"), render: (item) => resolveSessionResultCounts(item).ng },
       { key: "reconnect", header: t("colReconnect"), render: (item) => item.reconnect_count },
       { key: "last_seen", header: t("colHeartbeat"), render: (item) => <DateText value={item.last_seen_at} /> },
       {
@@ -83,10 +102,12 @@ export function RuntimeView() {
     <div className="min-w-0 space-y-4">
       <DataTablePanel
         title={t("runtimeSessionList")}
-        endpoint={`/runtime/sessions?take=100&refresh=${refreshId}`}
+        endpoint="/runtime/sessions"
         columns={columns}
         getRowKey={(item) => item.id}
         emptyText={t("noRuntimeSessions")}
+        refreshSignal={refreshId}
+        pagination={{ pageSize: 25, mode: "server" }}
         searchableText={(item) =>
           `${item.session_code} ${item.machine_code} ${item.machine?.machine_name ?? ""} ${item.machine?.line_name ?? ""} ${item.status} ${
             resolveCurrentProductCode(item) ?? ""
@@ -117,6 +138,7 @@ export function RuntimeView() {
 
 function SessionDetails({ session }: { session: MachineRuntimeSession }) {
   const { t } = useI18n();
+  const resultCounts = resolveSessionResultCounts(session);
 
   return (
     <div className="space-y-4">
@@ -124,7 +146,7 @@ function SessionDetails({ session }: { session: MachineRuntimeSession }) {
         <InfoLine label={t("colMachine")} value={<MonoText value={session.machine_code} />} />
         <InfoLine label={t("colStatus")} value={<StatusBadge value={session.status} />} />
         <InfoLine label={t("colDuration")} value={formatDuration(session.started_at, session.ended_at ?? session.last_seen_at)} />
-        <InfoLine label={t("colTotal")} value={`${session.total_count} / OK ${session.ok_count} / NG ${session.ng_count}`} />
+        <InfoLine label={t("colTotal")} value={`${resultCounts.total} / OK ${resultCounts.ok} / NG ${resultCounts.ng} / REWORK ${resultCounts.rework}`} />
         <InfoLine label={t("colStartedAt")} value={<DateText value={session.started_at} />} />
         <InfoLine label={t("colEndedAt")} value={<DateText value={session.ended_at} />} />
         <InfoLine label={t("colLastResult")} value={<StatusBadge value={session.last_result} />} />

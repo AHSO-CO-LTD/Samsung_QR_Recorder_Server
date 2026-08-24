@@ -585,7 +585,7 @@ export class SyncService {
   private buildServerReconcileSummary(serverRecords: any[]) {
     const total = serverRecords.length;
     const ok = serverRecords.filter((record) => record.final_status === "OK").length;
-    const ng = serverRecords.filter((record) => record.final_status === "NG").length;
+    const ng = serverRecords.filter((record) => record.final_status === "NG" || record.final_status === "NG_REWORK").length;
 
     return {
       total,

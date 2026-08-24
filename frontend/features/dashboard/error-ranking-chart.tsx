@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
   scanTrendScopes,
   type ScanTrendScope
 } from "./scan-trend-range-control";
+import { buildErrorRankingScanHistoryHref } from "./error-ranking-navigation";
 
 type ErrorRankingItem = {
   code: string;
@@ -38,6 +40,7 @@ const SCOPE_STORAGE_KEY = "dashboard-error-ranking-scope";
 
 export function ErrorRankingChart() {
   const { locale, t } = useI18n();
+  const router = useRouter();
   const [items, setItems] = useState<ErrorRankingItem[]>([]);
   const [scope, setScope] = useState<ScanTrendScope>("last_7_days");
   const [preferencesReady, setPreferencesReady] = useState(false);
@@ -117,6 +120,10 @@ export function ErrorRankingChart() {
     window.localStorage.setItem(SCOPE_STORAGE_KEY, value);
   };
 
+  const openScanHistory = (item: ErrorRankingChartItem) => {
+    router.push(buildErrorRankingScanHistoryHref(item.code, scope));
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -157,7 +164,18 @@ export function ErrorRankingChart() {
                 tick={{ fontSize: 12 }}
               />
               <ChartTooltip content={<ChartTooltipContent />} />
-              <Bar dataKey="occurrence_count" fill="var(--color-occurrence_count)" radius={[0, 3, 3, 0]}>
+              <Bar
+                dataKey="occurrence_count"
+                fill="var(--color-occurrence_count)"
+                radius={[0, 3, 3, 0]}
+                className="cursor-pointer"
+                onClick={(bar) => {
+                  const item = bar.payload as ErrorRankingChartItem | undefined;
+                  if (item?.code) {
+                    openScanHistory(item);
+                  }
+                }}
+              >
                 <LabelList dataKey="ranking_label" position="right" className="fill-foreground" fontSize={12} />
               </Bar>
             </BarChart>

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { Prisma, type MachineRuntimeStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { hasNewRuntimeResult } from "../../common/runtime/runtime-state";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -335,16 +336,60 @@ export class RuntimeService {
     return updatedSession;
   }
 
-  async listSessions(query: { take: number; machine_code?: string; status?: string; include_scans?: boolean }) {
-    const sessions = await (this.prisma as any).machineRuntimeSession.findMany({
-      where: {
-        machine_code: this.clean(query.machine_code) ?? undefined,
-        status: this.clean(query.status) ?? undefined
-      },
-      take: Math.min(Math.max(query.take || 50, 1), 200),
-      orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
-      include: this.sessionInclude(query.include_scans)
-    });
+  async listSessions(query: { take: number; skip?: number; q?: string; machine_code?: string; status?: string; include_scans?: boolean }) {
+    const requestedTake = Number.isFinite(query.take) ? query.take : 50;
+    const requestedSkip = Number.isFinite(query.skip) ? (query.skip ?? 0) : 0;
+    const take = Math.min(Math.max(requestedTake || 50, 1), 200);
+    const skip = Math.max(requestedSkip, 0);
+    const searchText = this.clean(query.q);
+    const status = this.clean(query.status);
+    const where: Prisma.MachineRuntimeSessionWhereInput = {
+      machine_code: this.clean(query.machine_code) ?? undefined,
+      status: status ? (status as MachineRuntimeStatus) : undefined
+    };
+
+    if (searchText) {
+      const searchMode = Prisma.QueryMode.insensitive;
+      const searchFilters: Prisma.MachineRuntimeSessionWhereInput[] = [
+        { session_code: { contains: searchText, mode: searchMode } },
+        { machine_code: { contains: searchText, mode: searchMode } },
+        { last_result: { contains: searchText, mode: searchMode } },
+        { last_code: { contains: searchText, mode: searchMode } },
+        {
+          machine: {
+            is: {
+              OR: [
+                { machine_name: { contains: searchText, mode: searchMode } },
+                { line_name: { contains: searchText, mode: searchMode } }
+              ]
+            }
+          }
+        },
+        {
+          current_product: {
+            is: {
+              product_code: { contains: searchText, mode: searchMode }
+            }
+          }
+        }
+      ];
+      const normalizedSearchStatus = searchText.toUpperCase();
+      if (["RUNNING", "PAUSED", "STOPPED", "DISCONNECTED", "ERROR"].includes(normalizedSearchStatus)) {
+        searchFilters.push({ status: normalizedSearchStatus as MachineRuntimeStatus });
+      }
+      where.OR = searchFilters;
+    }
+
+    const [total, sessions] = await Promise.all([
+      (this.prisma as any).machineRuntimeSession.count({ where }),
+      (this.prisma as any).machineRuntimeSession.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ last_seen_at: "desc" }, { id: "desc" }],
+        include: this.sessionInclude(query.include_scans)
+      })
+    ]);
     const normalizedSessions = await this.normalizeSessionCounters(sessions);
     const sessionsWithLatestScan = await this.attachLatestMachineScanRecords(normalizedSessions);
 
@@ -352,8 +397,37 @@ export class RuntimeService {
       success: true,
       code: "RUNTIME_SESSIONS_LISTED",
       message: "Đã tải phiên chạy của máy.",
-      data: sessionsWithLatestScan
+      data: sessionsWithLatestScan,
+      meta: {
+        total,
+        take,
+        skip,
+        page: Math.floor(skip / take) + 1,
+        page_size: take,
+        total_pages: Math.max(1, Math.ceil(total / take)),
+        has_previous: skip > 0,
+        has_next: skip + sessions.length < total
+      }
     };
+  }
+
+  async listLatestSessionsForMachines(machineIds: number[]) {
+    if (machineIds.length === 0) {
+      return [];
+    }
+
+    const sessions = await (this.prisma as any).machineRuntimeSession.findMany({
+      where: {
+        machine_id: { in: machineIds }
+      },
+      orderBy: [{ machine_id: "asc" }, { last_seen_at: "desc" }, { id: "desc" }],
+      distinct: ["machine_id"],
+      include: {
+        current_product: true
+      }
+    });
+    const normalizedSessions = await this.normalizeSessionCounters(sessions);
+    return this.attachLatestMachineScanRecords(normalizedSessions, true);
   }
 
   async getSession(id: number) {
@@ -703,25 +777,19 @@ export class RuntimeService {
       return sessions;
     }
 
-    const baselineEvents = await (this.prisma as any).machineRuntimeEvent.findMany({
-      where: {
-        session_id: {
-          in: sessionIds
-        },
-        OR: [
-          { total_count: { not: null } },
-          { ok_count: { not: null } },
-          { ng_count: { not: null } }
-        ]
-      },
-      orderBy: [{ created_at: "asc" }, { id: "asc" }],
-      select: {
-        session_id: true,
-        total_count: true,
-        ok_count: true,
-        ng_count: true
-      }
-    });
+    const baselineEvents = await this.prisma.$queryRaw<
+      Array<{ session_id: number; total_count: number | null; ok_count: number | null; ng_count: number | null }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON ("session_id")
+        "session_id",
+        "total_count",
+        "ok_count",
+        "ng_count"
+      FROM "machine_runtime_events"
+      WHERE "session_id" IN (${Prisma.join(sessionIds)})
+        AND ("total_count" IS NOT NULL OR "ok_count" IS NOT NULL OR "ng_count" IS NOT NULL)
+      ORDER BY "session_id" ASC, "created_at" ASC, "id" ASC
+    `);
 
     const baselineBySessionId = new Map<number, { total_count?: number | null; ok_count?: number | null; ng_count?: number | null }>();
     for (const event of baselineEvents) {
@@ -759,7 +827,10 @@ export class RuntimeService {
     return Math.max(0, current - baseline);
   }
 
-  private async attachLatestMachineScanRecords<T extends { machine_id?: number }>(sessions: T[]): Promise<Array<T & { latest_scan_record?: unknown }>> {
+  private async attachLatestMachineScanRecords<T extends { machine_id?: number }>(
+    sessions: T[],
+    lightweight = false
+  ): Promise<Array<T & { latest_scan_record?: unknown }>> {
     const machineIds = Array.from(
       new Set(
         sessions
@@ -780,19 +851,41 @@ export class RuntimeService {
       },
       orderBy: [{ machine_id: "asc" }, { scan_at: "desc" }, { id: "desc" }],
       distinct: ["machine_id"],
-      include: {
-        profile: {
-          include: {
-            chassis_code: true
+      ...(lightweight
+        ? {
+            select: {
+              id: true,
+              machine_id: true,
+              local_scan_id: true,
+              full_code_raw: true,
+              full_chassis_code: true,
+              full_vendor_char: true,
+              full_led_code: true,
+              full_factory_code: true,
+              duplicate_key: true,
+              chassis_scan_raw: true,
+              local_status: true,
+              server_status: true,
+              final_status: true,
+              ng_reason: true,
+              scan_at: true
+            }
           }
-        },
-        led_items: {
-          select: {
-            led_scan_raw: true
-          }
-        }
-      }
-    });
+        : {
+            include: {
+              profile: {
+                include: {
+                  chassis_code: true
+                }
+              },
+              led_items: {
+                select: {
+                  led_scan_raw: true
+                }
+              }
+            }
+          })
+    } as any);
     const latestScanByMachineId = new Map(latestScans.map((scan) => [scan.machine_id, scan]));
 
     return sessions.map((session) => ({

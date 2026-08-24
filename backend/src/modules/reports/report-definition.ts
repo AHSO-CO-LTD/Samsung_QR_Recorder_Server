@@ -52,7 +52,7 @@ export const REPORT_COLUMN_KEYS = [
   "created_at"
 ] as const;
 
-export const REPORT_FINAL_STATUSES = ["OK", "NG", "PENDING"] as const;
+export const REPORT_FINAL_STATUSES = ["OK", "NG", "REWORK", "PENDING"] as const;
 export const REPORT_LOCALES = ["vi", "en"] as const;
 
 export type ScanReportColumnKey = (typeof REPORT_COLUMN_KEYS)[number];

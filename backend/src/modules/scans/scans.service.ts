@@ -1,5 +1,6 @@
-import { BadRequestException, HttpException, Injectable, Logger } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Prisma, type ErrorCode } from "@prisma/client";
+import { resolveLogicalResultCounts } from "../../common/results/logical-result-counts";
 import { getVietnamDayRange } from "../../common/time/vietnam-time";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MachinesService } from "../machines/machines.service";
@@ -17,6 +18,7 @@ import {
 } from "./scan-trend-range";
 import { resolveLocalNgReason } from "./scan-failure-reason";
 import { buildNgReasonWhere } from "./scan-query-filter";
+import { canReworkNgSource, getReworkSourceLocalScanId, isNgFinalStatus } from "./rework-scan-reference";
 
 type SubmitScanOptions = {
   syncBatchId?: number;
@@ -31,7 +33,7 @@ type ScanFilterQuery = {
   line_name?: string;
   profile_id?: number;
   vendor_char?: string;
-  final_status?: "OK" | "NG" | "PENDING";
+  final_status?: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING";
   ng_reason?: string;
   duplicate_only?: boolean;
   from?: string;
@@ -43,6 +45,7 @@ type ListScansQuery = ScanFilterQuery & {
   skip?: number;
   q?: string;
   duplicate_only?: boolean;
+  include_details?: boolean;
 };
 
 type CompleteSubmitScanDto = SubmitScanDto & {
@@ -52,9 +55,13 @@ type CompleteSubmitScanDto = SubmitScanDto & {
   led_scans: LedScanPayloadDto[];
 };
 
+const NG_FINAL_STATUSES: Array<"NG" | "NG_REWORK"> = ["NG", "NG_REWORK"];
+const SCAN_COUNT_CACHE_MS = 15_000;
+
 @Injectable()
 export class ScansService {
   private readonly logger = new Logger(ScansService.name);
+  private readonly scanCountCache = new Map<string, { expiresAt: number; value?: number; pending?: Promise<number> }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -69,42 +76,45 @@ export class ScansService {
     const skip = Math.max(query.skip || 0, 0);
     const where = this.buildScanWhere(query);
 
+    const includeDetails = query.include_details !== false;
     const [total, scans, errorDefinitions] = await Promise.all([
-      this.prisma.scanRecord.count({ where }),
+      this.getCachedScanCount(query, where),
       this.prisma.scanRecord.findMany({
         where,
         skip,
         take,
         orderBy: { scan_at: "desc" },
-        include: {
-          machine: true,
-          profile: {
-            include: {
-              chassis_code: true,
-              profile_led_codes: {
+        include: includeDetails
+          ? {
+              machine: true,
+              profile: {
                 include: {
-                  led_code: true
-                },
-                orderBy: [{ led_slot: "asc" }, { id: "asc" }]
+                  chassis_code: true,
+                  profile_led_codes: {
+                    include: {
+                      led_code: true
+                    },
+                    orderBy: [{ led_slot: "asc" }, { id: "asc" }]
+                  }
+                }
+              },
+              led_items: {
+                orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
               }
             }
-          },
-          led_items: {
-            orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
-          }
-        }
+          : {
+              machine: true,
+              profile: {
+                include: {
+                  chassis_code: true
+                }
+              }
+            }
       }),
       this.prisma.errorCode.findMany()
     ]);
     const definitionByCode = new Map(errorDefinitions.map((definition) => [definition.code, definition]));
-    const scansWithDefinitions = scans.map((scan) => ({
-      ...scan,
-      ng_reason_definition: scan.ng_reason ? (definitionByCode.get(scan.ng_reason.trim().toUpperCase()) ?? null) : null,
-      led_items: scan.led_items.map((item) => ({
-        ...item,
-        ng_reason_definition: item.ng_reason ? (definitionByCode.get(item.ng_reason.trim().toUpperCase()) ?? null) : null
-      }))
-    }));
+    const scansWithDefinitions = scans.map((scan) => this.attachErrorDefinitions(scan, definitionByCode));
 
     return {
       success: true,
@@ -124,6 +134,112 @@ export class ScansService {
     };
   }
 
+  async getScanDetails(id: number) {
+    const [scan, errorDefinitions] = await Promise.all([
+      this.prisma.scanRecord.findUnique({
+        where: { id },
+        include: {
+          machine: true,
+          profile: {
+            include: {
+              chassis_code: true,
+              profile_led_codes: {
+                include: { led_code: true },
+                orderBy: [{ led_slot: "asc" }, { id: "asc" }]
+              }
+            }
+          },
+          led_items: {
+            orderBy: [{ led_slot: "asc" }, { led_index: "asc" }, { id: "asc" }]
+          }
+        }
+      }),
+      this.prisma.errorCode.findMany()
+    ]);
+    if (!scan) {
+      throw new NotFoundException({
+        success: false,
+        code: "SCAN_NOT_FOUND",
+        message: "Không tìm thấy lượt quét."
+      });
+    }
+
+    const definitionByCode = new Map(errorDefinitions.map((definition) => [definition.code, definition]));
+    return {
+      success: true,
+      code: "SCAN_DETAILS_LOADED",
+      message: "Đã tải chi tiết lượt quét.",
+      data: this.attachErrorDefinitions(scan, definitionByCode)
+    };
+  }
+
+  private attachErrorDefinitions<
+    T extends {
+      ng_reason: string | null;
+      led_items?: Array<{ ng_reason: string | null }>;
+    }
+  >(scan: T, definitionByCode: Map<string, ErrorCode>) {
+    return {
+      ...scan,
+      ng_reason_definition: scan.ng_reason ? (definitionByCode.get(scan.ng_reason.trim().toUpperCase()) ?? null) : null,
+      ...(scan.led_items
+        ? {
+            led_items: scan.led_items.map((item) => ({
+              ...item,
+              ng_reason_definition: item.ng_reason ? (definitionByCode.get(item.ng_reason.trim().toUpperCase()) ?? null) : null
+            }))
+          }
+        : {})
+    };
+  }
+
+  private getCachedScanCount(query: ListScansQuery, where: Prisma.ScanRecordWhereInput) {
+    const cacheKey = JSON.stringify({
+      q: query.q ?? null,
+      machine_code: query.machine_code ?? null,
+      line_name: query.line_name ?? null,
+      profile_id: query.profile_id ?? null,
+      vendor_char: query.vendor_char ?? null,
+      final_status: query.final_status ?? null,
+      ng_reason: query.ng_reason ?? null,
+      duplicate_only: query.duplicate_only ?? false,
+      from: query.from ?? null,
+      to: query.to ?? null
+    });
+    const now = Date.now();
+    const cached = this.scanCountCache.get(cacheKey);
+    if (cached?.value !== undefined && cached.expiresAt > now) {
+      return Promise.resolve(cached.value);
+    }
+    if (cached?.pending) {
+      return cached.pending;
+    }
+
+    const pending = this.prisma.scanRecord.count({ where }).then((value) => {
+      this.scanCountCache.set(cacheKey, { value, expiresAt: Date.now() + SCAN_COUNT_CACHE_MS });
+      this.pruneScanCountCache();
+      return value;
+    }).catch((error) => {
+      this.scanCountCache.delete(cacheKey);
+      throw error;
+    });
+    this.scanCountCache.set(cacheKey, { pending, expiresAt: now + SCAN_COUNT_CACHE_MS });
+    return pending;
+  }
+
+  private pruneScanCountCache() {
+    if (this.scanCountCache.size <= 100) return;
+    const now = Date.now();
+    for (const [key, entry] of this.scanCountCache) {
+      if (!entry.pending && entry.expiresAt <= now) this.scanCountCache.delete(key);
+    }
+    while (this.scanCountCache.size > 100) {
+      const oldestKey = this.scanCountCache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.scanCountCache.delete(oldestKey);
+    }
+  }
+
   async getMachineErrorRanking(query: ScanFilterQuery) {
     const filteredWhere = this.buildScanWhere(query);
     const summaryWhere: Prisma.ScanRecordWhereInput = {
@@ -132,11 +248,12 @@ export class ScansService {
 
     const isLineSelected = Boolean(query.line_name);
     const isProfileSelected = Boolean(query.profile_id);
+    const rankingStatus = query.final_status === "REWORK" ? "REWORK" : "NG";
 
     // MODE 3: Both Line and Profile selected -> Error Type Ranking
     if (isLineSelected && isProfileSelected) {
-      const ngScansWhere: Prisma.ScanRecordWhereInput = {
-        AND: [summaryWhere, { final_status: "NG" }]
+      const rankedScansWhere: Prisma.ScanRecordWhereInput = {
+        AND: [summaryWhere, { final_status: rankingStatus === "NG" ? { in: NG_FINAL_STATUSES } : rankingStatus }]
       };
 
       const [groupedCounts, ngReasonGroups, errorCodes] = await Promise.all([
@@ -147,14 +264,16 @@ export class ScansService {
         }),
         this.prisma.scanRecord.groupBy({
           by: ["ng_reason"],
-          where: ngScansWhere,
+          where: rankedScansWhere,
           _count: { _all: true }
         }),
         this.prisma.errorCode.findMany()
       ]);
 
       const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
-      const ngCount = groupedCounts.reduce((total, item) => total + (item.final_status === "NG" ? item._count._all : 0), 0);
+      const rawNgCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
+      const reworkCount = groupedCounts.reduce((total, item) => total + (item.final_status === "REWORK" ? item._count._all : 0), 0);
+      const displayCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
 
       const errorCodeMap = new Map(errorCodes.map((ec) => [ec.code.toUpperCase(), ec]));
       const errorData = ngReasonGroups
@@ -169,7 +288,9 @@ export class ScansService {
             name_vi: definition?.name_vi ?? null,
             name_en: definition?.name_en ?? null,
             ng_count: count,
-            percentage: ngCount > 0 ? Number(((count / ngCount) * 100).toFixed(2)) : 0
+            percentage: (rankingStatus === "REWORK" ? reworkCount : rawNgCount) > 0
+              ? Number(((count / (rankingStatus === "REWORK" ? reworkCount : rawNgCount)) * 100).toFixed(2))
+              : 0
           };
         })
         .sort((left, right) => right.ng_count - left.ng_count || left.code.localeCompare(right.code));
@@ -177,11 +298,13 @@ export class ScansService {
       return {
         success: true,
         code: "MACHINE_ERROR_RANKING_LOADED",
-        message: "Đã tải xếp hạng loại lỗi NG.",
+        message: `Đã tải xếp hạng loại lỗi ${rankingStatus}.`,
         data: {
-          ok_count: okCount,
-          ng_count: ngCount,
-          total_count: okCount + ngCount,
+          ok_count: displayCounts.ok,
+          ng_count: displayCounts.ng,
+          rework_count: displayCounts.rework,
+          total_count: displayCounts.total,
+          ranking_status: rankingStatus,
           ranking_type: "error_type" as const,
           machines: [],
           errors: errorData
@@ -191,8 +314,8 @@ export class ScansService {
 
     // MODE 2: Line selected, NO Profile selected -> Profile Error Ranking
     if (isLineSelected && !isProfileSelected) {
-      const ngScansWhere: Prisma.ScanRecordWhereInput = {
-        AND: [summaryWhere, { final_status: "NG" }]
+      const rankedScansWhere: Prisma.ScanRecordWhereInput = {
+        AND: [summaryWhere, { final_status: rankingStatus === "NG" ? { in: NG_FINAL_STATUSES } : rankingStatus }]
       };
 
       const [groupedCounts, profileGroups, profiles] = await Promise.all([
@@ -203,7 +326,7 @@ export class ScansService {
         }),
         this.prisma.scanRecord.groupBy({
           by: ["profile_id"],
-          where: ngScansWhere,
+          where: rankedScansWhere,
           _count: { _all: true }
         }),
         this.prisma.productProfile.findMany({
@@ -212,7 +335,9 @@ export class ScansService {
       ]);
 
       const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
-      const ngCount = groupedCounts.reduce((total, item) => total + (item.final_status === "NG" ? item._count._all : 0), 0);
+      const rawNgCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
+      const reworkCount = groupedCounts.reduce((total, item) => total + (item.final_status === "REWORK" ? item._count._all : 0), 0);
+      const displayCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
 
       const profileMap = new Map(profiles.map((p) => [p.id, p]));
       const profileNgMap = new Map(
@@ -230,7 +355,9 @@ export class ScansService {
             profile_name: profile?.chassis_code?.code_full ?? (profileId ? `Profile #${profileId}` : "Chưa gắn hồ sơ"),
             factory_code: profile?.factory_code ?? "-",
             ng_count: count,
-            percentage: ngCount > 0 ? Number(((count / ngCount) * 100).toFixed(2)) : 0
+            percentage: (rankingStatus === "REWORK" ? reworkCount : rawNgCount) > 0
+              ? Number(((count / (rankingStatus === "REWORK" ? reworkCount : rawNgCount)) * 100).toFixed(2))
+              : 0
           };
         })
         .filter((item) => item.ng_count > 0)
@@ -239,11 +366,13 @@ export class ScansService {
       return {
         success: true,
         code: "MACHINE_ERROR_RANKING_LOADED",
-        message: "Đã tải tỷ lệ lỗi NG theo hồ sơ.",
+        message: `Đã tải tỷ lệ ${rankingStatus} theo hồ sơ.`,
         data: {
-          ok_count: okCount,
-          ng_count: ngCount,
-          total_count: okCount + ngCount,
+          ok_count: displayCounts.ok,
+          ng_count: displayCounts.ng,
+          rework_count: displayCounts.rework,
+          total_count: displayCounts.total,
+          ranking_status: rankingStatus,
           ranking_type: "profile" as const,
           machines: [],
           profiles: profileData
@@ -275,20 +404,26 @@ export class ScansService {
     ]);
 
     const okCount = groupedCounts.reduce((total, item) => total + (item.final_status === "OK" ? item._count._all : 0), 0);
-    const ngCount = groupedCounts.reduce((total, item) => total + (item.final_status === "NG" ? item._count._all : 0), 0);
-    const ngCountByMachineId = new Map(
-      groupedCounts.filter((item) => item.final_status === "NG").map((item) => [item.machine_id, item._count._all])
+    const rawNgCount = groupedCounts.reduce((total, item) => total + (isNgFinalStatus(item.final_status) ? item._count._all : 0), 0);
+    const reworkCount = groupedCounts.reduce((total, item) => total + (item.final_status === "REWORK" ? item._count._all : 0), 0);
+    const displayCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
+    const rankedCountByMachineId = new Map(
+      groupedCounts
+        .filter((item) => (rankingStatus === "NG" ? isNgFinalStatus(item.final_status) : item.final_status === rankingStatus))
+        .reduce((counts, item) => counts.set(item.machine_id, (counts.get(item.machine_id) ?? 0) + item._count._all), new Map<number, number>())
     );
     const data = machines
       .map((machine) => {
-        const machineNgCount = ngCountByMachineId.get(machine.id) ?? 0;
+        const machineNgCount = rankedCountByMachineId.get(machine.id) ?? 0;
         return {
           machine_id: machine.id,
           machine_code: machine.machine_code,
           machine_name: machine.machine_name,
           line_name: machine.line_name,
           ng_count: machineNgCount,
-          percentage: ngCount > 0 ? Number(((machineNgCount / ngCount) * 100).toFixed(2)) : 0
+          percentage: (rankingStatus === "REWORK" ? reworkCount : rawNgCount) > 0
+            ? Number(((machineNgCount / (rankingStatus === "REWORK" ? reworkCount : rawNgCount)) * 100).toFixed(2))
+            : 0
         };
       })
       .sort((left, right) => right.ng_count - left.ng_count || left.machine_code.localeCompare(right.machine_code));
@@ -296,13 +431,40 @@ export class ScansService {
     return {
       success: true,
       code: "MACHINE_ERROR_RANKING_LOADED",
-      message: "Đã tải tỷ lệ lỗi NG theo máy.",
+      message: `Đã tải tỷ lệ ${rankingStatus} theo máy.`,
       data: {
-        ok_count: okCount,
-        ng_count: ngCount,
-        total_count: okCount + ngCount,
+        ok_count: displayCounts.ok,
+        ng_count: displayCounts.ng,
+        rework_count: displayCounts.rework,
+        total_count: displayCounts.total,
+        ranking_status: rankingStatus,
         ranking_type: "machine" as const,
         machines: data
+      }
+    };
+  }
+
+  async getHistoryAnalytics(query: ScanFilterQuery) {
+    const summaryQuery: ScanFilterQuery = {
+      machine_code: query.machine_code,
+      line_name: query.line_name,
+      profile_id: query.profile_id,
+      vendor_char: query.vendor_char,
+      from: query.from,
+      to: query.to
+    };
+    const [summaryResponse, rankingResponse] = await Promise.all([
+      this.getMachineErrorRanking(summaryQuery),
+      this.getMachineErrorRanking(query)
+    ]);
+
+    return {
+      success: true,
+      code: "SCAN_HISTORY_ANALYTICS_LOADED",
+      message: "Đã tải thống kê lịch sử quét.",
+      data: {
+        summary: summaryResponse.data,
+        ranking: rankingResponse.data
       }
     };
   }
@@ -317,7 +479,7 @@ export class ScansService {
           : undefined,
       profile_id: query.profile_id,
       full_vendor_char: query.vendor_char,
-      final_status: query.final_status,
+      final_status: query.final_status === "NG" ? { in: NG_FINAL_STATUSES } : query.final_status,
       ng_reason: query.duplicate_only ? { in: ["LOCAL_DUPLICATE", "SERVER_DUPLICATE"] } : undefined,
       scan_at:
         query.from || query.to
@@ -383,13 +545,15 @@ export class ScansService {
               lt: todayRange.end
             }
           };
-    const [okCount, ngCount, pendingCount, todayDuplicateCount, totalOkCount, totalNgCount, totalDuplicateCount, pendingSyncMachines, settings] = await Promise.all([
+    const [okCount, rawNgCount, reworkCount, pendingCount, todayDuplicateCount, totalOkCount, totalRawNgCount, totalReworkCount, totalDuplicateCount, pendingSyncMachines, settings] = await Promise.all([
       this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "OK" } }),
-      this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "NG" } }),
+      this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: { in: NG_FINAL_STATUSES } } }),
+      this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "REWORK" } }),
       this.prisma.scanRecord.count({ where: { ...rangeWhere, final_status: "PENDING" } }),
       this.prisma.scanRecord.count({ where: { ...rangeWhere, ng_reason: "SERVER_DUPLICATE" } }),
       this.prisma.scanRecord.count({ where: { final_status: "OK" } }),
-      this.prisma.scanRecord.count({ where: { final_status: "NG" } }),
+      this.prisma.scanRecord.count({ where: { final_status: { in: NG_FINAL_STATUSES } } }),
+      this.prisma.scanRecord.count({ where: { final_status: "REWORK" } }),
       this.prisma.scanRecord.count({ where: { ng_reason: "SERVER_DUPLICATE" } }),
       this.prisma.machineSyncState.aggregate({
         _sum: {
@@ -401,18 +565,23 @@ export class ScansService {
       })
     ]);
 
+    const resultCounts = resolveLogicalResultCounts({ ok: okCount, ng: rawNgCount, rework: reworkCount });
+    const historicalResultCounts = resolveLogicalResultCounts({ ok: totalOkCount, ng: totalRawNgCount, rework: totalReworkCount });
+
     return {
       success: true,
       code: "SCAN_SUMMARY_LOADED",
       message: "Đã tải tổng quan lượt quét.",
       data: {
-        ok: okCount,
-        ng: ngCount,
+        ok: resultCounts.ok,
+        ng: resultCounts.ng,
+        rework: resultCounts.rework,
         pending: pendingCount,
-        total: okCount + ngCount + pendingCount,
+        total: resultCounts.total,
         today_duplicates: todayDuplicateCount,
-        total_ok: totalOkCount,
-        total_ng: totalNgCount,
+        total_ok: historicalResultCounts.ok,
+        total_ng: historicalResultCounts.ng,
+        total_rework: historicalResultCounts.rework,
         total_duplicates: totalDuplicateCount,
         pending_sync: pendingSyncMachines._sum.local_pending_sync ?? 0,
         duplicate_days: settings?.duplicate_days ?? 31
@@ -453,20 +622,22 @@ export class ScansService {
         by: ["machine_id", "final_status"],
         where: {
           machine: { is_active: true },
-          final_status: { in: ["OK", "NG"] },
+          final_status: { in: ["OK", ...NG_FINAL_STATUSES, "REWORK"] },
           scan_at: scanAt
         },
         _count: { _all: true }
       })
     ]);
 
-    const countsByMachine = new Map<number, { ok: number; ng: number }>();
+    const countsByMachine = new Map<number, { ok: number; ng: number; rework: number }>();
     for (const item of groupedCounts) {
-      const counts = countsByMachine.get(item.machine_id) ?? { ok: 0, ng: 0 };
+      const counts = countsByMachine.get(item.machine_id) ?? { ok: 0, ng: 0, rework: 0 };
       if (item.final_status === "OK") {
         counts.ok = item._count._all;
-      } else if (item.final_status === "NG") {
-        counts.ng = item._count._all;
+      } else if (isNgFinalStatus(item.final_status)) {
+        counts.ng += item._count._all;
+      } else if (item.final_status === "REWORK") {
+        counts.rework = item._count._all;
       }
       countsByMachine.set(item.machine_id, counts);
     }
@@ -476,13 +647,12 @@ export class ScansService {
       code: "RUNTIME_SCAN_SUMMARY_LOADED",
       message: "Đã tải tổng kết quả theo phạm vi.",
       data: machines.map((machine) => {
-        const counts = countsByMachine.get(machine.id) ?? { ok: 0, ng: 0 };
+        const counts = countsByMachine.get(machine.id) ?? { ok: 0, ng: 0, rework: 0 };
+        const resultCounts = resolveLogicalResultCounts(counts);
         return {
           machine_id: machine.id,
           machine_code: machine.machine_code,
-          ok: counts.ok,
-          ng: counts.ng,
-          total: counts.ok + counts.ng
+          ...resultCounts
         };
       })
     };
@@ -531,7 +701,7 @@ export class ScansService {
         const toDate = new Date(fromDate);
         toDate.setDate(toDate.getDate() + 1);
 
-        const [ok, ng, pending] = await Promise.all([
+        const [ok, ng, rework, pending] = await Promise.all([
           this.prisma.scanRecord.count({
             where: {
               ...machineFilter,
@@ -545,7 +715,17 @@ export class ScansService {
           this.prisma.scanRecord.count({
             where: {
               ...machineFilter,
-              final_status: "NG",
+              final_status: { in: NG_FINAL_STATUSES },
+              scan_at: {
+                gte: fromDate,
+                lt: toDate
+              }
+            }
+          }),
+          this.prisma.scanRecord.count({
+            where: {
+              ...machineFilter,
+              final_status: "REWORK",
               scan_at: {
                 gte: fromDate,
                 lt: toDate
@@ -568,8 +748,9 @@ export class ScansService {
           date: this.formatTrendDate(fromDate),
           ok,
           ng,
+          rework,
           pending,
-          total: ok + ng + pending
+          total: ok + ng
         };
       })
     );
@@ -599,22 +780,11 @@ export class ScansService {
           sr."id" AS scan_record_id,
           UPPER(BTRIM(sr."ng_reason")) AS code
         FROM "scan_records" sr
-        WHERE sr."final_status" = 'NG'
+        WHERE sr."final_status" IN ('NG', 'NG_REWORK')
           AND sr."ng_reason" IS NOT NULL
           AND BTRIM(sr."ng_reason") <> ''
           AND ${scanRangeCondition}
 
-        UNION
-
-        SELECT
-          sli."scan_record_id",
-          UPPER(BTRIM(sli."ng_reason")) AS code
-        FROM "scan_led_items" sli
-        INNER JOIN "scan_records" sr ON sr."id" = sli."scan_record_id"
-        WHERE sr."final_status" = 'NG'
-          AND sli."ng_reason" IS NOT NULL
-          AND BTRIM(sli."ng_reason") <> ''
-          AND ${scanRangeCondition}
       )
       , observed_counts AS (
         SELECT code, COUNT(*)::INTEGER AS occurrence_count
@@ -678,12 +848,13 @@ export class ScansService {
           : Prisma.sql`to_char("scan_at" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD')`;
 
     const groupedRows = await this.prisma.$queryRaw<
-      Array<{ bucket: string; ok: bigint; ng: bigint; pending: bigint }>
+      Array<{ bucket: string; ok: bigint; ng: bigint; rework: bigint; pending: bigint }>
     >(Prisma.sql`
       SELECT
         ${bucketExpression} AS "bucket",
         count(*) FILTER (WHERE "final_status" = 'OK') AS "ok",
-        count(*) FILTER (WHERE "final_status" = 'NG') AS "ng",
+        count(*) FILTER (WHERE "final_status" IN ('NG', 'NG_REWORK')) AS "ng",
+        count(*) FILTER (WHERE "final_status" = 'REWORK') AS "rework",
         count(*) FILTER (WHERE "final_status" = 'PENDING') AS "pending"
       FROM "scan_records"
       WHERE "scan_at" >= ${start} AND "scan_at" <= ${range.end}
@@ -697,6 +868,7 @@ export class ScansService {
         {
           ok: Number(row.ok),
           ng: Number(row.ng),
+          rework: Number(row.rework),
           pending: Number(row.pending)
         }
       ])
@@ -715,7 +887,7 @@ export class ScansService {
     start: Date,
     end: Date,
     bucket: "30_minutes" | "day" | "month",
-    countsByBucket: Map<string, { ok: number; ng: number; pending: number }>
+    countsByBucket: Map<string, { ok: number; ng: number; rework: number; pending: number }>
   ) {
     if (bucket === "month") {
       const startInVietnam = new Date(start.getTime() + 7 * 60 * 60 * 1000);
@@ -728,13 +900,14 @@ export class ScansService {
         cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))
       ) {
         const bucketKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
-        const counts = countsByBucket.get(bucketKey) ?? { ok: 0, ng: 0, pending: 0 };
+        const counts = countsByBucket.get(bucketKey) ?? { ok: 0, ng: 0, rework: 0, pending: 0 };
         data.push({
           date: bucketKey,
           ok: counts.ok,
           ng: counts.ng,
+          rework: counts.rework,
           pending: counts.pending,
-          total: counts.ok + counts.ng + counts.pending
+          total: counts.ok + counts.ng
         });
       }
 
@@ -751,13 +924,14 @@ export class ScansService {
     for (let cursorMs = firstBucket.getTime(); cursorMs <= end.getTime(); cursorMs += bucketMs) {
       const cursor = new Date(cursorMs);
       const bucketKey = bucket === "30_minutes" ? this.formatVietnamTrendDateTime(cursor) : this.formatVietnamTrendDate(cursor);
-      const counts = countsByBucket.get(bucketKey) ?? { ok: 0, ng: 0, pending: 0 };
+      const counts = countsByBucket.get(bucketKey) ?? { ok: 0, ng: 0, rework: 0, pending: 0 };
       data.push({
         date: bucket === "30_minutes" ? bucketKey.slice(11) : bucketKey,
         ok: counts.ok,
         ng: counts.ng,
+        rework: counts.rework,
         pending: counts.pending,
-        total: counts.ok + counts.ng + counts.pending
+        total: counts.ok + counts.ng
       });
     }
 
@@ -806,6 +980,7 @@ export class ScansService {
       date: this.formatTrendTime(fromDate),
       ok: 0,
       ng: 0,
+      rework: 0,
       pending: 0,
       total: 0
     }));
@@ -820,12 +995,14 @@ export class ScansService {
 
       if (record.final_status === "OK") {
         bucket.ok += 1;
-      } else if (record.final_status === "NG") {
+      } else if (isNgFinalStatus(record.final_status)) {
         bucket.ng += 1;
+      } else if (record.final_status === "REWORK") {
+        bucket.rework += 1;
       } else if (record.final_status === "PENDING") {
         bucket.pending += 1;
       }
-      bucket.total = bucket.ok + bucket.ng + bucket.pending;
+      bucket.total = bucket.ok + bucket.ng;
     }
 
     return {
@@ -871,14 +1048,19 @@ export class ScansService {
         await this.logSyncRequest(machineForLog.id, dto, result, options.requestType ?? "SUBMIT_SCAN", "OK", options.batchCode);
       }
       const resultData = result.data as {
-        final_status?: "OK" | "NG" | "PENDING";
+        server_scan_id?: number | null;
+        final_status?: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING";
         is_replay?: boolean;
       } | undefined;
       this.runtimeGateway.publishScanUpdated({
         machine_code: dto.machine_code,
         local_scan_id: dto.local_scan_id,
+        server_scan_id: resultData?.server_scan_id ?? null,
         result_code: result.code,
         final_status: resultData?.final_status ?? null,
+        full_code_raw: dto.full_code?.raw ?? null,
+        full_chassis_code: dto.full_code?.chassis_code ?? dto.chassis_scan_raw ?? null,
+        scan_at: dto.scan_at,
         source: options.syncBatchId ? "BATCH" : "LIVE",
         is_replay: resultData?.is_replay === true
       });
@@ -930,6 +1112,15 @@ export class ScansService {
         });
       }
 
+      const reworkSourceLocalScanId = dto.local_status === "REWORK" ? getReworkSourceLocalScanId(dto.local_scan_id) : null;
+      if (dto.local_status === "REWORK" && !reworkSourceLocalScanId) {
+        throw new BadRequestException({
+          success: false,
+          code: "REWORK_SOURCE_INVALID",
+          message: "local_scan_id của REWORK phải có tiền tố RW- và tham chiếu một lượt NG gốc."
+        });
+      }
+
       const existingScan = await tx.scanRecord.findUnique({
         where: {
           machine_id_local_scan_id: {
@@ -948,11 +1139,11 @@ export class ScansService {
       });
       const runtimeContext = await this.runtimeService.resolveRuntimeForScan(machine.id, profile.id);
 
-      if (dto.local_status === "NG") {
-        if (existingScan) {
-          return this.buildReplayResponse(existingScan);
-        }
+      if (existingScan) {
+        return this.buildReplayResponse(existingScan);
+      }
 
+      if (dto.local_status === "NG") {
         const scan = await this.createScanRecord(tx, dto, {
           machine_id: machine.id,
           profile_snapshot_id: profileSnapshot?.id ?? null,
@@ -980,12 +1171,36 @@ export class ScansService {
         };
       }
 
-      this.assertCompleteOkPayload(dto);
+      this.assertCompleteScanPayload(dto);
       this.validateFullCodePayload(dto, profile);
       await this.captureVendorCharForReporting(tx, dto.full_code.vendor_char);
 
-      if (existingScan) {
-        return this.buildReplayResponse(existingScan);
+      const reworkSourceScan = reworkSourceLocalScanId
+        ? await tx.scanRecord.findUnique({
+            where: {
+              machine_id_local_scan_id: {
+                machine_id: machine.id,
+                local_scan_id: reworkSourceLocalScanId
+              }
+            },
+            select: { id: true, final_status: true }
+          })
+        : null;
+
+      if (reworkSourceLocalScanId && !reworkSourceScan) {
+        throw new BadRequestException({
+          success: false,
+          code: "REWORK_SOURCE_NOT_FOUND",
+          message: "Không tìm thấy lượt NG gốc để thực hiện REWORK."
+        });
+      }
+
+      if (reworkSourceScan && !canReworkNgSource(reworkSourceScan.final_status)) {
+        throw new ConflictException({
+          success: false,
+          code: "REWORK_SOURCE_NOT_NG",
+          message: "Lượt quét gốc không còn ở trạng thái NG để thực hiện REWORK."
+        });
       }
 
       const settings = await tx.serverSetting.findFirst({
@@ -1003,6 +1218,10 @@ export class ScansService {
       });
 
       if (existingKey && existingKey.expires_at > scanAt) {
+        if (dto.local_status === "REWORK") {
+          return this.buildRejectedReworkDuplicateResponse(existingKey.first_scan_record_id);
+        }
+
         const duplicateScan = await this.createScanRecord(tx, dto, {
           machine_id: machine.id,
           profile_snapshot_id: profileSnapshot?.id ?? null,
@@ -1038,14 +1257,14 @@ export class ScansService {
         });
       }
 
-      const okScan = await this.createScanRecord(tx, dto, {
+      const acceptedScan = await this.createScanRecord(tx, dto, {
         machine_id: machine.id,
         profile_snapshot_id: profileSnapshot?.id ?? null,
-        local_status: "OK",
+        local_status: dto.local_status,
         server_status: "OK",
-        final_status: "OK",
-        ng_stage: null,
-        ng_reason: null,
+        final_status: dto.local_status === "REWORK" ? "REWORK" : "OK",
+        ng_stage: dto.local_status === "REWORK" ? "LOCAL" : null,
+        ng_reason: dto.local_status === "REWORK" ? resolveLocalNgReason(dto) : null,
         sync_batch_id: options.syncBatchId ?? null,
         runtime_session_id: runtimeContext?.runtime_session_id ?? null,
         runtime_product_id: runtimeContext?.runtime_product_id ?? null,
@@ -1057,7 +1276,7 @@ export class ScansService {
           {
             profile_id: profile.id,
             duplicate_key: dto.duplicate_key,
-            first_scan_record_id: okScan.id,
+            first_scan_record_id: acceptedScan.id,
             first_machine_id: machine.id,
             first_scan_at: scanAt,
             expires_at: new Date(scanAt.getTime() + duplicateDays * 24 * 60 * 60 * 1000)
@@ -1075,8 +1294,13 @@ export class ScansService {
             }
           }
         });
+        if (dto.local_status === "REWORK") {
+          await tx.scanRecord.delete({ where: { id: acceptedScan.id } });
+          return this.buildRejectedReworkDuplicateResponse(winnerKey?.first_scan_record_id ?? null);
+        }
+
         const duplicateScan = await tx.scanRecord.update({
-          where: { id: okScan.id },
+          where: { id: acceptedScan.id },
           data: {
             server_status: "NG",
             final_status: "NG",
@@ -1100,18 +1324,60 @@ export class ScansService {
         };
       }
 
+      if (dto.local_status === "REWORK") {
+        const updatedSource = await tx.scanRecord.updateMany({
+          where: { id: reworkSourceScan!.id, final_status: "NG" },
+          data: { final_status: "NG_REWORK" }
+        });
+        if (updatedSource.count !== 1) {
+          throw new ConflictException({
+            success: false,
+            code: "REWORK_SOURCE_NOT_NG",
+            message: "Lượt quét gốc đã được REWORK bởi một lượt khác."
+          });
+        }
+
+        return {
+          success: true,
+          code: "LOCAL_REWORK_SAVED",
+          message: "Đã lưu lượt quét REWORK và cập nhật lượt NG gốc.",
+          data: {
+            decision: "LOCAL_REWORK_SAVED",
+            server_scan_id: acceptedScan.id,
+            reworked_scan_record_id: reworkSourceScan!.id,
+            final_status: acceptedScan.final_status,
+            ng_reason: acceptedScan.ng_reason
+          }
+        };
+      }
+
       return {
         success: true,
         code: "SERVER_OK",
         message: "Máy chủ đã nhận lượt quét. Không phát hiện trùng lặp.",
         data: {
           decision: "SERVER_OK",
-          server_scan_id: okScan.id,
-          final_status: okScan.final_status,
+          server_scan_id: acceptedScan.id,
+          final_status: acceptedScan.final_status,
           ng_reason: null
         }
       };
     });
+  }
+
+  private buildRejectedReworkDuplicateResponse(firstScanRecordId: number | null) {
+    return {
+      success: true,
+      code: "SERVER_DUPLICATE",
+      message: "Máy chủ phát hiện trùng lặp trong cửa sổ kiểm trùng đã cấu hình. Lượt REWORK không được lưu.",
+      data: {
+        decision: "SERVER_DUPLICATE",
+        server_scan_id: null,
+        first_scan_record_id: firstScanRecordId,
+        final_status: "NG" as const,
+        ng_reason: "SERVER_DUPLICATE"
+      }
+    };
   }
 
   private createScanRecord(
@@ -1120,9 +1386,9 @@ export class ScansService {
     state: {
       machine_id: number;
       profile_snapshot_id: number | null;
-      local_status: "OK" | "NG";
+      local_status: "OK" | "NG" | "REWORK";
       server_status: "OK" | "NG" | "SKIPPED" | "PENDING";
-      final_status: "OK" | "NG" | "PENDING";
+      final_status: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING";
       ng_stage: "LOCAL" | "SERVER" | "SYSTEM" | null;
       ng_reason: string | null;
       sync_batch_id: number | null;
@@ -1168,7 +1434,7 @@ export class ScansService {
             led_lot_no: this.cleanScanText(item?.lot_no),
             vendor_char: this.cleanScanText(item?.vendor_char),
             led_suffix: this.cleanScanText(item?.suffix),
-            local_status: item?.status === "OK" || item?.status === "NG" ? item.status : state.local_status,
+            local_status: item?.status === "OK" || item?.status === "NG" || item?.status === "REWORK" ? item.status : state.local_status,
             ng_reason: this.cleanOptionalScanText(item?.ng_reason)
           }))
         }
@@ -1202,10 +1468,25 @@ export class ScansService {
   private buildReplayResponse(scan: {
     id: number;
     server_status: "OK" | "NG" | "SKIPPED" | "PENDING";
-    final_status: "OK" | "NG" | "PENDING";
+    final_status: "OK" | "NG" | "NG_REWORK" | "REWORK" | "PENDING";
     ng_stage: "LOCAL" | "SERVER" | "SYSTEM" | null;
     ng_reason: string | null;
   }) {
+    if (scan.final_status === "REWORK") {
+      return {
+        success: true,
+        code: "LOCAL_REWORK_SAVED",
+        message: "Lượt quét REWORK đã được lưu trước đó.",
+        data: {
+          decision: "LOCAL_REWORK_SAVED",
+          server_scan_id: scan.id,
+          final_status: scan.final_status,
+          ng_reason: scan.ng_reason,
+          is_replay: true
+        }
+      };
+    }
+
     if (scan.ng_stage === "LOCAL") {
       return {
         success: true,
@@ -1272,12 +1553,12 @@ export class ScansService {
     });
   }
 
-  private assertCompleteOkPayload(dto: SubmitScanDto): asserts dto is CompleteSubmitScanDto {
+  private assertCompleteScanPayload(dto: SubmitScanDto): asserts dto is CompleteSubmitScanDto {
     if (!dto.full_code || !dto.duplicate_key || dto.chassis_scan_raw === undefined || !Array.isArray(dto.led_scans)) {
       throw new BadRequestException({
         success: false,
         code: "PAYLOAD_INVALID",
-        message: "Dữ liệu lượt quét OK phải có mã đầy đủ, khóa trùng lặp, dữ liệu khung thô và danh sách LED."
+        message: "Dữ liệu lượt quét OK hoặc REWORK phải có mã đầy đủ, khóa trùng lặp, dữ liệu khung thô và danh sách LED."
       });
     }
   }

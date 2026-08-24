@@ -8,7 +8,12 @@ import { APP_TIME_ZONE_LABEL, toAppDateInput, toAppDatetimeLocal } from "@/lib/a
 import { useI18n } from "@/lib/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
 import type { MachineRuntimeSession } from "@/features/shared/types";
-import type { RuntimeResultCounts } from "@/features/shared/machine-runtime-card";
+import {
+  resolveSessionResultCounts,
+  type RuntimeResultCounts
+} from "@/features/shared/runtime-result-counts";
+
+export { indexRuntimeSummary, type RuntimeSummaryRow } from "@/features/shared/runtime-result-counts";
 
 export const RUNTIME_RESULT_SCOPE_STORAGE_KEY = "runtime-monitor-result-scope";
 export const RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY = "runtime-monitor-result-since-date";
@@ -16,11 +21,6 @@ export const RUNTIME_RESULT_SINCE_DATE_STORAGE_KEY = "runtime-monitor-result-sin
 export const runtimeResultScopes = ["session", "today", "last_12_hours", "all", "since"] as const;
 
 export type RuntimeResultScope = (typeof runtimeResultScopes)[number];
-
-export type RuntimeSummaryRow = RuntimeResultCounts & {
-  machine_id: number;
-  machine_code: string;
-};
 
 const runtimeResultScopeLabelKeys: Record<RuntimeResultScope, MessageKey> = {
   session: "runtimeScopeSession",
@@ -96,17 +96,6 @@ export function isRuntimeResultScope(value: string): value is RuntimeResultScope
   return runtimeResultScopes.includes(value as RuntimeResultScope);
 }
 
-export function indexRuntimeSummary(rows: RuntimeSummaryRow[]) {
-  return rows.reduce<Record<number, RuntimeResultCounts>>((indexedRows, row) => {
-    indexedRows[row.machine_id] = {
-      ok: toSafeRuntimeCount(row.ok),
-      ng: toSafeRuntimeCount(row.ng),
-      total: toSafeRuntimeCount(row.total)
-    };
-    return indexedRows;
-  }, {});
-}
-
 export function resolveRuntimeResultCounts(
   machineId: number,
   session: MachineRuntimeSession | undefined,
@@ -114,20 +103,10 @@ export function resolveRuntimeResultCounts(
   summaryByMachine: Record<number, RuntimeResultCounts>
 ): RuntimeResultCounts {
   if (scope !== "session") {
-    return summaryByMachine[machineId] ?? { ok: 0, ng: 0, total: 0 };
+    return summaryByMachine[machineId] ?? { ok: 0, ng: 0, rework: 0, total: 0 };
   }
 
-  const ok = toSafeRuntimeCount(session?.ok_count);
-  const ng = toSafeRuntimeCount(session?.ng_count);
-  return {
-    ok,
-    ng,
-    total: ok + ng
-  };
-}
-
-function toSafeRuntimeCount(value: number | null | undefined) {
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value ?? 0)) : 0;
+  return resolveSessionResultCounts(session);
 }
 
 export function buildScanTimeRangeFromScope(

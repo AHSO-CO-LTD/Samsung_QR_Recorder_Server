@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { WifiOff } from "lucide-react";
 import { Cell, Pie, PieChart } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,14 +14,13 @@ import { MonoText } from "@/features/shared/data-view";
 import { LatestScanStatusStrip } from "@/features/shared/latest-scan-status-strip";
 import { ResponsiveRuntimeCount } from "@/features/shared/responsive-runtime-count";
 import { formatRuntimeCount, formatRuntimeCountFull } from "@/features/shared/runtime-count";
-import { formatIssueReason, resolveScanIssueReason } from "@/features/shared/scan-issue-reason";
 import type { Machine, MachineRuntimeSession, ScanRecord } from "@/features/shared/types";
-import type { Locale } from "@/lib/i18n";
+import type { RuntimeResultCounts } from "@/features/shared/runtime-result-counts";
 
 export const SERVER_TREND_HOURS = 12;
 export const SERVER_TREND_BUCKET_MINUTES = 30;
 
-const okNgChartConfig = {
+const resultChartConfig = {
   ok: {
     label: "OK",
     color: "var(--chart-ok)"
@@ -30,6 +28,10 @@ const okNgChartConfig = {
   ng: {
     label: "NG",
     color: "var(--chart-ng)"
+  },
+  rework: {
+    label: "REWORK",
+    color: "var(--chart-rework)"
   }
 } satisfies ChartConfig;
 
@@ -47,6 +49,7 @@ export type ScanTrendPoint = {
   date: string;
   ok: number;
   ng: number;
+  rework: number;
   pending: number;
   total: number;
   timestamp?: number;
@@ -63,7 +66,7 @@ export type MachineRuntimeCardDisplayOptions = {
   machineInfo: boolean;
   currentProduct: boolean;
   duration: boolean;
-  commonIssue: boolean;
+  machineStatus: boolean;
   serverChart: boolean;
 };
 
@@ -71,17 +74,13 @@ const defaultDisplayOptions: MachineRuntimeCardDisplayOptions = {
   machineInfo: true,
   currentProduct: true,
   duration: true,
-  commonIssue: true,
+  machineStatus: true,
   serverChart: true
 };
 
 export type TrendByMachine = Record<string, ScanTrendPoint[]>;
 
-export type RuntimeResultCounts = {
-  ok: number;
-  ng: number;
-  total: number;
-};
+export type { RuntimeResultCounts } from "@/features/shared/runtime-result-counts";
 
 type MachineRuntimeCardProps = {
   row: MachineRuntimeRow;
@@ -89,9 +88,9 @@ type MachineRuntimeCardProps = {
   resultCounts?: RuntimeResultCounts;
   timeAxis?: RuntimeChartTimeAxis;
   displayOptions?: Partial<MachineRuntimeCardDisplayOptions>;
-  showCommonLocalNgReason?: boolean;
   showServerChart?: boolean;
   ngHref?: string;
+  reworkHref?: string;
 };
 
 export function MachineRuntimeCard({
@@ -100,31 +99,31 @@ export function MachineRuntimeCard({
   resultCounts,
   timeAxis,
   displayOptions,
-  showCommonLocalNgReason = false,
   showServerChart = true,
-  ngHref
+  ngHref,
+  reworkHref
 }: MachineRuntimeCardProps) {
   const { t, locale } = useI18n();
   const { machine, session, isConnected } = row;
   const currentProduct = resolveCurrentProductCode(session);
   const serverChartData = showServerChart ? buildIncrementalCumulativeChartData(trendData, timeAxis) : [];
-  const serverCounts = resolveOkNgCountsFromChart(serverChartData, { ok: 0, ng: 0, total: 0 });
+  const serverCounts = resolveResultCountsFromChart(serverChartData, { ok: 0, ng: 0, rework: 0, total: 0 });
   const serverTotal = showServerChart ? resolveCumulativeTotal(serverChartData, 0) : 0;
   const displayedCounts = resultCounts
     ? {
         ok: toSafeCount(resultCounts.ok),
         ng: toSafeCount(resultCounts.ng),
+        rework: toSafeCount(resultCounts.rework),
         total: toSafeCount(resultCounts.total)
       }
     : {
         ok: serverCounts.ok,
         ng: serverCounts.ng,
+        rework: serverCounts.rework,
         total: serverTotal
       };
   const activeDisplayOptions = { ...defaultDisplayOptions, ...displayOptions };
-  const shouldShowCommonIssue = showCommonLocalNgReason && activeDisplayOptions.commonIssue;
   const shouldShowServerChart = showServerChart && activeDisplayOptions.serverChart;
-  const commonIssueReason = shouldShowCommonIssue ? resolveCommonLocalNgReason(session, locale) : null;
   const latestScan = findLatestScanRecord([
     ...(session?.scan_records ?? []),
     ...(session?.latest_scan_record ? [session.latest_scan_record] : [])
@@ -137,7 +136,7 @@ export function MachineRuntimeCard({
   const latestScanResult = normalizeScanValue(latestScan?.final_status) ?? normalizeScanValue(session?.last_result);
   const latestScanAt = latestScan?.scan_at ?? session?.last_result_at ?? null;
   const runtimeStatus = resolveMachineRuntimeDisplayStatus(session, isConnected);
-  const shouldShowDisconnectedState = !isConnected && runtimeStatus !== "STOPPED";
+  const shouldDimDisconnectedState = !isConnected && runtimeStatus !== "STOPPED";
   const headerItems = [
     activeDisplayOptions.machineInfo ? (
       <MachineIdentity
@@ -149,44 +148,24 @@ export function MachineRuntimeCard({
     ) : null,
     activeDisplayOptions.currentProduct ? <HeaderMetric key="product" label={t("colCurrentProduct")} value={<MonoText value={currentProduct ?? t("noCurrentProduct")} />} /> : null,
     activeDisplayOptions.duration ? <HeaderMetric key="duration" label={t("colDuration")} value={<RuntimeDuration session={session} />} /> : null,
-    shouldShowCommonIssue ? (
-      <HeaderMetric
-        key="common-issue"
-        label={t("commonIssueReason")}
-        value={
-          commonIssueReason ? (
-            <span className="inline-flex min-w-0 items-center gap-2" title={commonIssueReason.reason}>
-              <span className="truncate">{commonIssueReason.label}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">x{commonIssueReason.count}</span>
-            </span>
-          ) : (
-            "-"
-          )
-        }
-      />
+    activeDisplayOptions.machineStatus ? (
+      <MachineStatusMetric key="machine-status" status={runtimeStatus} />
     ) : null
   ].filter(Boolean);
 
   return (
     <Card
       className={cn(
-        "relative overflow-hidden",
+        "relative overflow-hidden border-2",
         runtimeStatus === "RUNNING" && "border-runtime-ok",
         runtimeStatus === "PAUSED" && "border-runtime-warning",
-        runtimeStatus === "STOPPED" && "border-muted-foreground/60",
+        runtimeStatus === "STOPPED" && "border-runtime-stopped",
         runtimeStatus === "DISCONNECTED" && "border-runtime-ng",
         runtimeStatus === "ERROR" && "border-runtime-ng",
-        shouldShowDisconnectedState && "bg-muted/40 text-muted-foreground"
+        shouldDimDisconnectedState && "bg-muted/40 text-muted-foreground"
       )}
     >
-      {shouldShowDisconnectedState ? (
-        <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-          <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
-          {t("machineNotConnected")}
-        </div>
-      ) : null}
-
-      <div className={cn(shouldShowDisconnectedState && "pt-6")}>
+      <div>
         {headerItems.length > 0 ? (
         <CardHeader className="pb-2 sm:pb-2">
           <div
@@ -203,13 +182,12 @@ export function MachineRuntimeCard({
             <MachineRuntimeOverview
               ok={displayedCounts.ok}
               ng={displayedCounts.ng}
+              rework={displayedCounts.rework}
               total={displayedCounts.total}
-              status={runtimeStatus}
               ngHref={ngHref}
+              reworkHref={reworkHref}
             />
-          ) : (
-            <RuntimeStatusRow status={runtimeStatus} />
-          )}
+          ) : null}
         </CardContent>
         <LatestScanStatusStrip code={latestScanCode} result={latestScanResult} scannedAt={latestScanAt} />
       </div>
@@ -231,7 +209,7 @@ function buildHeaderGridTemplate(itemCount: number) {
 }
 
 function MachineIdentity({ name, line, isVirtual }: { name: string; line: string; isVirtual: boolean }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const lineText = `Line: ${line}`;
 
   return (
@@ -257,6 +235,26 @@ function HeaderMetric({ label, value, className }: { label: string; value: React
       <div className="truncate text-xs text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate text-sm font-medium">{value}</div>
     </div>
+  );
+}
+
+function MachineStatusMetric({ status }: { status: MachineRuntimeStatus }) {
+  const { t } = useI18n();
+  const label = getMachineRuntimeStatusLabel(status, t);
+  const statusClassName = cn(
+    "rounded-sm border px-2 py-1",
+    status === "RUNNING" && "border-runtime-ok/70 bg-runtime-ok/10 text-runtime-ok",
+    status === "PAUSED" && "border-runtime-warning/70 bg-runtime-warning/15 text-runtime-warning",
+    status === "STOPPED" && "border-runtime-stopped/70 bg-runtime-stopped/10 text-runtime-stopped",
+    (status === "DISCONNECTED" || status === "ERROR") && "border-runtime-ng/70 bg-runtime-ng/10 text-runtime-ng"
+  );
+
+  return (
+    <HeaderMetric
+      label={t("machineRuntimeStatus")}
+      className={statusClassName}
+      value={<span className="font-semibold">{label}</span>}
+    />
   );
 }
 
@@ -290,38 +288,42 @@ function RuntimeDuration({ session }: { session?: MachineRuntimeSession }) {
 function MachineRuntimeOverview({
   ok,
   ng,
+  rework,
   total,
-  status,
-  ngHref
+  ngHref,
+  reworkHref
 }: {
   ok: number;
   ng: number;
+  rework: number;
   total: number;
-  status: MachineRuntimeStatus;
   ngHref?: string;
+  reworkHref?: string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   return (
     <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(15rem,0.9fr)] md:items-stretch">
       <div className="flex min-w-0 items-center border-b pb-3 md:border-b-0 md:border-r md:pb-0 md:pr-3">
-        <OkNgDonut ok={ok} ng={ng} total={total} />
+        <ResultDonut ok={ok} ng={ng} rework={rework} total={total} />
       </div>
       <div className="grid min-h-52 grid-rows-4 gap-2">
         <RuntimeMetricRow label="OK" value={ok} tone="ok" />
         <RuntimeMetricRow label="NG" value={ng} tone="ng" href={ngHref} />
+        <RuntimeMetricRow label="REWORK / NG" value={`${formatRuntimeCountFull(rework, locale)} / ${formatRuntimeCountFull(ng, locale)}`} tone="rework" href={reworkHref} />
         <RuntimeMetricRow label={t("colTotal")} value={total} tone="total" />
-        <RuntimeStatusRow status={status} />
       </div>
     </div>
   );
 }
 
-function OkNgDonut({ ok, ng, total }: { ok: number; ng: number; total: number }) {
+function ResultDonut({ ok, ng, rework, total }: { ok: number; ng: number; rework: number; total: number }) {
   const { t, locale } = useI18n();
+  const reworkInDonut = Math.min(rework, ng);
   const data = [
     { key: "ok", name: "OK", value: ok, color: "var(--color-ok)" },
-    { key: "ng", name: "NG", value: ng, color: "var(--color-ng)" }
+    { key: "ng", name: "NG", value: Math.max(0, ng - reworkInDonut), color: "var(--color-ng)" },
+    { key: "rework", name: "REWORK", value: reworkInDonut, color: "var(--color-rework)" }
   ];
   const hasData = total > 0;
   const compactTotal = formatRuntimeCount(total, locale);
@@ -333,7 +335,7 @@ function OkNgDonut({ ok, ng, total }: { ok: number; ng: number; total: number })
       title={`${t("colTotal")}: ${fullTotal}`}
       aria-label={`${t("colTotal")}: ${fullTotal}`}
     >
-      <ChartContainer config={okNgChartConfig} className="h-full w-full">
+      <ChartContainer config={resultChartConfig} className="h-full w-full">
         <PieChart accessibilityLayer>
           <ChartTooltip content={<ChartTooltipContent />} />
           <Pie
@@ -351,9 +353,15 @@ function OkNgDonut({ ok, ng, total }: { ok: number; ng: number; total: number })
           </Pie>
         </PieChart>
       </ChartContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono text-3xl font-semibold tabular-nums">{compactTotal}</span>
-        <span className="text-[11px] text-muted-foreground">{t("colTotal")}</span>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          className="pointer-events-auto flex h-[128px] w-[128px] cursor-help flex-col items-center justify-center rounded-full"
+          title={`${t("colTotal")}: ${fullTotal}`}
+          aria-label={`${t("colTotal")}: ${fullTotal}`}
+        >
+          <span className="font-mono text-3xl font-semibold tabular-nums">{compactTotal}</span>
+          <span className="text-[11px] text-muted-foreground">{t("colTotal")}</span>
+        </div>
       </div>
     </div>
   );
@@ -366,8 +374,8 @@ function RuntimeMetricRow({
   href
 }: {
   label: string;
-  value: number;
-  tone: "ok" | "ng" | "total";
+  value: number | string;
+  tone: "ok" | "ng" | "rework" | "total";
   href?: string;
 }) {
   const content = (
@@ -376,8 +384,10 @@ function RuntimeMetricRow({
         "grid h-full grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm transition-colors",
         tone === "ok" && "border-runtime-ok bg-runtime-ok/10",
         tone === "ng" && "border-runtime-ng bg-runtime-ng/10",
+        tone === "rework" && "border-[var(--runtime-rework)] bg-[var(--runtime-rework)]/10",
         tone === "total" && "border-primary bg-primary/10",
-        href && tone === "ng" && "hover:border-runtime-ng/80 hover:bg-runtime-ng/20"
+        href && tone === "ng" && "hover:border-runtime-ng/80 hover:bg-runtime-ng/20",
+        href && tone === "rework" && "hover:border-[var(--runtime-rework)]/80 hover:bg-[var(--runtime-rework)]/20"
       )}
     >
       <div
@@ -385,18 +395,19 @@ function RuntimeMetricRow({
           "px-3 py-2 font-semibold",
           tone === "ok" && "bg-runtime-ok text-[var(--runtime-black)]",
           tone === "ng" && "bg-runtime-ng text-[var(--runtime-white)]",
+          tone === "rework" && "bg-[var(--runtime-rework)] text-white",
           tone === "total" && "bg-primary text-primary-foreground"
         )}
       >
         {label}
       </div>
-      <ResponsiveRuntimeCount value={value} />
+      {typeof value === "number" ? <ResponsiveRuntimeCount value={value} /> : <div className="flex items-center justify-end px-3 font-mono text-sm font-semibold tabular-nums">{value}</div>}
     </div>
   );
 
-  if (href && tone === "ng") {
+  if (href) {
     return (
-      <Link href={href} title="Xem lịch sử quét NG" className="block min-h-0 min-w-0 transition-transform active:scale-[0.99]">
+      <Link href={href} title={`Xem lịch sử quét ${label}`} className="block min-h-0 min-w-0 transition-transform active:scale-[0.99]">
         {content}
       </Link>
     );
@@ -405,61 +416,15 @@ function RuntimeMetricRow({
   return content;
 }
 
-function RuntimeStatusRow({ status }: { status: MachineRuntimeStatus }) {
-  const { t } = useI18n();
-  const label =
-    status === "RUNNING"
-      ? t("statusRunning")
-      : status === "PAUSED"
-        ? t("statusPaused")
-        : status === "STOPPED"
-          ? t("statusStopped")
-          : status === "ERROR"
-            ? t("statusError")
-            : t("statusDisconnected");
-
-  const isRunning = status === "RUNNING";
-  const isPaused = status === "PAUSED";
-  const isStopped = status === "STOPPED";
-  const isFault = status === "DISCONNECTED" || status === "ERROR";
-
-  return (
-    <div
-      className={cn(
-        "grid grid-cols-[minmax(5rem,0.8fr)_minmax(0,1.2fr)] overflow-hidden rounded-md border text-sm",
-        isRunning && "border-runtime-ok",
-        isPaused && "border-runtime-warning",
-        isStopped && "border-muted-foreground/60",
-        isFault && "border-runtime-ng"
-      )}
-    >
-      <div
-        className={cn(
-          "px-3 py-2 font-medium",
-          isRunning && "bg-runtime-ok/15",
-          isPaused && "bg-runtime-warning/20",
-          isStopped && "bg-muted",
-          isFault && "bg-runtime-ng/15"
-        )}
-      >
-        {t("machineRuntimeStatus")}
-      </div>
-      <div
-        className={cn(
-          "border-l px-3 py-2 text-right font-semibold",
-          isRunning && "border-black/15 bg-runtime-ok text-[var(--runtime-black)]",
-          isPaused && "border-black/15 bg-runtime-warning text-[var(--runtime-black)]",
-          isStopped && "border-border bg-muted-foreground text-background",
-          isFault && "border-black/15 bg-runtime-ng text-[var(--runtime-black)]"
-        )}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
 type MachineRuntimeStatus = MachineRuntimeSession["status"];
+
+function getMachineRuntimeStatusLabel(status: MachineRuntimeStatus, t: ReturnType<typeof useI18n>["t"]) {
+  if (status === "RUNNING") return t("statusRunning");
+  if (status === "PAUSED") return t("statusPaused");
+  if (status === "STOPPED") return t("statusStopped");
+  if (status === "ERROR") return t("statusError");
+  return t("statusDisconnected");
+}
 
 export function resolveMachineRuntimeDisplayStatus(session: MachineRuntimeSession | undefined, isConnected: boolean): MachineRuntimeStatus {
   return session?.status ?? (isConnected ? "STOPPED" : "DISCONNECTED");
@@ -501,36 +466,6 @@ export function resolveCurrentProductCode(session?: MachineRuntimeSession | null
   );
 }
 
-export function resolveCommonLocalNgReason(session?: MachineRuntimeSession | null, locale: Locale = "vi") {
-  const counts = new Map<string, number>();
-
-  for (const record of session?.scan_records ?? []) {
-    if (record.local_status !== "NG") {
-      continue;
-    }
-
-    const reason = resolveScanIssueReason(normalizeNgReason(record.ng_reason) ?? "LOCAL_NG", record);
-    counts.set(reason, (counts.get(reason) ?? 0) + 1);
-  }
-
-  let bestReason: string | null = null;
-  let bestCount = 0;
-  for (const [reason, count] of counts) {
-    if (count > bestCount || (count === bestCount && bestReason && reason < bestReason)) {
-      bestReason = reason;
-      bestCount = count;
-    }
-  }
-
-  return bestReason
-    ? {
-        reason: bestReason,
-        label: formatIssueReason(bestReason, locale),
-        count: bestCount
-      }
-    : null;
-}
-
 function resolveScanProductCode(scan?: ScanRecord | null) {
   return (
     normalizeProductCode(scan?.full_chassis_code) ??
@@ -561,11 +496,6 @@ function normalizeScanValue(value?: string | number | null) {
   return text || null;
 }
 
-function normalizeNgReason(value?: string | null) {
-  const text = value?.trim();
-  return text || null;
-}
-
 export function buildSessionServerTrendData(session?: MachineRuntimeSession): ScanTrendPoint[] {
   const records = [...(session?.scan_records ?? [])].sort((left, right) => new Date(left.scan_at).getTime() - new Date(right.scan_at).getTime());
 
@@ -575,6 +505,7 @@ export function buildSessionServerTrendData(session?: MachineRuntimeSession): Sc
         date: formatLiveSampleTime(session?.last_seen_at),
         ok: 0,
         ng: 0,
+        rework: 0,
         pending: 0,
         total: 0,
         timestamp: toTimestamp(session?.last_seen_at)
@@ -588,18 +519,20 @@ export function buildSessionServerTrendData(session?: MachineRuntimeSession): Sc
 function buildScanRecordPoint(record: ScanRecord): ScanTrendPoint {
   const status = record.final_status;
   const ok = status === "OK" ? 1 : 0;
-  const ng = status === "NG" ? 1 : 0;
+  const ng = status === "NG" || status === "NG_REWORK" ? 1 : 0;
+  const rework = status === "REWORK" ? 1 : 0;
   return {
     date: formatLiveSampleTime(record.scan_at),
     ok,
     ng,
+    rework,
     pending: 0,
     total: ok + ng,
     timestamp: toTimestamp(record.scan_at)
   };
 }
 
-function resolveOkNgCountsFromChart(data: ScanTrendPoint[], fallback: { ok: number; ng: number; total: number }) {
+function resolveResultCountsFromChart(data: ScanTrendPoint[], fallback: RuntimeResultCounts) {
   const latest = data.at(-1);
   if (!latest) {
     return fallback;
@@ -608,6 +541,7 @@ function resolveOkNgCountsFromChart(data: ScanTrendPoint[], fallback: { ok: numb
   return {
     ok: toSafeCount(latest.ok),
     ng: toSafeCount(latest.ng),
+    rework: toSafeCount(latest.rework),
     total: toSafeCount(latest.total)
   };
 }
@@ -624,16 +558,19 @@ function buildIncrementalCumulativeChartData(data: ScanTrendPoint[], timeAxis?: 
   const source = data.length > 0 ? data : emptyTrendData;
   let ok = 0;
   let ng = 0;
+  let rework = 0;
 
   return [
     buildOriginPoint(),
     ...source.map((point) => {
       ok += toSafeCount(point.ok);
       ng += toSafeCount(point.ng);
+      rework += toSafeCount(point.rework);
       return {
         ...point,
         ok,
         ng,
+        rework,
         pending: 0,
         total: ok + ng
       };
@@ -646,9 +583,10 @@ function buildFixedBucketCumulativeChartData(data: ScanTrendPoint[], timeAxis: R
   const latestBucketMs = ceilToBucket(timeAxis.nowMs, bucketMs);
   const rollingStartMs = latestBucketMs - (Math.max(1, timeAxis.maxBuckets) - 1) * bucketMs;
   const bucketStarts = buildBucketStarts(rollingStartMs, latestBucketMs, bucketMs);
-  const incrementsByBucket = new Map<number, { ok: number; ng: number }>();
+  const incrementsByBucket = new Map<number, { ok: number; ng: number; rework: number }>();
   let ok = 0;
   let ng = 0;
+  let rework = 0;
 
   for (const point of data) {
     const pointMs = point.timestamp;
@@ -659,16 +597,19 @@ function buildFixedBucketCumulativeChartData(data: ScanTrendPoint[], timeAxis: R
     const bucketMsKey = floorToBucket(pointMs, bucketMs);
     const pointOk = toSafeCount(point.ok);
     const pointNg = toSafeCount(point.ng);
+    const pointRework = toSafeCount(point.rework);
 
     if (bucketMsKey < rollingStartMs) {
       ok += pointOk;
       ng += pointNg;
+      rework += pointRework;
       continue;
     }
 
-    const current = incrementsByBucket.get(bucketMsKey) ?? { ok: 0, ng: 0 };
+    const current = incrementsByBucket.get(bucketMsKey) ?? { ok: 0, ng: 0, rework: 0 };
     current.ok += pointOk;
     current.ng += pointNg;
+    current.rework += pointRework;
     incrementsByBucket.set(bucketMsKey, current);
   }
 
@@ -676,11 +617,13 @@ function buildFixedBucketCumulativeChartData(data: ScanTrendPoint[], timeAxis: R
     const increments = incrementsByBucket.get(bucketStartMs);
     ok += increments?.ok ?? 0;
     ng += increments?.ng ?? 0;
+    rework += increments?.rework ?? 0;
 
     return {
       date: formatBucketTime(new Date(bucketStartMs)),
       ok,
       ng,
+      rework,
       pending: 0,
       total: ok + ng,
       timestamp: bucketStartMs
@@ -709,6 +652,7 @@ function buildOriginPoint(): ScanTrendPoint {
     date: "0",
     ok: 0,
     ng: 0,
+    rework: 0,
     pending: 0,
     total: 0
   };
@@ -751,6 +695,7 @@ function buildEmptyTrendData() {
       date: formatBucketTime(date),
       ok: 0,
       ng: 0,
+      rework: 0,
       pending: 0,
       total: 0
     };

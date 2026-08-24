@@ -42,7 +42,7 @@ const SETTINGS = {
 
 const SAMPLE_MACHINE = {
   machine_code: process.env.SEED_SAMPLE_MACHINE_CODE || "LOCAL01",
-  machine_name: process.env.SEED_SAMPLE_MACHINE_NAME || "Local scanner 01",
+  machine_name: process.env.SEED_SAMPLE_MACHINE_NAME || "LocalScanner01",
   serial: process.env.SEED_MACHINE_SERIAL || "SN-LOCAL01-DEV",
   uid: process.env.SEED_MACHINE_UID || "UID-LOCAL01-DEV",
   line_name: process.env.SEED_SAMPLE_LINE_NAME || "LINE-A",

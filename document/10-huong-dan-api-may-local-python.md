@@ -161,7 +161,7 @@ Người code máy local chỉ cần quan tâm các nhóm sau:
 | Runtime máy | `POST /api/machines/heartbeat` | Định kỳ khi đã có `machine_code`. | `last_heartbeat_at`, tổng record, pending sync. |
 | Runtime realtime | Socket.IO namespace `/machine-runtime` | Sau khi đã có `machine_code`, khi bắt đầu/dừng chạy, đổi mã hàng, cập nhật OK/NG realtime hoặc reconnect. | Không bắt buộc đổi DB local; nên lưu trạng thái socket hiện tại vào `local_runtime_status`/log local. |
 | Lệnh server | `GET /api/machines/commands/poll`, `POST /api/machines/commands/:id/ack` | Local chủ động nhận lệnh vì server không gọi ngược local. | `command_inbox`, notification local. |
-| Scan realtime | `POST /api/scans/submit` | Mỗi scan OK/NG khi server online. | `server_status`, `final_status`, `sync_status`. |
+| Scan realtime | `POST /api/scans/submit` | Mỗi scan OK/NG/REWORK khi server online. | `server_status`, `final_status`, `sync_status`. |
 | Đối soát dữ liệu | `POST /api/sync/reconcile/check`, `POST /api/sync/reconcile/pull` | Startup hoặc người dùng bấm kiểm tra/sync dữ liệu. | diff record, lựa chọn sync theo server/local, log đối soát. |
 | Offline sync | `POST /api/sync/batches/submit` | Startup/reconnect/manual khi có pending. | `sync_batches`, `sync_batch_items`, từng record trong `local_scan_records`. |
 
@@ -2420,8 +2420,8 @@ Quy tắc:
 | `full_code` | object | Có | Thành phần full code đã parse. |
 | `chassis_scan_raw` | string | Có | Mã chassis raw. |
 | `led_scans` | array | Có | Danh sách LED scan item. |
-| `local_status` | `OK` hoặc `NG` | Có | Kết quả kiểm local. |
-| `local_ng_reason` | string hoặc null | Không | Lý do NG nếu local NG. |
+| `local_status` | `OK`, `NG` hoặc `REWORK` | Có | Kết quả độc lập do local gửi. Mỗi REWORK phải dùng một `local_scan_id` mới và có đủ dữ liệu mã để kiểm tra trùng. |
+| `local_ng_reason` | string hoặc null | Không | Lý do lỗi local; REWORK nên gửi để truy vết lỗi đang được sửa. |
 | `scan_at` | ISO8601 string | Có | Thời điểm scan gốc, nên có timezone. |
 
 ### Field `full_code`
@@ -2527,6 +2527,36 @@ final_status = NG
 ng_reason = lỗi local đã gửi
 sync_status = SYNCED
 ```
+
+### Response `LOCAL_REWORK_SAVED`
+
+Local gửi `local_status = REWORK` qua API submit hiện có với `local_scan_id` dạng `RW-<local_scan_id_NG_gốc>`. REWORK bắt buộc có `duplicate_key`, `full_code`, `chassis_scan_raw` và `led_scans` như local OK để server kiểm tra trùng; đồng thời gửi `local_ng_reason` (hoặc `ng_reason` trong LED) để biết REWORK đang sửa lỗi gì.
+
+```json
+{
+  "success": true,
+  "code": "LOCAL_REWORK_SAVED",
+  "message": "Đã lưu lượt quét REWORK và cập nhật lượt NG gốc.",
+  "data": {
+    "decision": "LOCAL_REWORK_SAVED",
+    "server_scan_id": 126,
+    "reworked_scan_record_id": 125,
+    "final_status": "REWORK",
+    "ng_reason": "LED_SUFFIX_NOT_MATCH"
+  }
+}
+```
+
+Local cập nhật:
+
+```txt
+server_status = OK
+final_status = REWORK
+ng_reason = lỗi local đã gửi
+sync_status = SYNCED
+```
+
+Nếu duplicate, server trả `SERVER_DUPLICATE` với `server_scan_id = null`, `final_status = NG` và không lưu lượt REWORK. Nếu không trùng, server lưu REWORK, ghi khóa duplicate, đổi bản ghi NG gốc cùng máy sang `NG_REWORK` và giữ nguyên thời gian NG. `NG_REWORK` vẫn được đếm là NG. Nếu gửi lại cùng `local_scan_id` sau khi REWORK đã được lưu, server trả replay của chính lượt REWORK đó để tránh nhân đôi do retry mạng.
 
 ### Response replay
 
@@ -3957,7 +3987,7 @@ Sai. Local phải xử lý từng item trong `data.results`.
 | `POST /api/machines/heartbeat` | `HEARTBEAT_ACCEPTED` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH` |
 | `GET /api/machines/commands/poll?serial=...&uid=...` | `MACHINE_COMMANDS_POLLED` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH` |
 | `POST /api/machines/commands/{id}/ack` | `MACHINE_COMMAND_ACKED`, `MACHINE_COMMAND_FAILED` | `MACHINE_COMMAND_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH` |
-| `POST /api/scans/submit` | `SERVER_OK`, `SERVER_DUPLICATE`, `LOCAL_NG_SAVED` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH`, `PROFILE_NOT_FOUND` |
+| `POST /api/scans/submit` | `SERVER_OK`, `SERVER_DUPLICATE`, `LOCAL_NG_SAVED`, `LOCAL_REWORK_SAVED` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH`, `PROFILE_NOT_FOUND` |
 | `POST /api/sync/reconcile/check` | `SYNC_RECONCILE_CHECK_READY`, `SYNC_RECONCILE_MATCHED`, `SYNC_RECONCILE_DIFF_FOUND` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH`, `PAYLOAD_INVALID` |
 | `POST /api/sync/reconcile/pull` | `SYNC_RECONCILE_PULL_READY` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH`, `PAYLOAD_INVALID` |
 | `POST /api/sync/batches/submit` | `BATCH_SUBMIT_DONE`, `BATCH_SUBMIT_PARTIAL_FAILED` | `MACHINE_NOT_FOUND`, `MACHINE_IDENTITY_MISMATCH`, per-record errors |

@@ -11,23 +11,27 @@
   --muted-foreground: 218 12% 38%;
   --primary: 214 78% 42%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 174 42% 90%;
-  --secondary-foreground: 188 56% 18%;
-  --destructive: 0 72% 46%;
+  --secondary: 217 89% 95%;
+  --secondary-foreground: 217 65% 30%;
+  --destructive: 4 68% 54%;
   --destructive-foreground: 0 0% 100%;
   --border: 214 16% 84%;
   --input: 214 16% 84%;
   --ring: 214 78% 42%;
-  --runtime-ok: #4ad45a;
-  --runtime-ng: #ff0000;
-  --runtime-warning: #ffff00;
+  --runtime-ok: #0f9d58;
+  --runtime-ng: #db4437;
+  --runtime-rework: #ea580c;
+  --runtime-warning: #f4b400;
+  --runtime-stopped: #9e9e9e;
   --runtime-white: #ffffff;
   --runtime-black: #000000;
-  --runtime-ok-channels: 74 212 90;
-  --runtime-ng-channels: 255 0 0;
-  --runtime-warning-channels: 255 255 0;
+  --runtime-ok-channels: 15 157 88;
+  --runtime-ng-channels: 219 68 55;
+  --runtime-warning-channels: 244 180 0;
+  --runtime-stopped-channels: 158 158 158;
   --chart-ok: var(--runtime-ok);
   --chart-ng: var(--runtime-ng);
+  --chart-rework: var(--runtime-rework);
 }
 
 .dark {
@@ -39,15 +43,16 @@
   --muted-foreground: 215 14% 70%;
   --primary: 209 78% 58%;
   --primary-foreground: 222 28% 10%;
-  --secondary: 176 26% 22%;
-  --secondary-foreground: 176 42% 88%;
-  --destructive: 0 68% 56%;
+  --secondary: 217 42% 22%;
+  --secondary-foreground: 217 89% 88%;
+  --destructive: 4 68% 54%;
   --destructive-foreground: 0 0% 100%;
   --border: 220 16% 26%;
   --input: 220 16% 26%;
   --ring: 209 78% 58%;
   --chart-ok: var(--runtime-ok);
   --chart-ng: var(--runtime-ng);
+  --chart-rework: var(--runtime-rework);
 }
 
 * {

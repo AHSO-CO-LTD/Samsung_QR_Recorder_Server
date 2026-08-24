@@ -71,3 +71,8 @@ Dự án này là ứng dụng desktop server dùng để quản lý và kiểm 
    - Luồng hiển thị nội dung trước ảnh.
    - Cách xuất PDF trong Electron và browser.
    - Checklist thêm guide và kiểm tra trước release.
+
+13. `13-huong-dan-rework-cho-may-local.md`
+   - Contract REWORK qua `POST /api/scans/submit`.
+   - Quy tắc ID `RW-<local_scan_id_NG_gốc>`.
+   - Payload, response, retry/offline sync và checklist cho máy local.

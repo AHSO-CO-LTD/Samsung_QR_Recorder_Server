@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.2.2 - 2026-08-10
+
+### Added
+
+- Bổ sung API tổng hợp `GET /api/dashboard/runtime-overview` để cung cấp trạng thái máy, phiên chạy, lượt quét cuối, bộ đếm theo phạm vi và xu hướng trong một response nhỏ.
+- Bổ sung API chi tiết `GET /api/scans/:id` và API thống kê `GET /api/scans/history-analytics` dành riêng cho trang lịch sử quét.
+- Bổ sung watchdog cho Electron để kiểm tra và tự khởi động lại API/Web khi dịch vụ mất phản hồi liên tiếp.
+
+### Changed
+
+- Tổng hợp dữ liệu xu hướng Dashboard trực tiếp trong PostgreSQL thay vì tải bản ghi quét thô về backend để phân tích.
+- Danh sách lịch sử quét dùng payload nhẹ, 50 dòng mỗi trang; chi tiết LED chỉ được tải khi người dùng mở một dòng.
+- Giảm tần suất tải lại toàn bộ Dashboard và thống kê lịch sử; sự kiện realtime cập nhật lượt quét mới tại chỗ rồi đồng bộ có giới hạn.
+- Thêm timeout, hủy request cũ, chống request chồng nhau và cache ngắn hạn cho truy vấn tổng số lịch sử.
+
+### Fixed
+
+- Tránh trạng thái giao diện tải vô hạn khi API không phản hồi.
+- Giảm nguy cơ `Failed to fetch` do request Dashboard/Lịch sử quét dồn dập trong lúc máy local đang đồng bộ dữ liệu.
+
+## 1.2.1 - 2026-08-10
+
+### Fixed
+
+- Tăng giới hạn JSON và URL-encoded request lên 25 MB để tiếp nhận các đợt đồng bộ hợp lệ có payload lớn.
+- Ghi nhật ký an toàn khi request vượt giới hạn, gồm method, route, kích thước, giới hạn và IP nguồn; không ghi nội dung payload.
+
+## 1.2.0 - 2026-08-10
+
+### Changed
+
+- Chuẩn hóa cách đếm kết quả: Tổng = OK + NG; REWORK là tập con của NG và được hiển thị theo dạng `REWORK / NG`.
+- Đồng bộ số liệu tổng quan, runtime, biểu đồ xu hướng, báo cáo Excel và xếp hạng lỗi theo quy ước kết quả mới.
+- Bổ sung các bước hướng dẫn máy local trong catalog hướng dẫn.
+
 ## 1.1.8 - 2026-08-03
 
 ### Added

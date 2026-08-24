@@ -26,7 +26,9 @@ export type ErrorTypeRankingItem = {
 export type ScanAnalyticsResult = {
   ok_count: number;
   ng_count: number;
+  rework_count: number;
   total_count: number;
+  ranking_status?: "NG" | "REWORK";
   ranking_type?: "machine" | "profile" | "error_type";
   machines: MachineErrorRankingItem[];
   profiles?: ProfileErrorRankingItem[];

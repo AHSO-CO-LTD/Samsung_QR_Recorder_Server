@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiGet } from "@/lib/api";
@@ -32,6 +33,8 @@ import { emptyScanFilters, type ScanFilters } from "./scan-filter-state";
 import { ScanHistoryAnalytics } from "./scan-history-analytics";
 
 type ScansTab = "all-scans" | "active-duplicate-keys" | "scheduled-duplicate-check";
+const SCAN_TABLE_REALTIME_REFRESH_MS = 1_000;
+const SCAN_ANALYTICS_REALTIME_REFRESH_MS = 30_000;
 
 export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab }) {
   const searchParams = useSearchParams();
@@ -49,6 +52,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
   const [activeTab, setActiveTab] = useState<ScansTab>(defaultTab);
   const [scanDisplaySettings, setScanDisplaySettings] = useState<ScanDisplaySettings>(defaultScanDisplaySettings);
   const [realtimeRefreshSignal, setRealtimeRefreshSignal] = useState(0);
+  const [analyticsRefreshSignal, setAnalyticsRefreshSignal] = useState(0);
 
   useEffect(() => {
     setScanDisplaySettings(readScanDisplaySettings());
@@ -97,7 +101,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     void apiGet<ScanErrorFilterOption[]>("/error-config")
       .then((result) => {
         if (isMounted) {
-          setErrorOptions(result.data ?? []);
+          setErrorOptions((result.data ?? []).filter((option) => option.definition?.is_active));
         }
       })
       .catch((error) => {
@@ -127,6 +131,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     }
 
     let refreshTimer: number | undefined;
+    let analyticsRefreshTimer: number | undefined;
     let hasReportedConnectionError = false;
     const socket = io(buildRuntimeSocketUrl(), {
       transports: ["websocket", "polling"]
@@ -137,10 +142,18 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
       if (scanDisplaySettings.refreshMode !== "realtime") {
         return;
       }
-      window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => {
-        setRealtimeRefreshSignal((value) => value + 1);
-      }, 250);
+      if (refreshTimer === undefined) {
+        refreshTimer = window.setTimeout(() => {
+          refreshTimer = undefined;
+          setRealtimeRefreshSignal((value) => value + 1);
+        }, SCAN_TABLE_REALTIME_REFRESH_MS);
+      }
+      if (analyticsRefreshTimer === undefined) {
+        analyticsRefreshTimer = window.setTimeout(() => {
+          analyticsRefreshTimer = undefined;
+          setAnalyticsRefreshSignal((value) => value + 1);
+        }, SCAN_ANALYTICS_REALTIME_REFRESH_MS);
+      }
     });
     socket.on("connect_error", () => {
       if (!hasReportedConnectionError) {
@@ -157,6 +170,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
 
     return () => {
       window.clearTimeout(refreshTimer);
+      window.clearTimeout(analyticsRefreshTimer);
       socket.disconnect();
     };
   }, [scanDisplaySettings.refreshMode, t, visibleTab]);
@@ -188,13 +202,17 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
     if (filters.line_name) params.set("line_name", filters.line_name);
     if (filters.profile_id) params.set("profile_id", filters.profile_id);
     if (filters.vendor_char) params.set("vendor_char", filters.vendor_char);
+    if (filters.final_status === "NG" || filters.final_status === "NG_REWORK" || filters.final_status === "REWORK") {
+      params.set("final_status", filters.final_status);
+    }
+    if (filters.ng_reason) params.set("ng_reason", filters.ng_reason);
     if (filters.from) params.set("from", appDatetimeLocalToIso(filters.from));
     if (filters.to) params.set("to", appDatetimeLocalToIso(filters.to));
     return params.toString();
-  }, [filters.from, filters.line_name, filters.profile_id, filters.to, filters.vendor_char]);
+  }, [filters.final_status, filters.from, filters.line_name, filters.ng_reason, filters.profile_id, filters.to, filters.vendor_char]);
 
-  const allScansEndpoint = `/scans?${scanFilterQuery}`;
-  const machineErrorRankingEndpoint = `/scans/machine-error-ranking?${analyticsFilterQuery}`;
+  const allScansEndpoint = `/scans?include_details=false${scanFilterQuery ? `&${scanFilterQuery}` : ""}`;
+  const historyAnalyticsEndpoint = `/scans/history-analytics?${analyticsFilterQuery}`;
 
   const columns: Column<ScanRecord>[] = [
     { key: "time", header: t("colScanTime"), className: "min-w-[10rem] whitespace-nowrap", render: (item) => <DateText value={item.scan_at} /> },
@@ -260,8 +278,8 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
         <TabsContent value="all-scans">
           <div className="space-y-4">
             <ScanHistoryAnalytics
-              endpoint={machineErrorRankingEndpoint}
-              refreshSignal={realtimeRefreshSignal}
+              endpoint={historyAnalyticsEndpoint}
+              refreshSignal={analyticsRefreshSignal}
               autoRefreshMs={scanDisplaySettings.refreshMode === "automatic" ? scanDisplaySettings.autoRefreshSeconds * 1000 : undefined}
             />
             <DataTablePanel
@@ -280,7 +298,7 @@ export function ScansView({ defaultTab = "all-scans" }: { defaultTab?: ScansTab 
               refreshSignal={realtimeRefreshSignal}
               showTopHorizontalScrollbar
               singleExpandedRow
-              pagination={{ pageSize: 100, mode: "server" }}
+              pagination={{ pageSize: 50, mode: "server" }}
               renderExpandedRow={(item) => <ScanLedDetails scan={item} vendorLabel={getVendorLabel(item.full_vendor_char)} />}
               searchableText={getScanSearchableText(getVendorLabel)}
             />
@@ -334,18 +352,54 @@ function getScanSearchableText(getVendorLabel: (vendorChar?: string | null) => s
 
 function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: string }) {
   const { t } = useI18n();
-  const ledItems = [...(scan.led_items ?? [])].sort((first, second) => first.led_slot - second.led_slot || first.led_index - second.led_index || first.id - second.id);
+  const [details, setDetails] = useState<ScanRecord | null>(scan.led_items ? scan : null);
+  const [isLoading, setIsLoading] = useState(!scan.led_items);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (scan.led_items && reloadKey === 0) return;
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(null);
+    void apiGet<ScanRecord>(`/scans/${scan.id}`, { signal: controller.signal, timeoutMs: 15_000 })
+      .then((result) => setDetails(result.data ?? null))
+      .catch((currentError) => {
+        if (currentError instanceof Error && currentError.name === "AbortError") return;
+        setError(currentError instanceof Error ? currentError.message : t("error"));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false);
+      });
+    return () => controller.abort();
+  }, [reloadKey, scan, t]);
+
+  if (isLoading) {
+    return <div className="p-4 text-sm text-muted-foreground">{t("loading")}</div>;
+  }
+  if (error || !details) {
+    return (
+      <div className="flex items-center justify-between gap-3 p-4 text-sm text-destructive">
+        <span>{error ?? t("error")}</span>
+        <Button type="button" variant="outline" size="sm" onClick={() => setReloadKey((value) => value + 1)}>
+          {t("retry")}
+        </Button>
+      </div>
+    );
+  }
+
+  const ledItems = [...(details.led_items ?? [])].sort((first, second) => first.led_slot - second.led_slot || first.led_index - second.led_index || first.id - second.id);
 
   return (
     <div className="space-y-3 p-3 sm:p-4">
       <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-7">
-        <DetailValue label={t("colChassis")} value={getChassisCode(scan)} mono />
+        <DetailValue label={t("colChassis")} value={getChassisCode(details)} mono />
         <DetailValue label={t("colVendor")} value={vendorLabel} />
-        <DetailValue label={t("scanFullLedCode")} value={scan.full_led_code ?? "-"} mono />
-        <DetailValue label={t("scanLedSlot1")} value={getLedCodeForSlot(scan, 1)} mono />
-        <DetailValue label={t("scanLedSlot2")} value={getLedCodeForSlot(scan, 2)} mono />
-        <DetailValue label={t("colFactory")} value={scan.full_factory_code ?? "-"} mono />
-        <DetailValue label={t("colDuplicateKey")} value={scan.duplicate_key} mono />
+        <DetailValue label={t("scanFullLedCode")} value={details.full_led_code ?? "-"} mono />
+        <DetailValue label={t("scanLedSlot1")} value={getLedCodeForSlot(details, 1)} mono />
+        <DetailValue label={t("scanLedSlot2")} value={getLedCodeForSlot(details, 2)} mono />
+        <DetailValue label={t("colFactory")} value={details.full_factory_code ?? "-"} mono />
+        <DetailValue label={t("colDuplicateKey")} value={details.duplicate_key} mono />
       </div>
 
       {ledItems.length === 0 ? (
@@ -376,7 +430,7 @@ function ScanLedDetails({ scan, vendorLabel }: { scan: ScanRecord; vendorLabel: 
                     <MonoText value={ledItem.led_index} />
                   </TableCell>
                   <TableCell>
-                    <MonoText value={getLedCodeForSlot(scan, ledItem.led_slot)} />
+                      <MonoText value={getLedCodeForSlot(details, ledItem.led_slot)} />
                   </TableCell>
                   <TableCell>
                     <MonoText value={ledItem.led_scan_raw} />

@@ -27,8 +27,8 @@ export function GuideLauncher({ guideIds, mode = "page", className }: GuideLaunc
       ? "Hướng dẫn đăng nhập"
       : "Login guide"
     : locale === "vi"
-      ? "Hướng dẫn trang này"
-      : "Page guide";
+      ? "Hướng dẫn sử dụng"
+      : "User guide";
 
   useEffect(() => {
     if (requestedGuideIds.length === 0) {

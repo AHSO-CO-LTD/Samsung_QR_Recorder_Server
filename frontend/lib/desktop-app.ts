@@ -46,6 +46,15 @@ export type DesktopUpdateState = {
   message: string;
 };
 
+export type DesktopUpdateProgress = {
+  tagName: string;
+  phase: "preparing" | "downloading" | "installing";
+  transferredBytes: number;
+  totalBytes: number | null;
+  bytesPerSecond: number;
+  percent: number | null;
+};
+
 export type DesktopLicensePayload = {
   lic_id?: string;
   customer_id?: string;
@@ -115,6 +124,7 @@ export type DesktopAppBridge = {
   updates: {
     check: () => Promise<DesktopUpdateState>;
     install: (tagName: string) => Promise<{ success: boolean; message: string }>;
+    onProgress?: (handler: (progress: DesktopUpdateProgress) => void) => () => void;
   };
   license: {
     getStatus: () => Promise<DesktopLicenseStatus>;

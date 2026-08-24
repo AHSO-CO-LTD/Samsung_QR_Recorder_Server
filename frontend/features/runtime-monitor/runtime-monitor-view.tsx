@@ -287,6 +287,9 @@ export function RuntimeMonitorView() {
             if (timeRange.from) ngParams.set("from", timeRange.from);
             if (timeRange.to) ngParams.set("to", timeRange.to);
             const ngHref = `/scans?${ngParams.toString()}`;
+            const reworkParams = new URLSearchParams(ngParams);
+            reworkParams.set("final_status", "REWORK");
+            const reworkHref = `/scans?${reworkParams.toString()}`;
 
             return (
               <MachineRuntimeCard
@@ -300,8 +303,8 @@ export function RuntimeMonitorView() {
                 }
                 timeAxis={buildRuntimeChartTimeAxis(columnsPerRow, timeAxisNowMs)}
                 displayOptions={displayOptions}
-                showCommonLocalNgReason
                 ngHref={ngHref}
+                reworkHref={reworkHref}
               />
             );
           })}

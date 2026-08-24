@@ -2,7 +2,7 @@
 
 Ứng dụng desktop server cho dự án kiểm tra mã độc nhất TV.
 
-Phiên bản hiện tại: `1.1.8`.
+Phiên bản hiện tại: `1.2.2`.
 
 ## Cấu trúc
 
@@ -100,7 +100,7 @@ npm run dist:win
 GitHub Actions tự build và phát hành installer khi push tag `v*`, ví dụ:
 
 ```bash
-git tag v1.1.8
+git tag v1.2.2
 git push origin setup
-git push origin v1.1.8
+git push origin v1.2.2
 ```

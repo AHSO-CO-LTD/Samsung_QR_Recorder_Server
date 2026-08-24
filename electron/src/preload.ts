@@ -41,7 +41,12 @@ contextBridge.exposeInMainWorld("serverApp", {
   },
   updates: {
     check: () => ipcRenderer.invoke("updates:check"),
-    install: (tagName: string) => ipcRenderer.invoke("updates:install", tagName)
+    install: (tagName: string) => ipcRenderer.invoke("updates:install", tagName),
+    onProgress: (handler: (progress: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: unknown) => handler(progress);
+      ipcRenderer.on("updates:progress", listener);
+      return () => ipcRenderer.removeListener("updates:progress", listener);
+    }
   },
   license: {
     getStatus: () => ipcRenderer.invoke("license:get-status"),

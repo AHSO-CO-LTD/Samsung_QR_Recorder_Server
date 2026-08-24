@@ -72,11 +72,13 @@ export function DataTablePanel<T>({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [paginationMeta, setPaginationMeta] = useState<ApiPaginationMeta | null>(null);
   const previousRefreshSignal = useRef(refreshSignal);
-  const trimmedSearch = searchText.trim();
+  const activeRequest = useRef<AbortController | null>(null);
+  const trimmedSearch = debouncedSearch.trim();
   const normalizedSearch = trimmedSearch.toLowerCase();
   const pageSize = Math.max(pagination?.pageSize ?? 0, 0);
   const isPaginationEnabled = pageSize > 0;
@@ -90,12 +92,16 @@ export function DataTablePanel<T>({
     : endpoint;
 
   const load = useCallback(async (background = false) => {
+    if (background && activeRequest.current) return;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     if (!background) {
       setIsLoading(true);
       setError(null);
     }
     try {
-      const result = await apiGet<T[] | T>(requestEndpoint);
+      const result = await apiGet<T[] | T>(requestEndpoint, { signal: controller.signal, timeoutMs: 15_000 });
       const nextItems = Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
       setItems(nextItems);
       setExpandedRows(new Set());
@@ -103,17 +109,28 @@ export function DataTablePanel<T>({
       onData?.(nextItems);
       setError(null);
     } catch (currentError) {
+      if (currentError instanceof Error && currentError.name === "AbortError") return;
       const message = currentError instanceof Error ? currentError.message : t("error");
       if (!background) {
         setError(message);
         toast.error(message);
       }
     } finally {
-      if (!background) {
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+      }
+      if (!background && !controller.signal.aborted) {
         setIsLoading(false);
       }
     }
   }, [requestEndpoint, isServerPaginated, onData, t]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchText), 400);
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
+  useEffect(() => () => activeRequest.current?.abort(), []);
 
   useEffect(() => {
     void load();
@@ -383,13 +400,20 @@ export function StatusBadge({ value }: { value?: string | boolean | null }) {
     normalized.includes("OFFLINE") ||
     normalized.includes("DISCONNECTED")
       ? "destructive"
-      : normalized.includes("PENDING") || normalized.includes("WARNING") || normalized.includes("UNKNOWN")
+      : normalized.includes("PENDING") || normalized.includes("WARNING") || normalized.includes("UNKNOWN") || normalized === "REWORK"
         ? "outline"
         : normalized.includes("OK") || normalized.includes("ACTIVE") || normalized.includes("ONLINE") || normalized.includes("RUNNING") || normalized.includes("DONE")
           ? "default"
           : "secondary";
 
-  return <Badge variant={variant}>{text}</Badge>;
+  return (
+    <Badge
+      variant={variant}
+      className={cn(normalized === "REWORK" && "border-orange-600/50 bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300")}
+    >
+      {text}
+    </Badge>
+  );
 }
 
 export function DateText({ value }: { value?: string | Date | null }) {
@@ -412,6 +436,7 @@ function getStatusLabel(normalized: string, rawText: string | boolean | number, 
   if (normalized === "ACTIVATED") return t("activated");
   if (normalized === "NOT_ACTIVE") return t("notActive");
   if (normalized === "PENDING") return t("pending");
+  if (normalized === "NG_REWORK") return t("statusNgRework");
   if (normalized === "UNKNOWN") return t("unknown");
   if (normalized === "ONLINE") return t("online");
   if (normalized === "OFFLINE") return t("offline");

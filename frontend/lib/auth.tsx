@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n-provider";
 
 const SESSION_STORAGE_KEY = "server-session-token";
 const REMEMBER_STORAGE_KEY = "server-remember-token";
+const DEV_ROLE_PREVIEW_STORAGE_KEY = "server-dev-role-preview";
 
 export type AuthUser = {
   id: number;
@@ -14,6 +15,8 @@ export type AuthUser = {
   full_name: string;
   role: "OPERATOR" | "ENGINEER" | "ADMIN" | "DEV";
 };
+
+export type AuthUserRole = AuthUser["role"];
 
 type LoginResult = {
   user: AuthUser;
@@ -27,9 +30,12 @@ type ValidateResult = {
 
 type AuthContextValue = {
   user: AuthUser | null;
+  authenticatedUser: AuthUser | null;
+  isRolePreview: boolean;
   isBooting: boolean;
   isLoggingIn: boolean;
   login: (input: { username: string; password: string; rememberPassword: boolean }) => Promise<void>;
+  setRolePreview: (role: AuthUserRole) => void;
   logout: () => void;
 };
 
@@ -38,7 +44,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const tRef = useRef(t);
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authenticatedUser, setAuthenticatedUser] = useState<AuthUser | null>(null);
+  const [previewRole, setPreviewRole] = useState<AuthUserRole | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -59,13 +66,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const result = await apiPost<ValidateResult>("/auth/validate", { token });
-        setUser(result.data?.user ?? null);
+        const nextUser = result.data?.user ?? null;
+        setAuthenticatedUser(nextUser);
+        setPreviewRole(nextUser?.role === "DEV" ? readStoredDevRolePreview() : null);
         if (rememberedToken) {
           toast.success(tRef.current("authRememberedLoginSuccess"));
         }
       } catch {
         clearStoredTokens();
-        setUser(null);
+        clearStoredDevRolePreview();
+        setAuthenticatedUser(null);
+        setPreviewRole(null);
       } finally {
         setIsBooting(false);
       }
@@ -88,32 +99,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       clearStoredTokens();
+      clearStoredDevRolePreview();
       window.sessionStorage.setItem(SESSION_STORAGE_KEY, data.token);
       if (input.rememberPassword) {
         window.localStorage.setItem(REMEMBER_STORAGE_KEY, data.token);
       }
-      setUser(data.user);
+      setAuthenticatedUser(data.user);
+      setPreviewRole(null);
       toast.success(input.rememberPassword ? t("loginSuccessRemembered") : t("loginSuccess"));
     } finally {
       setIsLoggingIn(false);
     }
   }, [t]);
 
+  const setRolePreview = useCallback(
+    (role: AuthUserRole) => {
+      if (authenticatedUser?.role !== "DEV") {
+        return;
+      }
+
+      if (role === "DEV") {
+        clearStoredDevRolePreview();
+        setPreviewRole(null);
+        return;
+      }
+
+      window.sessionStorage.setItem(DEV_ROLE_PREVIEW_STORAGE_KEY, role);
+      setPreviewRole(role);
+    },
+    [authenticatedUser?.role]
+  );
+
   const logout = useCallback(() => {
     clearStoredTokens();
-    setUser(null);
+    clearStoredDevRolePreview();
+    setAuthenticatedUser(null);
+    setPreviewRole(null);
     toast.success(t("logoutSuccess"));
   }, [t]);
+
+  const user = useMemo(() => {
+    if (!authenticatedUser) {
+      return null;
+    }
+
+    return authenticatedUser.role === "DEV" && previewRole ? { ...authenticatedUser, role: previewRole } : authenticatedUser;
+  }, [authenticatedUser, previewRole]);
+  const isRolePreview = authenticatedUser?.role === "DEV" && previewRole !== null;
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      authenticatedUser,
+      isRolePreview,
       isBooting,
       isLoggingIn,
       login,
+      setRolePreview,
       logout
     }),
-    [user, isBooting, isLoggingIn, login, logout]
+    [user, authenticatedUser, isRolePreview, isBooting, isLoggingIn, login, setRolePreview, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -131,4 +176,17 @@ export function useAuth() {
 function clearStoredTokens() {
   window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
   window.localStorage.removeItem(REMEMBER_STORAGE_KEY);
+}
+
+function readStoredDevRolePreview(): AuthUserRole | null {
+  const value = window.sessionStorage.getItem(DEV_ROLE_PREVIEW_STORAGE_KEY);
+  return isAuthUserRole(value) && value !== "DEV" ? value : null;
+}
+
+function clearStoredDevRolePreview() {
+  window.sessionStorage.removeItem(DEV_ROLE_PREVIEW_STORAGE_KEY);
+}
+
+function isAuthUserRole(value: string | null): value is AuthUserRole {
+  return value === "OPERATOR" || value === "ENGINEER" || value === "ADMIN" || value === "DEV";
 }

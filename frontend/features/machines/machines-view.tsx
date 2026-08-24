@@ -8,7 +8,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n-provider";
-import { CheckboxField, SelectField, TextAreaField, TextInputField } from "@/features/shared/form-fields";
+import { SelectField, TextAreaField, TextInputField } from "@/features/shared/form-fields";
+import { MachineFormField } from "@/features/machines/machine-form-field";
+import { getMissingMachineRequiredFields, type MachineRequiredField } from "@/features/machines/machine-form-validation";
 import { MachineRegistrationRequestsPanel } from "@/features/machines/machine-registration-requests-panel";
 import { ConfirmActionDialog } from "@/features/shared/confirm-action-dialog";
 import { DataTablePanel, DateText, MonoText, StatusBadge, type Column } from "@/features/shared/data-view";
@@ -62,6 +64,7 @@ export function MachinesView() {
   const [isSaving, setIsSaving] = useState(false);
   const [machineFilter, setMachineFilter] = useState<MachineFilter>("ALL");
   const [draft, setDraft] = useState<MachineDraft>(emptyMachineDraft);
+  const [formErrors, setFormErrors] = useState<Partial<Record<MachineRequiredField, string>>>({});
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
   const [target, setTarget] = useState<MachineStatusTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Machine | null>(null);
@@ -91,21 +94,23 @@ export function MachinesView() {
       {
         key: "actions",
         header: t("colActions"),
-        className: "w-56 text-right",
+        className: isDev ? "w-56 text-right" : "w-40 text-right",
         render: (item) => (
           <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={(event) => {
-                event.stopPropagation();
-                openCommandDialog(item);
-              }}
-            >
-              <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-              {t("commandButton")}
-            </Button>
+            {isDev ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openCommandDialog(item);
+                }}
+              >
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+                {t("commandButton")}
+              </Button>
+            ) : null}
             {item.is_active ? (
               <Button
                 type="button"
@@ -152,7 +157,7 @@ export function MachinesView() {
         )
       }
     ],
-    [canViewIdentity, t]
+    [canViewIdentity, isDev, t]
   );
 
   const commandColumns: Column<MachineCommand>[] = [
@@ -178,7 +183,8 @@ export function MachinesView() {
           }
         : emptyMachineDraft
     );
-    setIsAdvancedOpen(Boolean(machine));
+    setFormErrors({});
+    setIsAdvancedOpen(false);
     setIsFormOpen(true);
   };
 
@@ -188,14 +194,40 @@ export function MachinesView() {
     setCommandRefreshId((value) => value + 1);
   };
 
+  const updateMachineDraftField = <Field extends MachineRequiredField>(field: Field, value: MachineDraft[Field]) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+    if (typeof value === "string" && value.trim()) {
+      setFormErrors((current) => {
+        if (!current[field]) {
+          return current;
+        }
+
+        const nextErrors = { ...current };
+        delete nextErrors[field];
+        return nextErrors;
+      });
+    }
+  };
+
   const saveMachine = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const missingFields = getMissingMachineRequiredFields(draft, Boolean(editingMachine));
+    if (missingFields.length > 0) {
+      setFormErrors(
+        Object.fromEntries(
+          missingFields.map((field) => [field, t("formRequiredField", { field: t(machineFieldLabelKeys[field]) })])
+        )
+      );
+      return;
+    }
+
+    setFormErrors({});
     setIsSaving(true);
     try {
       if (editingMachine) {
         await apiPatch(`/machines/${editingMachine.id}`, {
           machine_name: draft.machine_name,
-          line_name: cleanOptional(draft.line_name),
+          line_name: draft.line_name.trim(),
           station_name: cleanOptional(draft.station_name),
           ip_address: cleanOptional(draft.ip_address),
           is_active: draft.is_active
@@ -205,7 +237,7 @@ export function MachinesView() {
         await apiPost("/machines", {
           machine_code: draft.machine_code,
           machine_name: draft.machine_name,
-          line_name: cleanOptional(draft.line_name),
+          line_name: draft.line_name.trim(),
           station_name: cleanOptional(draft.station_name),
           ip_address: cleanOptional(draft.ip_address),
           is_active: draft.is_active
@@ -320,9 +352,10 @@ export function MachinesView() {
           <DialogHeader>
             <DialogTitle>{editingMachine ? t("editMachine") : t("createMachine")}</DialogTitle>
           </DialogHeader>
-          <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveMachine}>
-            <TextInputField required disabled={Boolean(editingMachine)} label={t("fieldMachineCode")} value={draft.machine_code} onChange={(event) => setDraft({ ...draft, machine_code: event.target.value })} />
-            <TextInputField required label={t("fieldMachineName")} value={draft.machine_name} onChange={(event) => setDraft({ ...draft, machine_name: event.target.value })} />
+          <form noValidate className="grid gap-3 sm:grid-cols-2" onSubmit={saveMachine}>
+            <MachineFormField disabled={Boolean(editingMachine)} label={t("fieldMachineCode")} value={draft.machine_code} error={formErrors.machine_code} onChange={(event) => updateMachineDraftField("machine_code", event.target.value)} />
+            <MachineFormField label={t("fieldMachineName")} value={draft.machine_name} error={formErrors.machine_name} onChange={(event) => updateMachineDraftField("machine_name", event.target.value)} />
+            <MachineFormField label={t("fieldLine")} value={draft.line_name} error={formErrors.line_name} onChange={(event) => updateMachineDraftField("line_name", event.target.value)} />
             <div className="rounded-md border sm:col-span-2">
               <button
                 type="button"
@@ -334,10 +367,12 @@ export function MachinesView() {
                 <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isAdvancedOpen && "rotate-180")} aria-hidden="true" />
               </button>
               <div className={cn("grid gap-3 border-t p-3 sm:grid-cols-2", !isAdvancedOpen && "hidden")}>
-                <TextInputField label={t("fieldLine")} value={draft.line_name} onChange={(event) => setDraft({ ...draft, line_name: event.target.value })} />
                 <TextInputField label={t("fieldStation")} value={draft.station_name} onChange={(event) => setDraft({ ...draft, station_name: event.target.value })} />
                 <TextInputField label={t("fieldConfiguredIp")} value={draft.ip_address} onChange={(event) => setDraft({ ...draft, ip_address: event.target.value })} />
-                <CheckboxField label={t("machineActiveField")} checked={draft.is_active} onCheckedChange={(checked) => setDraft({ ...draft, is_active: checked })} />
+                <SelectField label={t("colStatus")} value={draft.is_active ? "ACTIVE" : "INACTIVE"} onChange={(event) => setDraft({ ...draft, is_active: event.target.value === "ACTIVE" })}>
+                  <option value="ACTIVE">{t("active")}</option>
+                  <option value="INACTIVE">{t("inactive")}</option>
+                </SelectField>
               </div>
             </div>
             {editingMachine ? (
@@ -363,42 +398,44 @@ export function MachinesView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(commandMachine)} onOpenChange={(open) => !open && setCommandMachine(null)}>
-        <DialogContent className="max-h-[90dvh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t("commandDialogTitle", { code: commandMachine?.machine_code })}</DialogTitle>
-          </DialogHeader>
-          <form className="grid gap-3 rounded-md border p-3 sm:grid-cols-[14rem_1fr_auto]" onSubmit={sendCommand}>
-            <SelectField label={t("commandType")} value={commandDraft.command_type} onChange={(event) => setCommandDraft({ ...commandDraft, command_type: event.target.value as MachineCommand["command_type"] })}>
-              <option value="SYNC_PROFILE">SYNC_PROFILE</option>
-              <option value="SYNC_SCAN_DATA">SYNC_SCAN_DATA</option>
-              <option value="RELOAD_CONFIG">RELOAD_CONFIG</option>
-              <option value="SHOW_MESSAGE">SHOW_MESSAGE</option>
-            </SelectField>
-            <TextAreaField
-              label={t("payloadJson")}
-              placeholder={t("payloadPlaceholder")}
-              value={commandDraft.payload_text}
-              onChange={(event) => setCommandDraft({ ...commandDraft, payload_text: event.target.value })}
-            />
-            <div className="flex items-end">
-              <Button type="submit" disabled={isSaving}>
-                <Send className="h-4 w-4" aria-hidden="true" />
-                {t("send")}
-              </Button>
-            </div>
-          </form>
-          {commandMachine ? (
-            <DataTablePanel
-              title={t("commandHistory")}
-              endpoint={`/machines/${commandMachine.id}/commands?take=50&refresh=${commandRefreshId}`}
-              columns={commandColumns}
-              getRowKey={(item) => item.id}
-              searchableText={(item) => `${item.command_type} ${item.status} ${item.error_message ?? ""}`}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {isDev ? (
+        <Dialog open={Boolean(commandMachine)} onOpenChange={(open) => !open && setCommandMachine(null)}>
+          <DialogContent className="max-h-[90dvh] max-w-4xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("commandDialogTitle", { code: commandMachine?.machine_code })}</DialogTitle>
+            </DialogHeader>
+            <form className="grid gap-3 rounded-md border p-3 sm:grid-cols-[14rem_1fr_auto]" onSubmit={sendCommand}>
+              <SelectField label={t("commandType")} value={commandDraft.command_type} onChange={(event) => setCommandDraft({ ...commandDraft, command_type: event.target.value as MachineCommand["command_type"] })}>
+                <option value="SYNC_PROFILE">SYNC_PROFILE</option>
+                <option value="SYNC_SCAN_DATA">SYNC_SCAN_DATA</option>
+                <option value="RELOAD_CONFIG">RELOAD_CONFIG</option>
+                <option value="SHOW_MESSAGE">SHOW_MESSAGE</option>
+              </SelectField>
+              <TextAreaField
+                label={t("payloadJson")}
+                placeholder={t("payloadPlaceholder")}
+                value={commandDraft.payload_text}
+                onChange={(event) => setCommandDraft({ ...commandDraft, payload_text: event.target.value })}
+              />
+              <div className="flex items-end">
+                <Button type="submit" disabled={isSaving}>
+                  <Send className="h-4 w-4" aria-hidden="true" />
+                  {t("send")}
+                </Button>
+              </div>
+            </form>
+            {commandMachine ? (
+              <DataTablePanel
+                title={t("commandHistory")}
+                endpoint={`/machines/${commandMachine.id}/commands?take=50&refresh=${commandRefreshId}`}
+                columns={commandColumns}
+                getRowKey={(item) => item.id}
+                searchableText={(item) => `${item.command_type} ${item.status} ${item.error_message ?? ""}`}
+              />
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <ConfirmActionDialog
         open={Boolean(target)}
@@ -426,6 +463,12 @@ export function MachinesView() {
     </div>
   );
 }
+
+const machineFieldLabelKeys: Record<MachineRequiredField, "fieldMachineCode" | "fieldMachineName" | "fieldLine"> = {
+  machine_code: "fieldMachineCode",
+  machine_name: "fieldMachineName",
+  line_name: "fieldLine"
+};
 
 function MachineStatusFilter({ value, onChange }: { value: MachineFilter; onChange: (value: MachineFilter) => void }) {
   const { t } = useI18n();

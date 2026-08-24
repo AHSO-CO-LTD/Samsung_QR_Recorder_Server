@@ -41,7 +41,7 @@ Mục đích:
 - Hiển thị bốn biểu đồ đường: Tổng màu xanh dương, OK màu xanh lá, NG màu đỏ và Rework màu cam.
 - Mỗi biểu đồ hỗ trợ các mốc hôm nay, 7 ngày, 30 ngày, 1 năm và toàn bộ; lựa chọn được lưu riêng trên máy.
 - Dữ liệu theo năm dùng nhãn tháng theo ngôn ngữ hiện tại; không ép cố định đủ 12 điểm nếu khoảng dữ liệu không yêu cầu.
-- Rework hiện mang nhãn `Sắp có` và trả về 0 cho đến khi có logic xác định mã NG được sửa thành OK.
+- REWORK hiển thị lượt quét rework mới; lượt NG gốc được đánh dấu `NG_REWORK` nhưng vẫn nằm trong tổng NG.
 - Bên dưới khu vực máy local có biểu đồ xếp hạng toàn bộ lỗi NG từ nhiều đến ít theo mốc thời gian đã chọn.
 - Xếp hạng vẫn hiển thị lỗi đã biết với giá trị 0 khi khoảng thời gian chưa ghi nhận lỗi.
 
@@ -88,16 +88,16 @@ Route:
 
 Mục đích:
 
-- Tra cứu scan OK/NG.
+- Tra cứu scan OK/NG/REWORK.
 - Xem full code raw.
 - Xem duplicate key.
 - Xem LED raw.
 - Xem local status, server status, final status.
 - Xem ng reason.
 - Bộ lọc `Line` thay cho lọc theo máy. Danh sách line được lấy từ các máy hiện có và loại bỏ giá trị trùng.
-- Bộ lọc `Kết quả` hỗ trợ OK, NG và PENDING; bộ lọc `Loại lỗi` lấy động từ danh sách lỗi đã cấu hình hoặc đã ghi nhận.
-- Hai biểu đồ dùng cùng bộ lọc với danh sách quét: `Tổng quan kết quả quét` hiển thị donut OK/NG và các tổng số; `Xếp hạng lỗi theo máy` dùng biểu đồ thanh ngang giống ranking ở trang Tổng quan, hiển thị số NG và tỷ lệ của toàn bộ máy đang hoạt động. Máy mới được tự động bổ sung vào ranking.
-- Chọn loại lỗi tự chuyển kết quả sang NG. Chuyển kết quả sang OK hoặc PENDING tự xóa loại lỗi để tránh điều kiện xung đột.
+- Bộ lọc `Kết quả` hỗ trợ OK, NG, REWORK và PENDING; bộ lọc `Loại lỗi` chỉ lấy các mã lỗi đã định danh và đang bật trong Cấu hình lỗi.
+- Hai biểu đồ dùng cùng bộ lọc với danh sách quét: `Tổng quan kết quả quét` hiển thị donut OK/NG/REWORK và các tổng số; `Xếp hạng lỗi` dùng biểu đồ thanh ngang giống ranking ở trang Tổng quan. Mặc định xếp hạng lượt NG; khi lọc REWORK, xếp hạng REWORK theo cùng logic, bao gồm lỗi local mà REWORK ghi nhận. Máy mới được tự động bổ sung vào ranking.
+- Chọn loại lỗi tự chuyển kết quả sang NG. Khi đang lọc REWORK, chọn loại lỗi vẫn giữ REWORK; chỉ chuyển sang OK hoặc PENDING mới xóa loại lỗi để tránh điều kiện xung đột.
 - Ẩn tab danh sách mã trùng lặp vì trùng chức năng với luồng kiểm tra trùng chuyên biệt.
 - Tab khóa trùng đang hoạt động chỉ hiển thị cho DEV và dùng phân trang phía server.
 

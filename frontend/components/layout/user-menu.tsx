@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Moon, Power, RotateCw, Settings, Sun, UserRound } from "lucide-react";
+import { LogOut, Moon, Power, RotateCw, Settings, ShieldCheck, Sun, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { AuthUser } from "@/lib/auth";
+import { useAuth, type AuthUser, type AuthUserRole } from "@/lib/auth";
 import type { Locale, MessageKey } from "@/lib/i18n";
 
 type UserMenuProps = {
@@ -40,6 +45,9 @@ export function UserMenu({
   onRestartApp,
   t
 }: UserMenuProps) {
+  const { authenticatedUser, isRolePreview, setRolePreview } = useAuth();
+  const canPreviewRoles = authenticatedUser?.role === "DEV";
+
   return (
     <DropdownMenu>
       <Tooltip>
@@ -72,6 +80,30 @@ export function UserMenu({
           <span className="block truncate text-xs font-normal text-muted-foreground">{user?.username ?? t("offlineMode")}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {canPreviewRoles ? (
+          <>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ShieldCheck className="mr-2 h-4 w-4" aria-hidden="true" />
+                {t("rolePreview")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="min-w-48">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  {isRolePreview ? t("rolePreviewActive", { role: t(roleLabelKeys[user?.role ?? "DEV"]) }) : t("rolePreviewDesc")}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={user?.role ?? "DEV"} onValueChange={(value) => setRolePreview(value as AuthUserRole)}>
+                  {(Object.keys(roleLabelKeys) as AuthUserRole[]).map((role) => (
+                    <DropdownMenuRadioItem key={role} value={role}>
+                      {t(roleLabelKeys[role])}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         {canAccessSettings ? (
           <DropdownMenuItem asChild>
             <Link href="/settings">
@@ -106,6 +138,13 @@ export function UserMenu({
     </DropdownMenu>
   );
 }
+
+const roleLabelKeys: Record<AuthUserRole, MessageKey> = {
+  OPERATOR: "roleOperator",
+  ENGINEER: "roleEngineer",
+  ADMIN: "roleAdmin",
+  DEV: "roleDev"
+};
 
 function ToggleRow({
   active,

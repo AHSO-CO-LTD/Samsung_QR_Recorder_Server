@@ -119,6 +119,42 @@ export class NotificationsService {
     };
   }
 
+  async markAllNotificationsRead(actorUserId?: number | null) {
+    const result = await this.prisma.notificationEvent.updateMany({
+      where: {
+        status: "NEW",
+        noti_code: {
+          in: VISIBLE_NOTIFICATION_CODES
+        }
+      },
+      data: {
+        status: "READ"
+      }
+    });
+
+    if (result.count > 0) {
+      await this.audit.write({
+        userId: actorUserId,
+        action: "MARK_ALL_NOTIFICATIONS_READ",
+        tableName: "notification_events",
+        recordId: "bulk",
+        newValue: {
+          status: "READ",
+          updated_count: result.count
+        }
+      });
+    }
+
+    return {
+      success: true,
+      code: "ALL_NOTIFICATIONS_MARKED_READ",
+      message: "Đã đánh dấu tất cả thông báo là đã đọc.",
+      data: {
+        updated_count: result.count
+      }
+    };
+  }
+
   async listTemplates() {
     const templates = await this.prisma.notificationTemplate.findMany({
       orderBy: [{ is_active: "desc" }, { noti_code: "asc" }]
