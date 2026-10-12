@@ -39,7 +39,7 @@ export function MachineRegistrationRequestsPanel({ onChanged }: { onChanged: () 
   const [rejectTarget, setRejectTarget] = useState<MachineRegistrationRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const canManageRegistration = user?.role === "DEV";
+  const canManageRegistration = user?.role === "ADMIN" || user?.role === "DEV";
   const canManageLicense = canManageRegistration;
   const canApprove = canManageRegistration;
   const canViewIdentity = canManageRegistration;

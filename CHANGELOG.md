@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.4 - 2026-10-12
+
+### Added
+
+- Cho phép ADMIN tạo máy trực tiếp và xử lý toàn bộ quy trình đăng ký máy đang chờ, gồm xuất/nhập license, phê duyệt và từ chối.
+- Hiển thị serial và UID của yêu cầu đăng ký máy cho ADMIN để phục vụ cấp license.
+
+### Security
+
+- Giữ quyền gửi lệnh điều khiển máy là chức năng chỉ dành cho DEV ở cả API và giao diện.
+
 ## 1.2.2 - 2026-08-10
 
 ### Added

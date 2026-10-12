@@ -55,7 +55,7 @@ export class MachinesController {
 
   @Get("register-requests")
   @ApiTags("machines-admin")
-  @Roles("DEV")
+  @Roles("ADMIN", "DEV")
   @ApiQuery({ name: "take", required: false, example: 50 })
   @ApiQuery({ name: "status", required: false, enum: ["PENDING", "APPROVED", "REJECTED"] })
   @ApiOkResponse({ description: "Liệt kê yêu cầu đăng ký máy đang chờ máy chủ định danh." })
@@ -65,7 +65,7 @@ export class MachinesController {
 
   @Get("register-requests/:id/license-export")
   @ApiTags("machines-admin")
-  @Roles("DEV")
+  @Roles("ADMIN", "DEV")
   @ApiOkResponse({ description: "Xuất thông tin seri/UID thô để tạo giấy phép bên ngoài." })
   exportRegistrationLicenseInfo(@Param("id", ParseIntPipe) id: number) {
     return this.machinesService.exportRegistrationLicenseInfo(id);
@@ -73,7 +73,7 @@ export class MachinesController {
 
   @Post("register-requests/:id/license/import")
   @ApiTags("machines-admin")
-  @Roles("DEV")
+  @Roles("ADMIN", "DEV")
   @ApiOkResponse({ description: "Nhập tệp giấy phép thô và kiểm tra với seri/UID đăng ký." })
   importRegistrationLicense(
     @Param("id", ParseIntPipe) id: number,
@@ -85,7 +85,7 @@ export class MachinesController {
 
   @Post("register-requests/:id/approve")
   @ApiTags("machines-admin")
-  @Roles("DEV")
+  @Roles("ADMIN", "DEV")
   @ApiOkResponse({ description: "Duyệt yêu cầu đăng ký máy cục bộ và tạo định danh máy chính thức." })
   approveRegistrationRequest(
     @Param("id", ParseIntPipe) id: number,
@@ -97,7 +97,7 @@ export class MachinesController {
 
   @Post("register-requests/:id/reject")
   @ApiTags("machines-admin")
-  @Roles("DEV")
+  @Roles("ADMIN", "DEV")
   @ApiOkResponse({ description: "Từ chối yêu cầu đăng ký máy cục bộ." })
   rejectRegistrationRequest(
     @Param("id", ParseIntPipe) id: number,
@@ -109,7 +109,7 @@ export class MachinesController {
 
   @Post()
   @ApiTags("machines-admin")
-  @Roles("DEV")
+  @Roles("ADMIN", "DEV")
   @ApiOkResponse({ description: "Tạo đăng ký máy cục bộ." })
   createMachine(@Body() dto: CreateMachineDto, @Req() request: AuthenticatedRequest) {
     return this.machinesService.createMachine(dto, request.user?.id);
